@@ -1,8 +1,9 @@
 """CLI entry point.
 
-One command so far. ``qedro events`` reads a directory and says what it
-found — not a projection, and it does not pretend to be one, but it is the
-thing to run first to find out whether your lineage is readable at all.
+One command so far. ``qedro events`` reads a directory or a Marquez-compatible
+API and says what it found — not a projection, and it does not pretend to be
+one, but it is the thing to run first to find out whether your lineage is
+readable at all.
 
 The projections come next. This exists so the reader is usable before they
 land, and so the completeness rule is exercised end to end rather than only
@@ -15,18 +16,55 @@ import argparse
 import os
 import sys
 from collections import Counter
+from datetime import datetime
 
 from . import __version__
+from .errors import QedroError
 from .mark import Completeness
-from .sources import read_dir
+from .sources import read
 
 
-def _events(path: str, *, symbol: bool) -> int:
-    events, report = read_dir(path)
+def _instant(value: str) -> datetime:
+    """A `--since` / `--until` argument.
+
+    A bare date is the start of that day. `--since 2026-01-01` meaning
+    *"anything on or after the first"* is what everyone expects it to mean, and
+    `fromisoformat` already reads both spellings on the 3.12 floor.
+    """
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not an ISO-8601 date or timestamp (try 2026-01-01)"
+        ) from None
+
+
+def _count(n: int, noun: str) -> str:
+    """`1 file`, not `1 files`.
+
+    Small, and the kind of small that costs a tool its authority. An artefact
+    that argues for care about what a number means cannot print a plural it
+    does not mean.
+    """
+    return f"{n:,} {noun if n == 1 else noun + 's'}"
+
+
+def _events(target: str, *, symbol: bool, since: datetime | None, until: datetime | None) -> int:
+    events, report = read(target, since=since, until=until)
 
     completeness = Completeness()
     for reason in report.reasons():
         completeness = completeness.degraded(reason)
+
+    if not events and report.clean:
+        # A clean read of nothing is not a proof of anything. The mark says
+        # *this stands on its own evidence*, and there is no evidence here —
+        # which is the difference between "nothing happened" and "nothing was
+        # recorded" that a reviewer needs flagged.
+        completeness = completeness.degraded(
+            "no events in the window — nothing was recorded, "
+            "which is not the same as nothing having happened"
+        )
 
     if not events and not report.clean:
         # Nothing read and something wrong: a failure, not a quiet success
@@ -39,12 +77,15 @@ def _events(path: str, *, symbol: bool) -> int:
     jobs = {e.job.key for e in events}
     datasets = {d.key for e in events for d in e.datasets}
 
+    # One of the two is always zero — a directory has files and an API has
+    # pages, and naming the wrong one reads as a bug in the tool.
+    fetched = _count(report.files, "file") if report.files else _count(report.pages, "page")
     summary = " · ".join(
         [
-            f"{report.events} events",
-            f"{len(jobs)} jobs",
-            f"{len(datasets)} datasets",
-            f"{report.files} files",
+            _count(report.events, "event"),
+            _count(len(jobs), "job"),
+            _count(len(datasets), "dataset"),
+            fetched,
         ]
     )
     suffix = completeness.suffix(symbol=symbol)
@@ -88,9 +129,15 @@ def main(argv: list[str] | None = None) -> int:
     events = sub.add_parser(
         "events",
         parents=[common],
-        help="read a directory of OpenLineage events and summarise it",
+        help="read OpenLineage events from a directory or an API and summarise them",
     )
-    events.add_argument("path", help="directory containing .json, .ndjson or .jsonl events")
+    events.add_argument(
+        "source",
+        help="a directory of .json, .ndjson or .jsonl events, "
+        "or the base URL of a Marquez-compatible API",
+    )
+    events.add_argument("--since", type=_instant, help="ignore events before this date")
+    events.add_argument("--until", type=_instant, help="ignore events after this date")
 
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
@@ -99,7 +146,13 @@ def main(argv: list[str] | None = None) -> int:
     no_symbol = getattr(args, "no_symbol", False) or os.environ.get("QEDRO_NO_SYMBOL") == "1"
 
     if args.command == "events":
-        return _events(args.path, symbol=not no_symbol)
+        try:
+            return _events(args.source, symbol=not no_symbol, since=args.since, until=args.until)
+        except QedroError as exc:
+            # What the user wrote, handed back as a sentence rather than a
+            # traceback. Evidence never gets here — it is counted, not raised.
+            print(f"  {exc}", file=sys.stderr)
+            return 2
 
     parser.print_help(sys.stderr)
     return 1

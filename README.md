@@ -30,6 +30,23 @@ events, JSON arrays and single objects without being told which, walks nested
 directories, and never stops on a bad record — malformed events are counted and
 reported rather than thrown.
 
+Or point it at a Marquez-compatible API and it reads the same events over HTTP:
+
+```console
+$ qedro events https://marquez.internal --since 2026-01-01
+  4,102 events · 37 jobs · 112 datasets · 42 pages                             ∎
+```
+
+Any spelling of the address works — a bare host, `.../api/v1`, or the full endpoint.
+The window is passed to the backend as a query and **applied again to what comes
+back**, so a backend that ignores it still produces a correct result rather than a
+quietly wider one. Reading stops after 10,000 events, and says so, rather than
+returning a prefix of the history that looks like all of it.
+
+The HTTP source is read-only by construction: GET is the only verb the code can
+build. If the backend needs a token, it comes from `QEDRO_API_TOKEN` and never from
+the command line, where it would land in shell history and in `ps`.
+
 If anything was unusable the tombstone is withheld and the reason goes to stderr:
 
 ```console
