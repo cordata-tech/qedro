@@ -5,9 +5,15 @@ produces a DSGVO Art. 30 record of processing activities, an assertion history, 
 the provenance chain from a published number back to the signed commit that
 authorised it.
 
-Planning lives in `cordata-tech/platform`: **#25** is the epic, **#27** is v1. Read
-#27 before starting anything substantial — the scope and the sequencing are there,
-and the design constraints below were each argued out in its comments.
+Planning lives in this repository: **#1** is the epic, **#2** is v1. Read #2 before
+starting anything substantial — the scope and the sequencing are there, and the
+design constraints below were each argued out in its comments.
+
+Both were transferred from `cordata-tech/platform` on 2026-08-21, so their comment
+history refers to them as `#25` and `#27` and to Qedro as *Atrium* and briefly
+*Aktario*. Three closed issues stay in `platform` because they span more than this
+repo: **platform#29** (which LF-tag ontology is authoritative), **platform#30** (the
+naming search) and **platform#26** (`catalog-mcp`, which has no repo yet).
 
 ## Four commitments that must not erode
 
