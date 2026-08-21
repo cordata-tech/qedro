@@ -13,8 +13,33 @@ $ qedro ropa --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. The event reader is the current work; the projections are not
-> built yet. Watch the repository rather than depending on it.
+> Early development. The reader works; the projections do not exist yet. Watch the
+> repository rather than depending on it.
+
+What runs today is the reader, which is worth running on its own before anything
+else — it tells you whether your lineage is readable at all:
+
+```console
+$ qedro events ./lineage
+  1,284 events · 37 jobs · 112 datasets · 14 files                             ∎
+  complete 641, start 641, fail 2
+```
+
+Point it at a directory of `.json`, `.ndjson` or `.jsonl`. It reads newline-delimited
+events, JSON arrays and single objects without being told which, walks nested
+directories, and never stops on a bad record — malformed events are counted and
+reported rather than thrown.
+
+If anything was unusable the tombstone is withheld and the reason goes to stderr:
+
+```console
+$ qedro events ./lineage
+  1,282 events · 37 jobs · 112 datasets · 14 files
+  complete 640, start 641, fail 1
+  ! 2 records were not usable OpenLineage events
+```
+
+Use `--no-symbol`, or `QEDRO_NO_SYMBOL=1`, where U+220E has no glyph.
 
 ## The name
 
