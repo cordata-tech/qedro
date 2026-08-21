@@ -29,6 +29,19 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
+      # The Art. 30 facet schema is generated from
+      # `pipeline_runtime.descriptor.Processing`, and `tests/test_facet_schema.py`
+      # fails when they diverge — so the model has to be importable here.
+      #
+      # `--no-deps` because `descriptor.py` needs pydantic and nothing else, and
+      # `@main` rather than a tag on purpose: the point of the test is to notice
+      # when the upstream model moves, and pinning would defer that to whenever
+      # someone bumped the pin.
+      - name: Install the descriptor model the facet schema is generated from
+        run: >
+          pip install --no-deps
+          "cordata-pipeline-runtime @ git+https://github.com/cordata-tech/pipeline-runtime@main"
+
       - name: Lint
         run: |
           ruff check .

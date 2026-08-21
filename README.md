@@ -13,8 +13,8 @@ $ qedro ropa --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. The reader works; the projections do not exist yet. Watch the
-> repository rather than depending on it.
+> Early development. The reader works and the facet spec is published; the
+> projections do not exist yet. Watch the repository rather than depending on it.
 
 What runs today is the reader, which is worth running on its own before anything
 else — it tells you whether your lineage is readable at all:
@@ -57,6 +57,25 @@ $ qedro events ./lineage
 ```
 
 Use `--no-symbol`, or `QEDRO_NO_SYMBOL=1`, where U+220E has no glyph.
+
+## The Art. 30 facet
+
+Lineage answers *what happened*. Art. 30(1)(b) asks for the **purposes of the
+processing**, and no graph of jobs and datasets contains them — whether a customer
+table is processed under consent or under legitimate interest is not derivable, it has
+to be declared by someone who knows.
+
+So this repository publishes the declaration as an OpenLineage job facet:
+[`schemas/openlineage-art30-processing-facet.json`](schemas/openlineage-art30-processing-facet.json),
+documented in [docs/art30-facet.md](docs/art30-facet.md). Two fields, `purpose` and
+`legal_basis`, under the `processing` key. Nothing in it is Cordata-specific; any
+emitter that can attach a custom job facet can produce it.
+
+The schema is **generated** from `pipeline_runtime.descriptor.Processing` rather than
+written beside it, and a test fails when the two diverge. One governance model with
+several consumers is a claim this project makes in public, so a consumer that quietly
+restates the model would be a counterexample sitting in the repository the claim
+cites.
 
 ## The name
 

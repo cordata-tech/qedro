@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cordata-tech/qedro/blob/main/schemas/openlineage-art30-processing-facet.json",
+  "$comment": "Generated from pipeline_runtime.descriptor.Processing by tools/facet_schema.py. Do not edit by hand — the model is the source of truth and this file is a projection of it.",
+  "title": "ProcessingJobFacet",
+  "description": "DSGVO Art. 30 fields for one processing activity, carried on the job that performs it. A job facet rather than a run facet: purpose and legal basis are properties of the pipeline, not of one execution of it. Occupies the `processing` key in `job.facets`.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "https://openlineage.io/spec/2-0-2/OpenLineage.json#/$defs/JobFacet"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "description": "Why the processing happens, in the controller's own words. Art. 30(1)(b). Free text rather than a closed set, because the purposes an organisation processes for are its own and no vocabulary ships with the right ones.",
+          "examples": [
+            "fraud-detection"
+          ]
+        },
+        "legal_basis": {
+          "enum": [
+            "consent",
+            "contract",
+            "legal-obligation",
+            "vital-interests",
+            "public-task",
+            "legitimate-interest"
+          ],
+          "type": "string",
+          "description": "The Art. 6(1) lawful basis for the processing. A closed set rather than a free string, so that an invented basis cannot reach a generated record of processing activities. Values: consent — Art. 6(1)(a); contract — Art. 6(1)(b); legal-obligation — Art. 6(1)(c); vital-interests — Art. 6(1)(d); public-task — Art. 6(1)(e); legitimate-interest — Art. 6(1)(f).",
+          "examples": [
+            "legitimate-interest"
+          ]
+        }
+      },
+      "required": [
+        "purpose",
+        "legal_basis"
+      ]
+    }
+  ]
+}

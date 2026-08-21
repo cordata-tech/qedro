@@ -21,7 +21,18 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    # `tools/facet_schema.py` generates the Art. 30 facet schema from
+    # `pipeline_runtime.descriptor.Processing`, and a test fails when the two
+    # diverge. The runtime itself is installed `--no-deps` in CI: descriptor.py
+    # imports pydantic and nothing else, and pulling duckdb, pandas, pyarrow and
+    # great-expectations in to read a type declaration is not a trade worth
+    # making. This is the one dependency of that import.
+    "pydantic>=2.9",
+]
 
 [project.scripts]
 qedro = "qedro.__main__:main"
@@ -36,6 +47,7 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+src = ["src", "tests", "tools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
