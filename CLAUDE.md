@@ -66,11 +66,19 @@ relied on downstream, not diagnostics.
 | `catalog-mcp` (planned, platform#26) | *What is the policy on this dataset, right now?* | AWS-native by design |
 | **this** | *What happened, and can I prove it to an auditor?* | **must not be** |
 
-`pipeline_runtime.descriptor` is the shared governance vocabulary. When the Art. 30
-facet schema lands here it is **generated from `Processing`, never written beside it**
-— the published posts claim in public that one model has three consumers, so a fourth
-that derives is evidence for the claim and a fourth that restates is a counterexample
-to it. A test should fail when they diverge.
+`pipeline_runtime.descriptor` is the shared governance vocabulary. The Art. 30 facet
+schema is **generated from `Processing`, never written beside it** — the published
+posts claim in public that one model has three consumers, so a fourth that derives is
+evidence for the claim and a fourth that restates is a counterexample to it.
+`tools/facet_schema.py` does the generating and `tests/test_facet_schema.py` fails when
+they diverge. Only the prose is written here, and a field with no prose stops the
+generator rather than shipping undocumented.
+
+The runtime is a dev dependency installed **`--no-deps`, pinned to `main`** — see the
+CI step. `descriptor.py` imports pydantic and nothing else, so pulling duckdb, pandas,
+pyarrow and great-expectations in to read a type declaration is not a trade worth
+making; and a pinned tag would defer noticing that the model moved to whoever bumped
+the pin, which is the one thing the test exists to catch.
 
 ## Conventions
 
