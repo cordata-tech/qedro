@@ -1,4 +1,4 @@
-<img src="docs/wordmark.svg" alt="Qedro" width="240">
+<img src="docs/wordmark.svg" alt="Qedro" width="220">
 
 **Turns emitted evidence into the artefacts an auditor asks for.**
 
