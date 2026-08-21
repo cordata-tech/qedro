@@ -50,7 +50,7 @@ with absence.
 Related: **parsing never raises.** Production lineage contains events from emitters
 that disagree with the spec. Bad records are skipped and *counted*, and the count
 reaches `ReadReport` → the summary line → the completeness decision. That chain is
-load-carrying, not diagnostics.
+relied on downstream, not diagnostics.
 
 ## The other two repos
 
