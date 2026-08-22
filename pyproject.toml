@@ -18,7 +18,12 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Database",
 ]
-dependencies = []
+# The one runtime dependency, and it is here for `qedro.yaml`. Config and
+# vocabulary documents are user-written, so `document.py` reads YAML, JSON and
+# TOML — TOML is stdlib and JSON comes free with the YAML parser, which leaves
+# exactly this. safe_load only: nothing in a user's config should be able to
+# construct a Python object.
+dependencies = ["pyyaml>=6"]
 
 [project.optional-dependencies]
 dev = [
@@ -43,6 +48,11 @@ Source = "https://github.com/cordata-tech/qedro"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The shipped starter ontology. It is data the tool loads at runtime, so it has
+# to be installed beside the code rather than only existing in the repository.
+[tool.setuptools.package-data]
+qedro = ["vocabularies/*.yaml"]
 
 [tool.ruff]
 line-length = 100

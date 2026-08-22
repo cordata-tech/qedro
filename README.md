@@ -7,17 +7,101 @@ processing activities, an assertion history, and the provenance chain from a pub
 number to the signed commit that authorised it.
 
 ```console
-$ qedro ropa --since 2026-01-01 --out ropa.xlsx
-  47 jobs · 12 domains · 3 legal bases
-  wrote ropa.xlsx                                                              ∎
+$ qedro ropa ./lineage --since 2026-01-01 --out ropa.md
+  wrote ropa.md                                                                ∎
 ```
 
 > [!NOTE]
-> Early development. The reader works and the facet spec is published; the
-> projections do not exist yet. Watch the repository rather than depending on it.
+> Early development. The reader, the facet spec and the Art. 30 projection work.
+> `quality` and `provenance` do not exist yet, and neither does `xlsx` output.
+> Watch the repository rather than depending on it.
 
-What runs today is the reader, which is worth running on its own before anything
-else — it tells you whether your lineage is readable at all:
+## The Art. 30 record
+
+`qedro ropa` produces one activity per job, with the purpose and lawful basis that
+job declared — and **where each field came from**. That last part is the difference
+between this and a register somebody maintains by hand:
+
+```console
+$ qedro ropa ./lineage
+Record of processing activities — ACME Finanz GmbH
+  contact: dpo@acme.example
+
+  acme.fraud/transactions-scored-daily
+    purpose       fraud-detection
+    legal basis   legitimate-interest
+    reads         wh/fraud_raw.transactions
+    writes        wh/fraud_curated.scores
+    runs          14 in window, last 2026-03-01T02:15:00+00:00
+
+  acme.fraud/transactions-scored-daily.validate
+    purpose       data-quality-validation (mapping)
+    legal basis   legitimate-interest (mapping)
+    ...
+```
+
+A value marked `(mapping)` came from `qedro.yaml` rather than from an emitted facet.
+It is an assertion by whoever wrote the file, not evidence produced by the thing that
+ran, and the tombstone is withheld for the whole record when any entry relies on one.
+
+**Every run states its own scope**, including a run that earns the mark:
+
+```console
+  Scope of this record
+    source        ./lineage
+    window        2026-01-01T00:00:00+00:00 to 2026-03-01T02:15:00+00:00
+    in view       47 jobs, 112 datasets, 1,284 events
+    provenance    41 evidenced, 6 from the mapping file, 0 undeclared
+    silent        marketing (in scope, no lineage)
+    This record covers processing performed by pipelines that emit lineage.
+    Systems that do not emit lineage — CRM, HR, ticketing, marketing tools,
+    anything on paper — are not represented here, and their absence from this
+    record is not evidence of their absence from the organisation.
+```
+
+That paragraph is not boilerplate. Art. 30 covers everything a controller processes,
+and pipelines are a subset of that — so what this produces is a complete record of
+the **pipeline-borne subset**, never the whole thing. Printing it only when something
+went wrong would teach a reader that its absence means full coverage.
+
+`--format text|markdown|json`, and `--out` to write a file.
+
+### Configuration
+
+`qedro.yaml` beside the working directory, or `--config`. **YAML, JSON and TOML all
+work** — nothing in the tool depends on which you chose.
+
+```yaml
+controller:
+  name: ACME Finanz GmbH
+  contact: dpo@acme.example
+
+domains:            # named here, so a domain that emitted nothing is visible
+  - fraud           # in the output instead of silently absent
+  - marketing
+
+jobs:               # the fallback, for pipelines that emit no facet
+  "acme.fraud/*":
+    purpose: fraud-detection
+    legal_basis: legitimate-interest
+```
+
+Patterns are fnmatch against `namespace/name` and then the bare name, first match in
+file order winning. A facet always beats the file: a config cannot silently rewrite
+what a pipeline emitted.
+
+### The vocabulary is a document, not an enum
+
+The six Art. 6(1) bases live in a YAML file the tool loads at runtime, not in Python.
+Point `--vocabulary` at your own and the shipped one is replaced wholesale — which is
+what makes an organisation's own ontology possible later without a rewrite. A value
+outside a closed term is flagged and still reported; refusing to read what an emitter
+actually sent would hide the finding that matters.
+
+## The reader
+
+Worth running on its own before anything else — it tells you whether your lineage is
+readable at all:
 
 ```console
 $ qedro events ./lineage
@@ -129,7 +213,14 @@ here needs Cordata's descriptor model, though richer facets produce richer outpu
 **Not bound to one cloud.** Classification is a source-neutral vocabulary; LakeFormation
 LF-tags are one adapter alongside GCP Data Catalog policy tags and Purview
 classifications. If `qedro ropa` cannot run against a Marquez instance with no AWS
-anywhere in the picture, the neutrality is decorative.
+anywhere in the picture, the neutrality is decorative — so that is an actual test
+(`tests/test_cli.py::TestRopaAgainstAnApi`), not an aspiration.
+
+**Flexible by construction, everywhere it is cheap to be.** Multi-cloud, multi-pipeline,
+multi-format. Sources are a directory or any Marquez-compatible API; config and
+vocabulary documents are YAML, JSON or TOML; facets stay raw dictionaries so an emitter
+nobody anticipated still arrives intact. Each of these was chosen at the point where
+picking one option would have cost nothing today and a rewrite later.
 
 **The vocabulary is data, not types.** Organisations define their own ontologies. Nothing
 is compiled against a fixed set of sensitivity levels.

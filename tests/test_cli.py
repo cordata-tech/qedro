@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from qedro import TOMBSTONE
 from qedro.__main__ import main
 
 from .lineage_api import Backend, event
@@ -108,3 +109,186 @@ class TestAgainstAnApi:
         base = serve(Backend(status=503))
         assert main(["events", base]) == 1
         assert "HTTP 503" in capsys.readouterr().err
+
+
+class TestRopa:
+    """The projection, through the CLI people actually type."""
+
+    def test_it_writes_a_record(self, tmp_path, capsys):
+        events = tmp_path / "events"
+        events.mkdir()
+        (events / "e.json").write_text(
+            json.dumps(
+                {
+                    "eventType": "COMPLETE",
+                    "eventTime": "2026-03-01T10:00:00Z",
+                    "run": {"runId": "r"},
+                    "job": {
+                        "namespace": "acme.fraud",
+                        "name": "scored",
+                        "facets": {
+                            "processing": {
+                                "purpose": "fraud-detection",
+                                "legal_basis": "legitimate-interest",
+                            }
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        config = tmp_path / "qedro.yaml"
+        config.write_text("controller: ACME GmbH\n", encoding="utf-8")
+
+        out = tmp_path / "ropa.md"
+        code = main(
+            [
+                "ropa",
+                str(events),
+                "--config",
+                str(config),
+                "--format",
+                "markdown",
+                "--out",
+                str(out),
+            ]
+        )
+        assert code == 0
+        assert "ACME GmbH" in out.read_text(encoding="utf-8")
+        assert "wrote" in capsys.readouterr().out
+
+    def test_the_mark_reaches_the_summary_line_when_earned(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "r.json"
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
+        assert TOMBSTONE in capsys.readouterr().out
+
+    def test_and_is_withheld_with_the_reason_on_stderr(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=False)
+        out = tmp_path / "r.json"
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
+        captured = capsys.readouterr()
+        assert TOMBSTONE not in captured.out
+        # The file is still written. The run succeeded; it just does not claim
+        # to be a proof.
+        assert out.exists()
+        assert "!" in captured.err
+
+    def test_a_bad_config_is_a_sentence_not_a_traceback(self, tmp_path, capsys):
+        events, _ = _estate(tmp_path, facet=True)
+        bad = tmp_path / "bad.yaml"
+        bad.write_text('jobs:\n  "*": {legalbasis: consent}\n', encoding="utf-8")
+        assert main(["ropa", str(events), "--config", str(bad)]) == 2
+        assert "unknown keys" in capsys.readouterr().err
+
+    def test_a_named_config_that_does_not_exist_says_so(self, tmp_path, capsys):
+        events, _ = _estate(tmp_path, facet=True)
+        assert main(["ropa", str(events), "--config", str(tmp_path / "nope.yaml")]) == 2
+        assert "no config file at" in capsys.readouterr().err
+
+    def test_every_format_is_reachable(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        for fmt in ("text", "markdown", "json"):
+            assert main(["ropa", str(events), "--config", str(config), "--format", fmt]) == 0
+            assert capsys.readouterr().out.strip()
+
+
+def _estate(tmp_path, *, facet: bool):
+    """A one-job directory and a config, with or without the emitted facet."""
+    events = tmp_path / "events"
+    events.mkdir(exist_ok=True)
+    job = {"namespace": "acme.fraud", "name": "scored", "facets": {}}
+    if facet:
+        job["facets"]["processing"] = {
+            "purpose": "fraud-detection",
+            "legal_basis": "legitimate-interest",
+        }
+    (events / "e.json").write_text(
+        json.dumps(
+            {
+                "eventType": "COMPLETE",
+                "eventTime": "2026-03-01T10:00:00Z",
+                "run": {"runId": "r"},
+                "job": job,
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "qedro.yaml"
+    config.write_text("controller: ACME GmbH\n", encoding="utf-8")
+    return events, config
+
+
+class TestRopaAgainstAnApi:
+    """The acceptance test for source-neutrality, on the projection this time.
+
+    `qedro ropa` has to produce a record against a Marquez-compatible instance
+    with **no AWS anywhere in the picture**. If this ever needs a LakeFormation
+    client, a boto session or an AWS credential to pass, the tool has
+    re-acquired the precondition that reading OpenLineage was supposed to
+    remove.
+    """
+
+    def test_a_record_from_an_http_source(self, serve, tmp_path, capsys):
+        emitted = event(job="scored")
+        emitted["job"]["facets"] = {
+            "processing": {
+                "purpose": "fraud-detection",
+                "legal_basis": "legitimate-interest",
+            }
+        }
+        backend = Backend(events=[emitted])
+        base = serve(backend)
+
+        config = tmp_path / "qedro.yaml"
+        config.write_text("controller: ACME GmbH\n", encoding="utf-8")
+
+        assert main(["ropa", base, "--config", str(config), "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["controller"]["name"] == "ACME GmbH"
+        [activity] = payload["activities"]
+        assert activity["purpose"]["provenance"] == "facet"
+        assert payload["complete"] is True
+
+        # Read-only by construction: the projection issued nothing but GETs.
+        assert backend.methods == {"GET"}
+
+    def test_the_scope_statement_names_the_instance(self, serve, tmp_path, capsys):
+        # A record that does not say which instance it came from cannot be
+        # reproduced by whoever receives it.
+        base = serve(Backend(events=[event(job="scored")]))
+        config = tmp_path / "qedro.yaml"
+        config.write_text("controller: ACME GmbH\n", encoding="utf-8")
+
+        assert main(["ropa", base, "--config", str(config), "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["scope"]["source"] == base
+
+
+class TestFormatFollowsTheFilename:
+    def test_out_md_writes_markdown(self, tmp_path):
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "ropa.md"
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
+        assert out.read_text(encoding="utf-8").startswith("# Record of processing activities")
+
+    def test_an_explicit_format_beats_the_filename(self, tmp_path):
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "ropa.md"
+        assert (
+            main(
+                [
+                    "ropa",
+                    str(events),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--out",
+                    str(out),
+                ]
+            )
+            == 0
+        )
+        json.loads(out.read_text(encoding="utf-8"))

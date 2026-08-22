@@ -1,0 +1,60 @@
+# The DSGVO baseline vocabulary.
+#
+# This file is DATA, not configuration and not a schema. Qedro loads it at
+# runtime and has no compiled knowledge of anything in it — which is what makes
+# it replaceable. An organisation with its own ontology points `--vocabulary` at
+# their document and nothing in the code changes.
+#
+# Ship it as a starting point, never as a standard. Fork it and delete what does
+# not apply. A vocabulary nobody edited is one nobody understood.
+
+name: dsgvo-baseline
+version: 1
+description: >-
+  The Art. 30 minimum: the terms a record of processing activities needs before
+  it can be shown to a supervisory authority. Sector overlays (BaFin, DORA)
+  belong in their own documents rather than as additions here.
+
+terms:
+  legal_basis:
+    description: >-
+      The Art. 6(1) lawful basis the processing relies on.
+    # Closed because Art. 6(1) enumerates exactly six bases and a seventh
+    # reaching a generated record is a defect that looks like data. This is a
+    # closed set for a reason external to us — do not read it as licence to
+    # close other terms by default.
+    closed: true
+    values:
+      consent:
+        means: >-
+          Art. 6(1)(a) — the data subject has given consent for one or more
+          specific purposes.
+      contract:
+        means: >-
+          Art. 6(1)(b) — necessary for the performance of a contract with the
+          data subject, or for pre-contractual steps at their request.
+      legal-obligation:
+        means: >-
+          Art. 6(1)(c) — necessary for compliance with a legal obligation to
+          which the controller is subject.
+      vital-interests:
+        means: >-
+          Art. 6(1)(d) — necessary to protect the vital interests of the data
+          subject or of another natural person.
+      public-task:
+        means: >-
+          Art. 6(1)(e) — necessary for a task carried out in the public interest
+          or in the exercise of official authority.
+      legitimate-interest:
+        means: >-
+          Art. 6(1)(f) — necessary for the legitimate interests of the controller
+          or a third party, where those interests are not overridden by the
+          rights of the data subject.
+
+  purpose:
+    description: >-
+      Why the processing happens, in the controller's own words. Art. 30(1)(b).
+    # Open on purpose. The purposes an organisation processes for are its own,
+    # and a shipped list of them would be wrong for everybody.
+    closed: false
+    values: {}

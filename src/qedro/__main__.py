@@ -17,8 +17,10 @@ import os
 import sys
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
-from . import __version__
+from . import __version__, render, ropa, vocabulary
+from . import config as config_module
 from .errors import QedroError
 from .mark import Completeness
 from .sources import read
@@ -102,6 +104,58 @@ def _events(target: str, *, symbol: bool, since: datetime | None, until: datetim
     return 0
 
 
+def _ropa(
+    source: str,
+    *,
+    symbol: bool,
+    since: datetime | None,
+    until: datetime | None,
+    config_path: str | None,
+    vocabulary_path: str | None,
+    fmt: str | None,
+    out: str | None,
+) -> int:
+    settings = config_module.load(config_module.find(config_path))
+    # `--vocabulary` beats `vocabulary:` in the config, which beats the shipped
+    # default. The flag is what someone reaches for while trying one out.
+    words = vocabulary.load(vocabulary_path or settings.vocabulary or None)
+
+    events, report = read(source, since=since, until=until)
+    record = ropa.build(
+        events,
+        config=settings,
+        vocabulary=words,
+        report=report,
+        since=since,
+        until=until,
+    )
+
+    if not record.activities and not report.clean:
+        # Nothing projected and something wrong reading: a failure, not an
+        # empty record that looks like an answer.
+        for reason in report.reasons():
+            print(f"  {reason}", file=sys.stderr)
+        return 1
+
+    # An explicit `--format` wins; otherwise `--out ropa.md` means markdown.
+    fmt = fmt or render.infer(out)
+    renderer = render.FORMATS[fmt]
+    rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
+
+    if out:
+        Path(out).write_text(rendered, encoding="utf-8")
+        mark = record.completeness.suffix(symbol=symbol)
+        print(f"  wrote {out}{'  ' + mark if mark else ''}")
+        # Reasons go to stderr even when the file was written. The run
+        # succeeded; the artefact simply does not claim to be a proof.
+        for reason in record.completeness.reasons:
+            print(f"  ! {reason}", file=sys.stderr)
+    else:
+        print(rendered, end="")
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # Shared flags go on a parent parser so they are accepted on either side
     # of the subcommand. `qedro events ./ --no-symbol` is how people actually
@@ -139,20 +193,60 @@ def main(argv: list[str] | None = None) -> int:
     events.add_argument("--since", type=_instant, help="ignore events before this date")
     events.add_argument("--until", type=_instant, help="ignore events after this date")
 
+    ropa_cmd = sub.add_parser(
+        "ropa",
+        parents=[common],
+        help="produce a DSGVO Art. 30 record of processing activities",
+    )
+    ropa_cmd.add_argument(
+        "source",
+        help="a directory of .json, .ndjson or .jsonl events, "
+        "or the base URL of a Marquez-compatible API",
+    )
+    ropa_cmd.add_argument("--since", type=_instant, help="ignore events before this date")
+    ropa_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
+    ropa_cmd.add_argument(
+        "--config",
+        help="qedro.yaml (or .json/.toml). Defaults to one beside the working directory",
+    )
+    ropa_cmd.add_argument(
+        "--vocabulary",
+        help="a vocabulary document to read terms from, instead of the shipped DSGVO baseline",
+    )
+    ropa_cmd.add_argument(
+        "--format",
+        dest="fmt",
+        choices=sorted(render.names()),
+        default=None,
+        help="output format. Defaults to the one implied by --out, else text",
+    )
+    ropa_cmd.add_argument("--out", help="write to this file instead of standard output")
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     # The env var is for CI logs and containers, where nobody is around to
     # pass a flag and a tofu box reads as a bug in the tool.
     no_symbol = getattr(args, "no_symbol", False) or os.environ.get("QEDRO_NO_SYMBOL") == "1"
 
-    if args.command == "events":
-        try:
+    try:
+        if args.command == "events":
             return _events(args.source, symbol=not no_symbol, since=args.since, until=args.until)
-        except QedroError as exc:
-            # What the user wrote, handed back as a sentence rather than a
-            # traceback. Evidence never gets here — it is counted, not raised.
-            print(f"  {exc}", file=sys.stderr)
-            return 2
+        if args.command == "ropa":
+            return _ropa(
+                args.source,
+                symbol=not no_symbol,
+                since=args.since,
+                until=args.until,
+                config_path=args.config,
+                vocabulary_path=args.vocabulary,
+                fmt=args.fmt,
+                out=args.out,
+            )
+    except QedroError as exc:
+        # What the user wrote, handed back as a sentence rather than a
+        # traceback. Evidence never gets here — it is counted, not raised.
+        print(f"  {exc}", file=sys.stderr)
+        return 2
 
     parser.print_help(sys.stderr)
     return 1
