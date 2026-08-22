@@ -322,6 +322,17 @@ is compiled against a fixed set of sensitivity levels.
 
 **Read-only by construction.** No write path, no credentials that could acquire one.
 
+## Documentation
+
+| | |
+|---|---|
+| [`demo/README.md`](demo/README.md) | the three tiers, walked through against a real estate |
+| [`docs/art30-facet.md`](docs/art30-facet.md) | the Art. 30 facet, for anyone who wants to emit it |
+| [`docs/compatibility.md`](docs/compatibility.md) | what this runs against, and what it does not |
+| [`CHANGELOG.md`](CHANGELOG.md) | what changed, in the words of somebody deciding whether to upgrade |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | scope, and the four commitments that must not erode |
+| [`SECURITY.md`](SECURITY.md) | what the tool can reach, by construction |
+
 ## Licence
 
 [Apache-2.0](LICENSE). Everything, including the parts that would be the commercial

@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qedro"
-version = "0.0.1"
 description = "Turns emitted evidence into the artefacts an auditor asks for"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 authors = [{ name = "Cordata", email = "hello@cordata.tech" }]
 keywords = ["openlineage", "governance", "gdpr", "dsgvo", "ropa", "data-lineage"]
+dynamic = ["version"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -55,6 +55,14 @@ qedro = "qedro.__main__:main"
 [project.urls]
 Homepage = "https://cordata.tech"
 Source = "https://github.com/cordata-tech/qedro"
+Changelog = "https://github.com/cordata-tech/qedro/blob/main/CHANGELOG.md"
+Issues = "https://github.com/cordata-tech/qedro/issues"
+
+# One source for the version, and it is the one `qedro --version` prints.
+# Restating it here would be the same mistake the facet schema exists to avoid,
+# with nothing to catch the drift.
+[tool.setuptools.dynamic]
+version = { attr = "qedro.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,84 @@
+name: Release
+
+# Fires on a `v*` tag. The tag is the decision; everything here is mechanical.
+#
+# Before the first release this needs a **trusted publisher** configured on
+# PyPI for `cordata-tech/qedro`, workflow `release.yml`, environment `pypi`.
+# Trusted publishing rather than an API token on purpose: there is no long-lived
+# credential to leak, and a project whose README argues about provenance should
+# not be uploading artefacts from a secret in a settings page.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # The tag says what version this is. The package says the same thing from
+  # `qedro.__version__`, and a release where those two disagree is one nobody
+  # can reason about afterwards — so it fails here rather than shipping.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: The tag matches the version in the package
+        run: |
+          python - <<'PY'
+          import os, sys
+          from qedro import __version__
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{__version__}":
+              sys.exit(f"tag {tag} does not match qedro {__version__}")
+          print(f"{tag} matches qedro {__version__}")
+          PY
+
+      - name: The changelog has an entry for it
+        run: |
+          python - <<'PY'
+          import os, pathlib, sys
+          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          changelog = pathlib.Path("CHANGELOG.md").read_text()
+          if f"## {version}" not in changelog:
+              sys.exit(f"CHANGELOG.md has no entry for {version}")
+          print(f"CHANGELOG.md documents {version}")
+          PY
+
+      - name: Test
+        run: pytest -q
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # trusted publishing; no API token anywhere
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

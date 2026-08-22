@@ -97,7 +97,13 @@ the pin, which is the one thing the test exists to catch.
   patent grant is what DACH enterprise legal review looks for.
 - **Private until v0.1.** The repo opens when the reader works, a projection produces
   real output, and a release cadence exists — not before. A public repo with no
-  commits behind it signals less than no repo.
+  commits behind it signals less than no repo. **All three conditions are now met**
+  (`CONTRIBUTING.md` § Releases, `.github/workflows/release.yml`), so opening it is a
+  decision waiting to be taken rather than a bar still to clear. It is Laszlo's to
+  take, and pushing a `v*` tag publishes to PyPI.
+- **The version has one source**, `qedro.__version__`; `pyproject.toml` reads it with
+  `dynamic = ["version"]`. The release workflow fails if the tag disagrees with it, or
+  if `CHANGELOG.md` has no entry for it.
 - Commit identity is `laszlo@cordata.tech`, signed. **No assistant commit trailers.**
 - **`jj` is colocated with git.** Work in `jj` — `jj new -m "…"`, `jj describe`, `jj git
   push` — and let it write the git commits; the repo-level jj config carries the same
