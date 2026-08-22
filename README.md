@@ -7,14 +7,14 @@ processing activities, an assertion history, and the provenance chain from a pub
 number to the signed commit that authorised it.
 
 ```console
-$ qedro ropa ./lineage --since 2026-01-01 --out ropa.md
-  wrote ropa.md                                                                ∎
+$ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
+  wrote ropa.xlsx                                                              ∎
 ```
 
 > [!NOTE]
-> Early development. The reader, the facet spec and the Art. 30 projection work.
-> `quality` and `provenance` do not exist yet, and neither does `xlsx` output.
-> Watch the repository rather than depending on it.
+> Early development. The reader, the facet spec, the Art. 30 projection and all
+> four output formats work. `quality` and `provenance` do not exist yet. Watch the
+> repository rather than depending on it.
 
 ## The Art. 30 record
 
@@ -64,7 +64,18 @@ and pipelines are a subset of that — so what this produces is a complete recor
 the **pipeline-borne subset**, never the whole thing. Printing it only when something
 went wrong would teach a reader that its absence means full coverage.
 
-`--format text|markdown|json`, and `--out` to write a file.
+### Output
+
+`--format text|markdown|json|xlsx`, and `--out` to write a file. The format follows
+the filename when you do not say — `--out ropa.xlsx` is a workbook, `--out ropa.md`
+is markdown — and an explicit `--format` always wins.
+
+**xlsx is the one an auditor asks for**, and it is the only output that has to
+survive being forwarded. Two sheets: the activities, and the scope. The verdict
+sits above the table on the first sheet rather than behind it, because a caveat
+below the data is a caveat nobody reads — the same failure this tool exists to
+prevent, reproduced in its own output. Where a value came from is a column of
+words; the tint on a cell is reinforcement and never carries the meaning alone.
 
 ### Configuration
 

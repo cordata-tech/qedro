@@ -14,8 +14,10 @@ is exactly where they get dropped.
 from __future__ import annotations
 
 import json as json_lib
+from io import BytesIO
 
 import pytest
+from openpyxl import load_workbook
 
 from qedro import TOMBSTONE, config, render, vocabulary
 from qedro.ropa import build
@@ -30,8 +32,28 @@ def record(events, cfg="controller: ACME GmbH\n"):
     return build(events, config=config.parse(cfg), vocabulary=WORDS, report=None)
 
 
+def readable(record, fmt):
+    """Any format as searchable text, so one property can be asserted of all of them.
+
+    A binary format is where a property like *the scope statement is always
+    printed* would quietly stop being checked — so xlsx is read back and
+    flattened rather than skipped.
+    """
+    out = render.FORMATS[fmt](record)
+    if not isinstance(out, bytes):
+        return out
+    book = load_workbook(BytesIO(out))
+    return "\n".join(
+        str(cell.value)
+        for sheet in book.worksheets
+        for row in sheet.iter_rows()
+        for cell in row
+        if cell.value is not None
+    )
+
+
 def rendered(events, fmt, cfg="controller: ACME GmbH\n"):
-    return render.FORMATS[fmt](record(events, cfg))
+    return readable(record(events, cfg), fmt)
 
 
 class TestEveryFormatStatesItsScope:
@@ -118,7 +140,7 @@ class TestTheRecordIsReadable:
         # Art. 30(1)(a). A record that does not name its controller is not an
         # Art. 30 record, so a blank field is not enough — it has to be a
         # reason the artefact gives for not claiming to be a proof.
-        out = render.FORMATS[fmt](build([event()], config=config.Config(), vocabulary=WORDS))
+        out = readable(build([event()], config=config.Config(), vocabulary=WORDS), fmt)
         assert "no controller is declared" in out
 
     def test_json_is_valid_json(self):
@@ -147,8 +169,11 @@ class TestFormatInference:
     def test_a_json_suffix(self):
         assert render.infer("record.json") == "json"
 
+    def test_an_xlsx_suffix(self):
+        assert render.infer("ropa.xlsx") == "xlsx"
+
     def test_an_unknown_suffix_falls_back(self):
-        assert render.infer("ropa.xlsx") == "text"
+        assert render.infer("ropa.pdf") == "text"
 
     def test_no_output_file_at_all(self):
         assert render.infer(None) == "text"

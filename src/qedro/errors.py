@@ -24,3 +24,14 @@ class ConfigError(QedroError):
     A source address, a ``qedro.yaml``, a vocabulary document. Not evidence —
     evidence is skipped and counted, never raised on.
     """
+
+
+class UsageError(QedroError):
+    """The command is well-formed but the combination cannot be carried out.
+
+    Separate from :class:`ConfigError` because nothing the user wrote is
+    *wrong* — ``--format xlsx`` with no ``--out`` is a sound request with
+    nowhere to put the answer. Raised before any evidence is read, so the
+    failure arrives in the first millisecond rather than after a run against a
+    remote backend.
+    """

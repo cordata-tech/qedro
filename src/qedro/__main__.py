@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import __version__, render, ropa, vocabulary
 from . import config as config_module
-from .errors import QedroError
+from .errors import QedroError, UsageError
 from .mark import Completeness
 from .sources import read
 
@@ -115,6 +115,17 @@ def _ropa(
     fmt: str | None,
     out: str | None,
 ) -> int:
+    # Resolved first, before a single event is read. An explicit `--format`
+    # wins; otherwise `--out ropa.md` means markdown and `--out ropa.xlsx`
+    # means a workbook. A combination that cannot work should fail in the first
+    # millisecond rather than after a long read against a remote backend.
+    fmt = fmt or render.infer(out)
+    if render.is_binary(fmt) and not out:
+        raise UsageError(
+            f"--format {fmt} produces a file rather than text, and there is nowhere "
+            f"to put it — add --out record.{fmt}"
+        )
+
     settings = config_module.load(config_module.find(config_path))
     # `--vocabulary` beats `vocabulary:` in the config, which beats the shipped
     # default. The flag is what someone reaches for while trying one out.
@@ -137,13 +148,15 @@ def _ropa(
             print(f"  {reason}", file=sys.stderr)
         return 1
 
-    # An explicit `--format` wins; otherwise `--out ropa.md` means markdown.
-    fmt = fmt or render.infer(out)
     renderer = render.FORMATS[fmt]
     rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
 
     if out:
-        Path(out).write_text(rendered, encoding="utf-8")
+        path = Path(out)
+        if isinstance(rendered, bytes):
+            path.write_bytes(rendered)
+        else:
+            path.write_text(rendered, encoding="utf-8")
         mark = record.completeness.suffix(symbol=symbol)
         print(f"  wrote {out}{'  ' + mark if mark else ''}")
         # Reasons go to stderr even when the file was written. The run

@@ -1,9 +1,10 @@
 """Turning a :class:`~qedro.ropa.Record` into something a person receives.
 
-Three formats here — text for a terminal, markdown for a repository or a
-document, json for whatever comes next. ``xlsx`` is the one an auditor actually
-asks for and it is deliberately not here yet: it is the only format needing a
-dependency, and adding one to prove the shape works is the wrong order.
+Four formats — text for a terminal, markdown for a repository or a document,
+json for whatever consumes this next, and xlsx for the auditor, who asks for a
+spreadsheet and will not be talked out of it. The first three are strings; xlsx
+is bytes and lives in its own module, because a workbook is layout as well as
+content and mixing that in here would bury the two rules below.
 
 **Every format prints the scope statement**, and none of them may make it
 conditional. A renderer that skips it on a clean run has quietly taught the
@@ -232,9 +233,30 @@ def _activity_json(activity: Activity) -> dict[str, object]:
     }
 
 
+def xlsx(record: Record) -> bytes:
+    """The workbook, as bytes.
+
+    openpyxl is imported here rather than at module scope so that `qedro
+    events`, and every text rendering, pays nothing for a format they do not
+    produce.
+    """
+    from .xlsx import workbook
+
+    return workbook(record)
+
+
 #: Public name to renderer. The CLI's `--format` choices come from this, so a
 #: new format is added in one place.
-FORMATS: dict[str, object] = {"text": text, "markdown": markdown, "json": json}
+FORMATS: dict[str, object] = {
+    "text": text,
+    "markdown": markdown,
+    "json": json,
+    "xlsx": xlsx,
+}
+
+#: Formats that return bytes. A caller has to know before it decides whether
+#: standard output is somewhere this can go — see `is_binary`.
+BINARY = frozenset({"xlsx"})
 
 #: File suffix to format, for inferring from `--out`. Someone writing
 #: `--out ropa.md` means markdown, and silently filling that file with terminal
@@ -244,11 +266,17 @@ BY_SUFFIX = {
     ".markdown": "markdown",
     ".json": "json",
     ".txt": "text",
+    ".xlsx": "xlsx",
 }
 
 
 def names() -> Iterable[str]:
     return FORMATS.keys()
+
+
+def is_binary(fmt: str) -> bool:
+    """Whether this format produces bytes rather than text."""
+    return fmt in BINARY
 
 
 def infer(out: str | None, *, default: str = "text") -> str:

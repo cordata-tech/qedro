@@ -327,6 +327,17 @@ def _scope(
     )
 
 
+def _plural(count: int, singular: str, plural: str) -> str:
+    """`1 of 4 activities relies`, not `1 of 4 activities rely`.
+
+    The same care as `_count` in the CLI, and for the same reason: an artefact
+    arguing that a reader should take its numbers seriously cannot print a verb
+    that disagrees with one. Note that in `n of m`, the noun agrees with *m*
+    and the verb with *n* — so the two are asked for separately.
+    """
+    return singular if count == 1 else plural
+
+
 def _completeness(
     activities: Sequence[Activity],
     *,
@@ -361,24 +372,32 @@ def _completeness(
             "which is not the same as nothing having happened"
         )
 
+    total = len(activities)
+
     mapped = [a for a in activities if not a.evidenced and (a.purpose or a.legal_basis)]
     if mapped:
+        n = len(mapped)
         completeness = completeness.degraded(
-            f"{len(mapped)} of {len(activities)} activities rely on the mapping file "
-            "rather than on an emitted facet, so those entries are asserted rather than proven"
+            f"{n} of {total} {_plural(total, 'activity', 'activities')} "
+            f"{_plural(n, 'relies', 'rely')} on the mapping file rather than on an emitted "
+            f"facet, so {_plural(n, 'that entry is', 'those entries are')} asserted rather "
+            "than proven"
         )
 
     silent_fields = [a for a in activities if not a.purpose or not a.legal_basis]
     if silent_fields:
+        n = len(silent_fields)
         completeness = completeness.degraded(
-            f"{len(silent_fields)} of {len(activities)} activities have no purpose or no "
-            "legal basis from any source"
+            f"{n} of {total} {_plural(total, 'activity', 'activities')} "
+            f"{_plural(n, 'has', 'have')} no purpose or no legal basis from any source"
         )
 
     unrecognised = [a for a in activities if a.purpose.unrecognised or a.legal_basis.unrecognised]
     if unrecognised:
+        n = len(unrecognised)
         completeness = completeness.degraded(
-            f"{len(unrecognised)} activities carry a value the vocabulary does not define"
+            f"{n} {_plural(n, 'activity carries', 'activities carry')} "
+            "a value the vocabulary does not define"
         )
 
     if scope.domains_silent:

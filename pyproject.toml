@@ -18,12 +18,21 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Database",
 ]
-# The one runtime dependency, and it is here for `qedro.yaml`. Config and
-# vocabulary documents are user-written, so `document.py` reads YAML, JSON and
-# TOML — TOML is stdlib and JSON comes free with the YAML parser, which leaves
-# exactly this. safe_load only: nothing in a user's config should be able to
-# construct a Python object.
-dependencies = ["pyyaml>=6"]
+# Two runtime dependencies, and each is here for a reason worth writing down.
+#
+# pyyaml is for `qedro.yaml`. Config and vocabulary documents are user-written,
+# so `document.py` reads YAML, JSON and TOML — TOML is stdlib and JSON comes
+# free with the YAML parser, which leaves exactly this. safe_load only: nothing
+# in a user's config should be able to construct a Python object.
+#
+# openpyxl is for `--format xlsx`. Not an optional extra, because the headline
+# command in cordata-tech/qedro#2 is `--out ropa.xlsx` and the acceptance test
+# is `pipx install qedro` — putting the artefact an auditor actually asks for
+# behind an extra somebody has to know to type makes the main deliverable
+# conditional on trivia. It is pure Python with one dependency of its own, so
+# this is nothing like the duckdb/pandas/pyarrow trade refused below. The
+# import is lazy, in `render.xlsx`, so a run that produces text never pays it.
+dependencies = ["pyyaml>=6", "openpyxl>=3.1"]
 
 [project.optional-dependencies]
 dev = [

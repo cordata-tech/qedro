@@ -237,3 +237,37 @@ class TestGroupingAndIdentity:
             cfg='jobs:\n  "weird_ns/*": {domain: fraud}\n',
         )
         assert out.activities[0].domain == "fraud"
+
+
+class TestTheReasonsReadLikeSentences:
+    """`1 of 4 activities relies`, not `1 of 4 activities rely`.
+
+    Small, and the kind of small that costs a tool its authority — the same
+    reason `_count` exists in the CLI. These strings are the entire explanation
+    a reviewer gets when the mark is withheld, so they are the last place to be
+    careless. Note the two agreements pull in different directions: the noun
+    goes with the total, the verb with the count.
+    """
+
+    def reasons(self, out) -> str:
+        return " ".join(out.completeness.reasons)
+
+    def test_one_activity_of_several_relies(self):
+        events = [event(name=n, facet=EVIDENCED) for n in "abc"] + [event(name="d")]
+        out = record(events, cfg='jobs:\n  "*d": {purpose: p, legal_basis: consent}\n')
+        assert "1 of 4 activities relies on the mapping file" in self.reasons(out)
+        assert "that entry is asserted" in self.reasons(out)
+
+    def test_several_of_several_rely(self):
+        events = [event(name=n, facet=EVIDENCED) for n in "ab"] + [event(name=n) for n in "cd"]
+        out = record(events, cfg='jobs:\n  "*": {purpose: p, legal_basis: consent}\n')
+        assert "2 of 4 activities rely on the mapping file" in self.reasons(out)
+        assert "those entries are asserted" in self.reasons(out)
+
+    def test_one_activity_has_no_declaration(self):
+        out = record([event(name="a", facet=EVIDENCED), event(name="b")])
+        assert "1 of 2 activities has no purpose or no legal basis" in self.reasons(out)
+
+    def test_one_activity_carries_an_unknown_value(self):
+        out = record([event(facet={"purpose": "p", "legal_basis": "vibes"})])
+        assert "1 activity carries a value the vocabulary does not define" in self.reasons(out)

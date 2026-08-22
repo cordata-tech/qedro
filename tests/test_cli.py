@@ -3,8 +3,9 @@
 import json
 
 import pytest
+from openpyxl import load_workbook
 
-from qedro import TOMBSTONE
+from qedro import TOMBSTONE, render
 from qedro.__main__ import main
 
 from .lineage_api import Backend, event
@@ -187,10 +188,18 @@ class TestRopa:
         assert "no config file at" in capsys.readouterr().err
 
     def test_every_format_is_reachable(self, tmp_path, capsys):
+        # Driven off the registry rather than a list written here, so a format
+        # added later cannot be unreachable from the CLI and still pass.
         events, config = _estate(tmp_path, facet=True)
-        for fmt in ("text", "markdown", "json"):
-            assert main(["ropa", str(events), "--config", str(config), "--format", fmt]) == 0
-            assert capsys.readouterr().out.strip()
+        for fmt in sorted(render.names()):
+            argv = ["ropa", str(events), "--config", str(config), "--format", fmt]
+            if render.is_binary(fmt):
+                out = tmp_path / f"record.{fmt}"
+                assert main([*argv, "--out", str(out)]) == 0
+                assert out.stat().st_size > 0
+            else:
+                assert main(argv) == 0
+                assert capsys.readouterr().out.strip()
 
 
 def _estate(tmp_path, *, facet: bool):
@@ -292,3 +301,34 @@ class TestFormatFollowsTheFilename:
             == 0
         )
         json.loads(out.read_text(encoding="utf-8"))
+
+
+class TestTheWorkbook:
+    """xlsx is the one an auditor asks for, and the only output that is a file
+    rather than something a terminal can show."""
+
+    def test_out_xlsx_writes_a_workbook(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "ropa.xlsx"
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
+
+        book = load_workbook(out)
+        assert book.sheetnames == ["Art. 30 record", "Scope"]
+        assert "wrote" in capsys.readouterr().out
+
+    def test_asking_for_it_with_nowhere_to_put_it_is_a_sentence(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        assert main(["ropa", str(events), "--config", str(config), "--format", "xlsx"]) == 2
+        assert "add --out" in capsys.readouterr().err
+
+    def test_that_failure_arrives_before_anything_is_read(self, capsys):
+        # No source, no config, nothing that exists: the combination is
+        # rejected on its own terms rather than after a long read.
+        assert main(["ropa", "/nonexistent", "--format", "xlsx"]) == 2
+        assert "add --out" in capsys.readouterr().err
+
+    def test_the_mark_still_reaches_the_summary_line(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "ropa.xlsx"
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
+        assert TOMBSTONE in capsys.readouterr().out
