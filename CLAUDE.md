@@ -5,9 +5,12 @@ produces a DSGVO Art. 30 record of processing activities, an assertion history, 
 the provenance chain from a published number back to the signed commit that
 authorised it.
 
-Planning lives in this repository: **#1** is the epic, **#2** is v1. Read #2 before
-starting anything substantial — the scope and the sequencing are there, and the
-design constraints below were each argued out in its comments.
+Planning lives in this repository: **#1** is the epic, **#2** is v1, **#3** constrains
+what any projection's output must contain. Read #2 before starting anything
+substantial — the scope and the sequencing are there, and the design constraints
+below were each argued out in its comments. `docs/architecture.md` is the map of
+the modules and the rule each one keeps — **untracked on purpose** until the target
+architecture is agreed, so it lives in the working copy and not in the history.
 
 Both were transferred from `cordata-tech/platform` on 2026-08-21, so their comment
 history refers to them as `#25` and `#27` and to Qedro as *Atrium* and briefly
@@ -89,6 +92,10 @@ the pin, which is the one thing the test exists to catch.
   real output, and a release cadence exists — not before. A public repo with no
   commits behind it signals less than no repo.
 - Commit identity is `laszlo@cordata.tech`, signed. **No assistant commit trailers.**
+- **`jj` is colocated with git.** Work in `jj` — `jj new -m "…"`, `jj describe`, `jj git
+  push` — and let it write the git commits; the repo-level jj config carries the same
+  identity and SSH signing key, so a change made either way is indistinguishable in the
+  history. Plain `git` still reads and writes the same working copy.
 - `ruff check` + `ruff format` + `pytest`. CI runs 3.12 and 3.13, and asserts the
   wordmark keeps `role="img"`, `aria-label` and a `<title>`.
 - Python floor is 3.12. `datetime.fromisoformat` handles `Z` natively there; do not
