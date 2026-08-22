@@ -104,6 +104,17 @@ python tools/seed.py --check
 
 Python 3.12 is the floor; CI runs 3.12, 3.13 and 3.14.
 
+Two test modules import `pipeline_runtime`, which is not on PyPI — the Art. 30
+facet schema is generated from its `Processing` model and a test fails when the
+two diverge. Install it the way CI does, or skip those two:
+
+```bash
+pip install --no-deps "cordata-pipeline-runtime @ git+https://github.com/cordata-tech/pipeline-runtime@main"
+```
+
+The import is unconditional on purpose. A skip when the module is absent would
+mean CI silently stops checking the thing the test exists for.
+
 ## Commits and pull requests
 
 **Explain the reasoning, not the diff.** The diff is in the diff. A commit
@@ -129,3 +140,7 @@ Releases happen when something is worth releasing rather than on a calendar, and
 each one is a tag, a changelog entry and a PyPI artefact. `main` is expected to
 be releasable at any point: CI runs on every push, and a red `main` is a bug
 before it is anything else.
+
+Pushing a `v*` tag is what publishes. The workflow refuses to ship if the tag
+disagrees with `qedro.__version__`, or if the changelog entry for that version
+is missing or still marked unreleased.

@@ -45,10 +45,16 @@ jobs:
           python - <<'PY'
           import os, pathlib, sys
           version = os.environ["GITHUB_REF_NAME"].lstrip("v")
-          changelog = pathlib.Path("CHANGELOG.md").read_text()
-          if f"## {version}" not in changelog:
+          changelog = pathlib.Path("CHANGELOG.md").read_text().splitlines()
+          heading = next((line for line in changelog if line.startswith(f"## {version}")), None)
+          if heading is None:
               sys.exit(f"CHANGELOG.md has no entry for {version}")
-          print(f"CHANGELOG.md documents {version}")
+          # A release whose changelog still says "unreleased" is one nobody
+          # updated. Cheaper to fail here than to notice on PyPI, where the
+          # version number cannot be reused.
+          if "unreleased" in heading.lower():
+              sys.exit(f"CHANGELOG.md still marks {version} as unreleased — date it")
+          print(f"CHANGELOG.md documents {version}: {heading}")
           PY
 
       - name: Test

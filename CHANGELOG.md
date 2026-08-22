@@ -6,7 +6,12 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## 0.1.0 — 2026-08-22
+## 0.1.0 — unreleased
+
+> Tagged and complete, and deliberately not published. The decision on
+> 2026-08-22 was to run it against real work first and let it mature before
+> anything is shown publicly — so the code below exists and the artefact does
+> not. The date goes in when the tag is pushed.
 
 First release. Three projections over OpenLineage, four output formats, and no
 adoption of anything required beyond lineage a platform already emits.

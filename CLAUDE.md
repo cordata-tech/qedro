@@ -99,8 +99,12 @@ the pin, which is the one thing the test exists to catch.
   real output, and a release cadence exists — not before. A public repo with no
   commits behind it signals less than no repo. **All three conditions are now met**
   (`CONTRIBUTING.md` § Releases, `.github/workflows/release.yml`), so opening it is a
-  decision waiting to be taken rather than a bar still to clear. It is Laszlo's to
-  take, and pushing a `v*` tag publishes to PyPI.
+  decision waiting to be taken rather than a bar still to clear — and on 2026-08-22
+  Laszlo decided **not yet**: run it against real work first and let it mature before
+  anything is shown publicly. `v0.1.0` is tagged locally and unpushed, `CHANGELOG.md`
+  marks it unreleased, and the release workflow refuses to ship an entry still marked
+  that way. **Publishing to PyPI is opening**, whatever GitHub says — the sdist
+  carries the full source and test suite — so there is no half step available here.
 - **The version has one source**, `qedro.__version__`; `pyproject.toml` reads it with
   `dynamic = ["version"]`. The release workflow fails if the tag disagrees with it, or
   if `CHANGELOG.md` has no entry for it.

@@ -1,0 +1,33 @@
+# What goes in the source distribution.
+#
+# The wheel is the code. The sdist is the code plus everything needed to check
+# that the code does what it says — which for this project is not a nicety. A
+# README that argues claims should be verifiable, shipped in an artefact where
+# they cannot be, would be making the opposite point.
+#
+# So `pytest` on an unpacked sdist runs the same 401 tests CI does — verified,
+# not assumed. `demo/` is present because `tests/test_demo.py` asserts against
+# those exact bytes, and `tools/` because two test modules import it. Twenty-
+# seven of those tests also need `pipeline_runtime`, which is a dev dependency
+# installed from git; without it the other 374 still run.
+
+include CHANGELOG.md CONTRIBUTING.md SECURITY.md
+graft tests
+graft tools
+graft schemas
+graft docs
+
+# Three weeks of synthetic lineage, and the reason it is worth the megabyte:
+# without it the shipped tests cannot run and the README's demo is a promise
+# the artefact does not keep.
+graft demo
+
+# `docs/architecture.md` is a proposal, not a description, and is deliberately
+# untracked until the target architecture is agreed. It sits in the working
+# tree, which is exactly where `graft docs` would find it — so it is excluded
+# by name rather than by hoping nobody builds an sdist from a dirty checkout.
+exclude docs/architecture.md
+exclude docs/architecture.pdf
+
+global-exclude *.py[cod] __pycache__/* .DS_Store
+prune **/__pycache__
