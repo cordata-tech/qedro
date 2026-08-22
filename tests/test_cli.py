@@ -440,3 +440,113 @@ def _asserting_estate(tmp_path, *, complete: bool = False):
     config = tmp_path / "qedro.yaml"
     config.write_text("controller: ACME GmbH\n", encoding="utf-8")
     return events, config
+
+
+class TestProvenance:
+    """The chain, through the CLI people actually type."""
+
+    def test_it_traces_a_dataset_by_bare_name(self, tmp_path, capsys):
+        events, config = _chain_estate(tmp_path)
+        argv = ["provenance", str(events), "--dataset", "final", "--config", str(config)]
+        assert main([*argv, "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["dataset"] == "wh/final"
+        assert [s["dataset"] for s in payload["steps"]] == ["wh/final", "wh/mid", "wh/raw"]
+
+    def test_a_name_that_matches_nothing_is_a_sentence(self, tmp_path, capsys):
+        events, config = _chain_estate(tmp_path)
+        argv = ["provenance", str(events), "--dataset", "nope", "--config", str(config)]
+        assert main(argv) == 2
+        assert "no dataset named" in capsys.readouterr().err
+
+    def test_an_ambiguous_name_asks_rather_than_guesses(self, tmp_path, capsys):
+        # Picking one would produce a chain for a dataset nobody asked about.
+        events, config = _chain_estate(tmp_path, ambiguous=True)
+        argv = ["provenance", str(events), "--dataset", "final", "--config", str(config)]
+        assert main(argv) == 2
+        err = capsys.readouterr().err
+        assert "matches more than one dataset" in err
+        assert "wh/final" in err and "lake/final" in err
+
+    def test_the_depth_limit_is_reachable_and_reported(self, tmp_path, capsys):
+        events, config = _chain_estate(tmp_path)
+        argv = ["provenance", str(events), "--dataset", "final", "--config", str(config)]
+        assert main([*argv, "--depth", "1", "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["scope"]["depth_limit"] == 1
+        assert payload["scope"]["ends_at_depth"] >= 1
+
+    def test_every_format_is_reachable(self, tmp_path, capsys):
+        events, config = _chain_estate(tmp_path)
+        for fmt in sorted(render.names()):
+            argv = [
+                "provenance",
+                str(events),
+                "--dataset",
+                "final",
+                "--config",
+                str(config),
+                "--format",
+                fmt,
+            ]
+            if render.is_binary(fmt):
+                out = tmp_path / f"chain.{fmt}"
+                assert main([*argv, "--out", str(out)]) == 0
+                assert load_workbook(out).sheetnames == ["Chain", "Scope"]
+            else:
+                assert main(argv) == 0
+                assert capsys.readouterr().out.strip()
+
+    def test_the_mark_is_earned_when_the_whole_chain_is_signed(self, tmp_path, capsys):
+        events, config = _chain_estate(tmp_path, signed=True, sources=False)
+        argv = ["provenance", str(events), "--dataset", "final", "--config", str(config)]
+        assert main(argv) == 0
+        assert TOMBSTONE in capsys.readouterr().out
+
+
+def _chain_estate(tmp_path, *, signed=None, ambiguous=False, sources=True):
+    """final <- mid <- raw, with as much provenance evidence as asked for."""
+    events = tmp_path / "chain-events"
+    events.mkdir(exist_ok=True)
+
+    def event(job, reads, writes, namespace="wh"):
+        run_facets = {}
+        if signed is not None:
+            run_facets["cordata_provenance"] = {"descriptor_git_commit_signed": signed}
+        return {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-03-01T10:00:00Z",
+            "run": {"runId": job, "facets": run_facets},
+            "job": {
+                "namespace": "acme.crm",
+                "name": job,
+                "facets": {
+                    "sourceCodeLocation": {
+                        "repoUrl": "https://github.com/acme/platform",
+                        "version": f"commit-{job}",
+                        "branch": "main",
+                        "path": f"models/{job}.sql",
+                    }
+                },
+            },
+            "inputs": [{"namespace": "wh", "name": n} for n in reads],
+            "outputs": [{"namespace": namespace, "name": n} for n in writes],
+        }
+
+    rows = [event("build-final", ["mid"], ["final"]), event("build-mid", ["raw"], ["mid"])]
+    if sources:
+        rows.append(event("ingest", [], ["raw"]))
+    else:
+        # No unproduced branch, so the only thing left to prove is the
+        # signature — which is what the earned-mark test needs.
+        rows = [event("build-final", [], ["final"])]
+    if ambiguous:
+        rows.append(event("other", [], ["final"], namespace="lake"))
+
+    (events / "e.ndjson").write_text(
+        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8"
+    )
+    config = tmp_path / "qedro.yaml"
+    config.write_text("controller: ACME GmbH\n", encoding="utf-8")
+    return events, config

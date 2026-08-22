@@ -32,6 +32,7 @@ from datetime import datetime
 from functools import singledispatch
 
 from . import TOMBSTONE, words
+from . import provenance as provenance_module
 from . import quality as quality_module
 from .ropa import Activity, Record
 from .scope import Scope
@@ -451,6 +452,139 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
         "reasons": list(record.completeness.reasons),
     }
     return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+
+
+# --- provenance -------------------------------------------------------------
+
+
+@text.register
+def _(record: provenance_module.Record, *, symbol: bool = True, width: int = 88) -> str:
+    out: list[str] = [f"Provenance of {record.dataset}", ""]
+
+    for step in record.steps:
+        indent = "  " + "  " * step.depth
+        out.append(f"{indent}{step.dataset}")
+        out.extend(_step_text(step, indent + "  "))
+        out.append("")
+
+    out.extend(_scope_text(record.scope, width=width, title="Scope of this chain"))
+    out.append("")
+    out.extend(
+        _verdict_text(
+            record,
+            "every step ran under a signed commit",
+            symbol=symbol,
+            withheld="chain",
+        )
+    )
+    return "\n".join(out) + "\n"
+
+
+def _step_text(step, indent: str) -> list[str]:
+    if not step.production:
+        return [f"{indent}— {step.ended}"]
+
+    p = step.production
+    run = f"{p.run_id or 'unreported'} ({p.event_type.lower()}), {_when(p.when)}"
+    out = [
+        f"{indent}produced by   {p.job}",
+        f"{indent}run           {run}",
+        f"{indent}code          {p.code.describe()}",
+    ]
+    if p.code.branch or p.code.path:
+        where = " ".join(x for x in (p.code.branch, p.code.path) if x)
+        out.append(f"{indent}              {where}")
+    out.append(f"{indent}signature     {p.signature.describe()}")
+    if step.also_produced_by:
+        out.append(
+            f"{indent}also          {words.count(step.also_produced_by, 'other run')} "
+            "wrote this in the window"
+        )
+    if step.ended:
+        out.append(f"{indent}— {step.ended}")
+    return out
+
+
+@markdown.register
+def _(record: provenance_module.Record) -> str:
+    out = [f"# Provenance of `{record.dataset}`", ""]
+    out += [
+        "| Depth | Dataset | Produced by | Commit | Signature |",
+        "|---|---|---|---|---|",
+    ]
+    for step in record.steps:
+        if step.production:
+            p = step.production
+            out.append(
+                f"| {step.depth} | `{step.dataset}` | `{p.job}` "
+                f"| {p.code.short or '—'} | {p.signature.describe()} |"
+            )
+        else:
+            out.append(f"| {step.depth} | `{step.dataset}` | — | — | _{step.ended}_ |")
+
+    out += _scope_markdown(record.scope)
+    out += _verdict_markdown(record, "Every step ran under a signed commit.", withheld="chain")
+    return "\n".join(out)
+
+
+@json.register
+def _(record: provenance_module.Record, *, indent: int = 2) -> str:
+    payload = {
+        "dataset": record.dataset,
+        "steps": [
+            {
+                "dataset": s.dataset,
+                "depth": s.depth,
+                "ended": s.ended,
+                "also_produced_by": s.also_produced_by,
+                "production": None
+                if not s.production
+                else {
+                    "job": s.production.job,
+                    "run_id": s.production.run_id,
+                    "event_type": s.production.event_type,
+                    "when": _when(s.production.when),
+                    "reads": list(s.production.reads),
+                    "code": {
+                        "repository": s.production.code.repository,
+                        "commit": s.production.code.commit,
+                        "branch": s.production.code.branch,
+                        "path": s.production.code.path,
+                    },
+                    # Three states, never two. `null` is *nobody reported*, and
+                    # a consumer that read it as false would be inventing a
+                    # finding the chain does not support.
+                    "signed": s.production.signature.signed,
+                    "signature_reported_by": s.production.signature.reported_by,
+                    "authorised": s.production.authorised,
+                },
+            }
+            for s in record.steps
+        ],
+        "scope": {
+            "source": record.scope.source,
+            "dataset": record.scope.dataset,
+            "window": {"since": _when(record.scope.since), "until": _when(record.scope.until)},
+            "events": record.scope.events,
+            "steps": record.scope.steps,
+            "with_commit": record.scope.with_commit,
+            "with_signature": record.scope.with_signature,
+            "ends_unproduced": record.scope.ends_unproduced,
+            "ends_at_depth": record.scope.ends_at_depth,
+            "depth_limit": record.scope.depth_limit,
+            "out_of_view": record.scope.OUT_OF_VIEW,
+        },
+        "complete": record.complete,
+        "reasons": list(record.completeness.reasons),
+    }
+    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+
+
+@xlsx.register
+def _(record: provenance_module.Record) -> bytes:
+    from .xlsx import provenance_workbook
+
+    return provenance_workbook(record)
 
 
 #: Public name to renderer. The CLI's `--format` choices come from this, so a

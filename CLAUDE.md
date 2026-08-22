@@ -3,7 +3,7 @@
 Turns emitted evidence into the artefacts an auditor asks for. Reads OpenLineage,
 produces a DSGVO Art. 30 record of processing activities, an assertion history, and
 the provenance chain from a published number back to the signed commit that
-authorised it. `ropa` and `quality` are built; `provenance` is not.
+authorised it. All three projections are built.
 
 Planning lives in this repository: **#1** is the epic, **#2** is v1, **#3** constrains
 what any projection's output must contain. Read #2 before starting anything

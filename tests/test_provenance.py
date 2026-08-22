@@ -1,0 +1,276 @@
+"""The provenance projection.
+
+Two things carry the weight, and both are about *not knowing*:
+
+**A chain that ends is not a chain that is complete.** The walk stops for three
+different reasons — a genuine source, a producing run outside the window, or
+the depth cap — and they are indistinguishable unless the artefact says which.
+
+**Unknown is not unsigned.** OpenLineage has no standard place for whether a
+commit was signed, so the common case is silence. Reporting that as *not
+signed* would be inventing a finding; reporting it as fine would be worse. It
+is a third state, and it withholds the mark without ever being rendered as the
+second.
+"""
+
+from __future__ import annotations
+
+from qedro import config
+from qedro.events import parse_event
+from qedro.provenance import DEPTH, build, resolve
+from qedro.sources import ReadReport
+
+CONTROLLER = "controller: ACME GmbH\n"
+REPO = "https://github.com/acme/platform"
+
+
+def event(
+    job="curate",
+    namespace="acme.crm",
+    reads=(),
+    writes=(),
+    commit="abc123def456",
+    signed=None,
+    when="2026-03-01T10:00:00Z",
+    run="r1",
+    event_type="COMPLETE",
+):
+    """One event, with as much or as little provenance evidence as wanted."""
+    job_facets = {}
+    if commit is not None:
+        job_facets["sourceCodeLocation"] = {
+            "_producer": "https://example.test",
+            "type": "git",
+            "repoUrl": REPO,
+            "version": commit,
+            "branch": "main",
+            "path": f"models/{job}.sql",
+        }
+    run_facets = {}
+    if signed is not None:
+        run_facets["cordata_provenance"] = {
+            "_producer": "https://example.test",
+            "descriptor_git_commit_signed": signed,
+        }
+
+    raw = {
+        "eventType": event_type,
+        "eventTime": when,
+        "run": {"runId": run, "facets": run_facets},
+        "job": {"namespace": namespace, "name": job, "facets": job_facets},
+        "inputs": [{"namespace": "wh", "name": n} for n in reads],
+        "outputs": [{"namespace": "wh", "name": n} for n in writes],
+    }
+    parsed = parse_event(raw)
+    assert parsed is not None
+    return parsed
+
+
+def chain(events, dataset, *, cfg="", report=None, **kw):
+    if "controller" not in cfg:
+        cfg = CONTROLLER + cfg
+    return build(events, dataset=dataset, config=config.parse(cfg), report=report, **kw)
+
+
+class TestWalkingBackwards:
+    def test_one_hop(self):
+        out = chain([event(writes=["scores"], reads=["raw"])], "wh/scores")
+        assert [s.dataset for s in out.steps] == ["wh/scores", "wh/raw"]
+        assert out.steps[0].production is not None
+        assert out.steps[0].production.job == "acme.crm/curate"
+
+    def test_several_hops_in_depth_order(self):
+        events = [
+            event(job="a", writes=["final"], reads=["mid"]),
+            event(job="b", writes=["mid"], reads=["raw"]),
+        ]
+        out = chain(events, "wh/final")
+        assert [(s.depth, s.dataset) for s in out.steps] == [
+            (0, "wh/final"),
+            (1, "wh/mid"),
+            (2, "wh/raw"),
+        ]
+
+    def test_the_code_and_commit_come_from_the_standard_facet(self):
+        out = chain([event(writes=["scores"], commit="0123456789abcdef")], "wh/scores")
+        code = out.steps[0].production.code
+        assert code.repository == REPO
+        assert code.commit == "0123456789abcdef"
+        assert code.short == "0123456789ab"
+        assert code.branch == "main"
+
+    def test_the_latest_run_is_followed_and_the_others_are_counted(self):
+        # *The latest* must never read as *the only*.
+        events = [
+            event(run="r1", when="2026-03-01T10:00:00Z", writes=["scores"], commit="old"),
+            event(run="r2", when="2026-03-05T10:00:00Z", writes=["scores"], commit="new"),
+        ]
+        out = chain(events, "wh/scores")
+        assert out.steps[0].production.code.commit == "new"
+        assert out.steps[0].also_produced_by == 1
+
+    def test_a_cycle_does_not_hang(self):
+        events = [
+            event(job="a", writes=["x"], reads=["y"]),
+            event(job="b", writes=["y"], reads=["x"]),
+        ]
+        out = chain(events, "wh/x")
+        assert {s.dataset for s in out.steps} == {"wh/x", "wh/y"}
+
+    def test_events_with_no_timestamp_do_not_break_the_ordering(self):
+        # Two undated events would compare None against None and raise.
+        events = [
+            event(run="r1", when=None, writes=["scores"]),
+            event(run="r2", when=None, writes=["scores"]),
+        ]
+        assert chain(events, "wh/scores").steps[0].production is not None
+
+
+class TestAChainThatEndsIsNotAChainThatIsComplete:
+    def test_a_dataset_nothing_produced_says_so(self):
+        out = chain([event(writes=["scores"], reads=["raw"])], "wh/scores")
+        [source] = [s for s in out.steps if s.dataset == "wh/raw"]
+        assert source.production is None
+        assert "nothing in the window produced it" in source.ended
+
+    def test_and_it_is_a_reason_the_mark_is_withheld(self):
+        out = chain([event(writes=["scores"], reads=["raw"], signed=True)], "wh/scores")
+        assert not out.complete
+        assert any("may be a source" in r for r in out.completeness.reasons)
+
+    def test_the_depth_limit_is_stated_rather_than_silent(self):
+        events = [
+            event(job=f"j{n}", writes=[f"d{n}"], reads=[f"d{n + 1}"], signed=True) for n in range(6)
+        ]
+        out = chain(events, "wh/d0", depth=2)
+        stopped = [s for s in out.steps if "depth limit" in s.ended]
+        assert stopped
+        assert out.scope.ends_at_depth == len(stopped)
+        assert any("depth limit of 2" in r for r in out.completeness.reasons)
+
+    def test_the_two_kinds_of_ending_are_counted_apart(self):
+        events = [event(job="a", writes=["x"], reads=["y"]), event(job="b", writes=["y"])]
+        out = chain(events, "wh/x", depth=1)
+        assert out.scope.ends_at_depth == 1
+        assert out.scope.ends_unproduced == 0
+
+    def test_the_requested_dataset_being_unproduced_is_its_own_reason(self):
+        out = chain([event(writes=["other"])], "wh/scores")
+        assert not out.complete
+        assert any("there is no chain to follow" in r for r in out.completeness.reasons)
+
+
+class TestUnknownIsNotUnsigned:
+    def test_nothing_reported_is_a_third_state(self):
+        out = chain([event(writes=["scores"])], "wh/scores")
+        signature = out.steps[0].production.signature
+        assert signature.signed is None
+        assert not signature.known
+        assert "unknown" in signature.describe()
+
+    def test_it_withholds_the_mark(self):
+        out = chain([event(writes=["scores"])], "wh/scores")
+        assert not out.complete
+        assert any("unknown is not the same as unsigned" in r for r in out.completeness.reasons)
+
+    def test_but_is_never_reported_as_unsigned(self):
+        out = chain([event(writes=["scores"])], "wh/scores")
+        assert not any("not signed" in r for r in out.completeness.reasons)
+
+    def test_an_explicit_false_is_a_different_and_louder_reason(self):
+        out = chain([event(writes=["scores"], signed=False)], "wh/scores")
+        assert any("reported as not signed" in r for r in out.completeness.reasons)
+        assert out.steps[0].production.signature.known
+
+    def test_a_signature_names_what_reported_it(self):
+        out = chain([event(writes=["scores"], signed=True)], "wh/scores")
+        assert out.steps[0].production.signature.reported_by == "cordata_provenance"
+
+    def test_no_code_location_at_all_is_its_own_reason(self):
+        out = chain([event(writes=["scores"], commit=None, signed=True)], "wh/scores")
+        assert not out.steps[0].production.code
+        assert any("emitted no code location" in r for r in out.completeness.reasons)
+
+
+class TestTheMark:
+    def test_earned_when_every_step_shows_a_signed_commit(self):
+        # The strongest claim any projection makes, so the bar is the highest.
+        out = chain([event(writes=["scores"], signed=True)], "wh/scores")
+        assert out.complete
+        assert out.completeness.reasons == ()
+        assert out.steps[0].production.authorised
+
+    def test_withheld_when_one_step_of_several_cannot_show_one(self):
+        events = [
+            event(job="a", writes=["final"], reads=["mid"], signed=True),
+            event(job="b", writes=["mid"], signed=None),
+        ]
+        out = chain(events, "wh/final")
+        assert not out.complete
+        assert len(out.unauthorised) == 1
+
+    def test_withheld_when_the_read_was_degraded(self):
+        report = ReadReport(origin="./x", events=1, skipped_records=3)
+        out = chain([event(writes=["scores"], signed=True)], "wh/scores", report=report)
+        assert not out.complete
+
+    def test_a_signed_commit_with_no_commit_id_is_not_authorised(self):
+        # A signature on nothing identifiable proves nothing.
+        out = chain([event(writes=["scores"], commit=None, signed=True)], "wh/scores")
+        assert not out.steps[0].production.authorised
+
+
+class TestScope:
+    def test_it_counts_evidence_rather_than_asserting_it(self):
+        events = [
+            event(job="a", writes=["final"], reads=["mid"], signed=True),
+            event(job="b", writes=["mid"], commit=None),
+        ]
+        out = chain(events, "wh/final")
+        assert out.scope.steps == 2
+        assert out.scope.with_commit == 1
+        assert out.scope.with_signature == 1
+
+    def test_it_makes_no_claim_about_domains(self):
+        # A chain is about one dataset. Carrying the declared domains through
+        # would report every one of them as silent, which is another
+        # artefact's finding and false in this one.
+        out = chain([event(writes=["scores"], signed=True)], "wh/scores", cfg="domains: [a, b]\n")
+        assert out.scope.domains_silent == ()
+
+    def test_the_default_depth_is_reported_not_assumed(self):
+        assert chain([event(writes=["s"])], "wh/s").scope.depth_limit == DEPTH
+
+
+class TestResolvingWhatTheUserTyped:
+    def test_a_bare_name_matches(self):
+        events = [event(writes=["scores"])]
+        assert resolve(events, "scores") == ["wh/scores"]
+
+    def test_a_full_key_matches_exactly(self):
+        events = [event(writes=["scores"])]
+        assert resolve(events, "wh/scores") == ["wh/scores"]
+
+    def test_an_ambiguous_name_returns_every_candidate(self):
+        # Picking the first would produce a chain for a dataset the user did
+        # not ask about, and nothing downstream would ever say so.
+        events = [
+            event(job="a", writes=["customers"]),
+            parse_event(
+                {
+                    "eventType": "COMPLETE",
+                    "eventTime": "2026-03-01T10:00:00Z",
+                    "run": {"runId": "r2"},
+                    "job": {"namespace": "acme.crm", "name": "b"},
+                    "outputs": [{"namespace": "lake", "name": "customers"}],
+                }
+            ),
+        ]
+        assert resolve(events, "customers") == ["lake/customers", "wh/customers"]
+
+    def test_an_exact_key_wins_over_a_bare_match(self):
+        events = [event(writes=["customers"])]
+        assert resolve(events, "wh/customers") == ["wh/customers"]
+
+    def test_nothing_matching_is_an_empty_list_not_a_guess(self):
+        assert resolve([event(writes=["scores"])], "nope") == []

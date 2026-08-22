@@ -28,6 +28,7 @@ from typing import Any
 
 from . import TOMBSTONE, words
 from .errors import QedroError
+from .provenance import Record as ProvenanceRecord
 from .quality import Record as QualityRecord
 from .ropa import Activity, Record, Sourced
 
@@ -403,6 +404,143 @@ def _quality_scope(sheet: Any, record: QualityRecord) -> None:
         return
 
     sheet.cell(row=row, column=2, value="This history does not claim to be complete.").font = STRONG
+    for reason in record.completeness.reasons:
+        row += 1
+        sheet.cell(row=row, column=2, value=reason).alignment = WRAP
+
+
+# --- the provenance chain ---------------------------------------------------
+
+PROVENANCE_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("Depth", 8),
+    ("Dataset", 44),
+    ("Produced by", 34),
+    ("Run", 38),
+    ("When", 26),
+    ("Repository", 40),
+    ("Commit", 16),
+    ("Branch", 14),
+    ("Path", 34),
+    ("Signature", 34),
+    ("Chain ends", 44),
+)
+
+PROVENANCE_AT = {h: i for i, (h, _) in enumerate(PROVENANCE_COLUMNS, start=1)}
+
+
+def provenance_workbook(record: ProvenanceRecord) -> bytes:
+    """The chain as ``.xlsx`` bytes.
+
+    One sheet, because a chain is one thing. Depth is a column rather than
+    indentation: a reader who sorts the sheet would destroy indentation without
+    noticing, and the depth is the part they would be sorting by.
+    """
+    book = Workbook()
+    book.properties.creator = "qedro"
+    book.properties.title = f"Provenance of {record.dataset}"
+    book.properties.description = record.scope.OUT_OF_VIEW
+
+    _chain(book.active, record)
+    _provenance_scope(book.create_sheet("Scope"), record)
+
+    buffer = BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def _chain(sheet: Any, record: ProvenanceRecord) -> None:
+    sheet.title = "Chain"
+
+    sheet["A1"] = f"Provenance of {record.dataset}"
+    sheet["A1"].font = TITLE
+    sheet["A2"] = record.controller.name or "No controller is declared"
+    sheet["A2"].font = STRONG
+    sheet["A3"] = (
+        f"{record.scope.with_commit} of {record.scope.steps} steps name a commit, "
+        f"{record.scope.with_signature} report a signature"
+    )
+    sheet["A4"] = _provenance_verdict(record)
+    sheet["A4"].font = STRONG
+
+    for index, (heading, width) in enumerate(PROVENANCE_COLUMNS, start=1):
+        cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)
+        cell.font = HEADING
+        cell.fill = HEADING_FILL
+        cell.alignment = WRAP
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
+    for offset, step in enumerate(record.steps):
+        row = HEADER_ROW + 1 + offset
+        p = step.production
+        values = (
+            step.depth,
+            step.dataset,
+            p.job if p else "",
+            p.run_id if p else "",
+            _when(p.when) if p else "",
+            p.code.repository if p else "",
+            p.code.short if p else "",
+            p.code.branch if p else "",
+            p.code.path if p else "",
+            p.signature.describe() if p else "",
+            step.ended,
+        )
+        for index, value in enumerate(values, start=1):
+            cell = sheet.cell(row=row, column=index, value=value)
+            cell.alignment = WRAP if index == PROVENANCE_AT["Path"] else TOP
+
+        # Tinted where the chain cannot show authorisation — and the cell says
+        # which of the three reasons it is, so the colour carries nothing alone.
+        if not p or not p.authorised:
+            sheet.cell(row=row, column=PROVENANCE_AT["Signature"]).fill = ASSERTED_FILL
+        if step.ended:
+            sheet.cell(row=row, column=PROVENANCE_AT["Chain ends"]).fill = ASSERTED_FILL
+
+    last = HEADER_ROW + len(record.steps)
+    sheet.auto_filter.ref = (
+        f"A{HEADER_ROW}:{get_column_letter(len(PROVENANCE_COLUMNS))}{max(last, HEADER_ROW)}"
+    )
+    sheet.freeze_panes = f"A{HEADER_ROW + 1}"
+
+
+def _provenance_verdict(record: ProvenanceRecord) -> str:
+    if record.complete:
+        return f"Every step in this chain ran under a signed commit. {TOMBSTONE}"
+    n = len(record.completeness.reasons)
+    return (
+        f"This chain does not claim to be a proof — {words.count(n, 'reason')} on the Scope sheet."
+    )
+
+
+def _provenance_scope(sheet: Any, record: ProvenanceRecord) -> None:
+    scope = record.scope
+    sheet.column_dimensions["A"].width = 26
+    sheet.column_dimensions["B"].width = 96
+
+    sheet["A1"] = "Scope of this chain"
+    sheet["A1"].font = TITLE
+
+    rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
+    rows += list(scope.lines())
+
+    row = 3
+    for label, value in rows:
+        sheet.cell(row=row, column=1, value=label[0].upper() + label[1:]).font = STRONG
+        sheet.cell(row=row, column=2, value=value).alignment = WRAP
+        row += 1
+
+    row += 1
+    sheet.cell(row=row, column=1, value="Not covered").font = STRONG
+    sheet.cell(row=row, column=2, value=scope.OUT_OF_VIEW).alignment = WRAP
+    sheet.row_dimensions[row].height = 64
+
+    row += 2
+    sheet.cell(row=row, column=1, value="Completeness").font = STRONG
+    if record.complete:
+        sheet.cell(row=row, column=2, value=_provenance_verdict(record))
+        return
+
+    sheet.cell(row=row, column=2, value="This chain does not claim to be a proof.").font = STRONG
     for reason in record.completeness.reasons:
         row += 1
         sheet.cell(row=row, column=2, value=reason).alignment = WRAP

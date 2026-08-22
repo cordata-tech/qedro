@@ -22,9 +22,10 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from qedro import TOMBSTONE, config, quality, render, vocabulary
+from qedro import TOMBSTONE, config, provenance, quality, render, vocabulary
 from qedro.ropa import build
 
+from .test_provenance import event as provenance_event
 from .test_quality import check
 from .test_quality import event as quality_event
 from .test_ropa import EVIDENCED, event
@@ -48,10 +49,29 @@ def quality_record(cfg="controller: ACME GmbH\n"):
     )
 
 
+def provenance_record(cfg="controller: ACME GmbH\n"):
+    return provenance.build(
+        [provenance_event(writes=["scores"], reads=["raw"])],
+        dataset="wh/scores",
+        config=config.parse(cfg),
+    )
+
+
 #: Every artefact a renderer can be handed. The properties below hold for all
 #: of them or they are not properties.
-PROJECTIONS = {"ropa": ropa_record, "quality": quality_record}
+PROJECTIONS = {
+    "ropa": ropa_record,
+    "quality": quality_record,
+    "provenance": provenance_record,
+}
 CASES = [(p, f) for p in sorted(PROJECTIONS) for f in FORMATS]
+
+#: Projections that make a claim about domain coverage. `provenance` does not
+#: — a chain is about one dataset — so it carries no declared domains and can
+#: have no silent ones. Excluded from that property rather than exempted from
+#: it quietly.
+DOMAIN_AWARE = ["ropa", "quality"]
+DOMAIN_CASES = [(p, f) for p in DOMAIN_AWARE for f in FORMATS]
 
 
 def readable(record, fmt):
@@ -227,13 +247,15 @@ class TestEveryProjectionKeepsTheProperties:
     def test_the_window_is_stated(self, projection, fmt):
         assert "2026-03-01" in readable(PROJECTIONS[projection](), fmt)
 
-    @pytest.mark.parametrize(("projection", "fmt"), CASES)
+    @pytest.mark.parametrize(("projection", "fmt"), DOMAIN_CASES)
     def test_a_silent_domain_is_named(self, projection, fmt):
         cfg = "controller: ACME GmbH\ndomains: [fraud, marketing]\n"
         assert "marketing" in readable(PROJECTIONS[projection](cfg), fmt)
 
     @pytest.mark.parametrize(("projection", "fmt"), CASES)
     def test_a_withheld_mark_carries_its_reasons(self, projection, fmt):
+        # Every projection withholds here, for its own reasons: ropa and
+        # quality for the silent domain, provenance for the unknown signature.
         cfg = "controller: ACME GmbH\ndomains: [fraud, marketing]\n"
         built = PROJECTIONS[projection](cfg)
         assert not built.complete
@@ -277,3 +299,39 @@ class TestQualityRendering:
         # quietly render something wrong.
         with pytest.raises(TypeError):
             render.text(object())
+
+
+class TestProvenanceRendering:
+    """What only the chain can get wrong."""
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_an_unknown_signature_is_never_rendered_as_unsigned(self, fmt):
+        out = readable(provenance_record(), fmt).lower()
+        assert "unknown" in out
+        assert "not signed" not in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_reported_signature_names_what_reported_it(self, fmt):
+        built = provenance.build(
+            [provenance_event(writes=["scores"], signed=True)],
+            dataset="wh/scores",
+            config=config.parse("controller: A\n"),
+        )
+        assert "cordata_provenance" in readable(built, fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_chain_that_ended_says_why_in_the_row(self, fmt):
+        assert "nothing in the window produced it" in readable(provenance_record(), fmt)
+
+    def test_json_keeps_the_signature_tri_state(self):
+        payload = json_lib.loads(render.json(provenance_record()))
+        [step] = [s for s in payload["steps"] if s["production"]]
+        # null, never false: a consumer reading false would be inventing a
+        # finding the chain does not support.
+        assert step["production"]["signed"] is None
+        assert step["production"]["authorised"] is False
+
+    def test_the_text_form_indents_by_depth(self):
+        out = render.text(provenance_record())
+        assert "\n  wh/scores" in out
+        assert "\n    wh/raw" in out

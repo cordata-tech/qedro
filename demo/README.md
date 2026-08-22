@@ -105,6 +105,27 @@ projection: nothing failed on them because nothing ran on them.
 Note what does *not* withhold the mark here — the failing expectation. The mark says
 the history is complete, not that the data is good.
 
+## The provenance chain, on the same estate
+
+```console
+$ qedro provenance demo/lineage --dataset billing_curated.dunning_cases
+```
+
+Three hops back to the source tables, and it crosses a domain boundary on the way:
+billing's invoices are built from crm's customers. Every produced step names a
+repository, a commit, a branch and a file — the estate emits `sourceCodeLocation`,
+because dbt, Airflow and Spark all do.
+
+**And not one step can show a signature**, so the chain does not claim to be a proof.
+That is not a gap in the demo. Nothing standard in OpenLineage reports whether a
+commit was signed, and the estate is deliberately built from what people already run.
+`pipeline-runtime` does report it, which is what the third tier of the adoption story
+looks like here.
+
+The three source tables at the end are marked as endings rather than failures — and
+the reasons say what an ending means, since a source dataset and a producing run
+outside the window are indistinguishable from here.
+
 ## Worth noticing
 
 **The scope statement is on all three**, including the one that earns the mark.

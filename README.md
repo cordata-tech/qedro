@@ -12,9 +12,8 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. The reader, the facet spec, the Art. 30 record, the assertion
-> history and all four output formats work. `provenance` does not exist yet. Watch
-> the repository rather than depending on it.
+> Early development. All three projections work, in four output formats. Interfaces
+> may still move. Watch the repository rather than depending on it.
 
 ## Try it
 
@@ -155,6 +154,44 @@ The evidence is the standard OpenLineage `dataQualityAssertions` facet, which Gr
 Expectations already emits. Nothing Cordata-specific is involved.
 
 `--domain fraud` narrows it, repeatably, and `--days 90` is shorthand for the window.
+
+## The provenance chain
+
+`qedro provenance` answers the question a published number provokes — where did this
+come from, and who authorised it? It walks backwards: the run that produced the
+dataset, the code that run executed, the commit it was at, and then the same for
+everything that run read.
+
+```console
+$ qedro provenance demo/lineage --dataset billing_curated.dunning_cases
+  warehouse/billing_curated.dunning_cases
+    produced by   acme.billing/dunning-weekly
+    code          https://github.com/acme-finanz/data-platform at b7eb23bd289c
+                  main models/billing/dunning_cases.sql
+    signature     signature unknown — nothing reported it
+
+    warehouse/billing_curated.invoices
+      produced by   acme.billing/invoices-nightly
+      ...
+
+      warehouse/crm_raw.contacts
+        — nothing in the window produced it
+```
+
+**Unknown is not unsigned.** OpenLineage has a standard place for the code identity —
+`sourceCodeLocation`, which dbt, Airflow and Spark all emit — and no standard place at
+all for whether that commit was signed. So silence is reported as a third state. It
+withholds the mark exactly as a failed signature would, and it is never rendered as
+one: saying *this ran under an unsigned commit* when nobody reported either way would
+be inventing evidence.
+
+**A chain that ends is not a chain that is complete.** The walk stops for three
+different reasons — a genuine source dataset, a producing run outside the window, or
+the depth limit — and each is counted and named, because in the output they look
+identical.
+
+Nothing here calls a forge API to resolve a commit. Read-only is a property of what
+the code can reach.
 
 ## The reader
 

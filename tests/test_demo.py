@@ -239,3 +239,69 @@ class TestTheAssertionHistory:
         payload = self.history(PLAIN, "--config", CONFIG, capsys=capsys)
         [invoices] = [d for d in payload["datasets"] if d["dataset"].endswith("invoices")]
         assert invoices["runs"] == 2
+
+
+class TestTheProvenanceChain:
+    """`provenance` against the same estate.
+
+    The demo emits `sourceCodeLocation`, which dbt, Airflow and Spark all do,
+    and nothing that reports a signature — because nothing standard does. So
+    the chain names every commit and can still not claim authorisation, which
+    is the honest state of the ecosystem rather than a gap in the demo.
+    """
+
+    def chain(self, dataset, *argv, capsys) -> dict:
+        assert main(["provenance", PLAIN, "--dataset", dataset, *argv, "--format", "json"]) == 0
+        return json.loads(capsys.readouterr().out)
+
+    def test_it_walks_back_three_hops_to_the_source_tables(self, capsys):
+        payload = self.chain("billing_curated.dunning_cases", capsys=capsys)
+        assert [s["dataset"] for s in payload["steps"]] == [
+            "warehouse/billing_curated.dunning_cases",
+            "warehouse/billing_curated.invoices",
+            "warehouse/billing_raw.orders",
+            "warehouse/crm_curated.customers",
+            "warehouse/crm_raw.accounts",
+            "warehouse/crm_raw.contacts",
+        ]
+
+    def test_the_chain_crosses_a_domain_boundary(self, capsys):
+        # billing's invoices read crm's customers. A provenance chain that
+        # stopped at a domain edge would miss the interesting half.
+        payload = self.chain("billing_curated.dunning_cases", capsys=capsys)
+        jobs = {s["production"]["job"] for s in payload["steps"] if s["production"]}
+        assert "acme.crm/customers-curated" in jobs
+        assert "acme.billing/invoices-nightly" in jobs
+
+    def test_every_produced_step_names_a_commit(self, capsys):
+        payload = self.chain("billing_curated.dunning_cases", capsys=capsys)
+        produced = [s for s in payload["steps"] if s["production"]]
+        assert produced
+        assert all(s["production"]["code"]["commit"] for s in produced)
+        assert all(
+            s["production"]["code"]["repository"].endswith("data-platform") for s in produced
+        )
+
+    def test_and_none_of_them_can_show_a_signature(self, capsys):
+        payload = self.chain("billing_curated.dunning_cases", capsys=capsys)
+        produced = [s for s in payload["steps"] if s["production"]]
+        assert all(s["production"]["signed"] is None for s in produced)
+        assert payload["complete"] is False
+        assert any("unknown is not the same as unsigned" in r for r in payload["reasons"])
+
+    def test_the_source_tables_are_ends_not_failures(self, capsys):
+        payload = self.chain("billing_curated.dunning_cases", capsys=capsys)
+        ends = [s for s in payload["steps"] if s["production"] is None]
+        assert len(ends) == 3
+        assert all("nothing in the window produced it" in s["ended"] for s in ends)
+        assert payload["scope"]["ends_unproduced"] == 3
+
+    def test_the_daily_job_wrote_the_dataset_many_times(self, capsys):
+        # *The latest* must not read as *the only*.
+        payload = self.chain("fraud_curated.transactions_scored", capsys=capsys)
+        assert payload["steps"][0]["also_produced_by"] == 20
+
+    def test_the_depth_limit_shows_up_as_its_own_kind_of_ending(self, capsys):
+        payload = self.chain("billing_curated.dunning_cases", "--depth", "1", capsys=capsys)
+        assert payload["scope"]["ends_at_depth"] >= 1
+        assert any("depth limit of 1" in r for r in payload["reasons"])

@@ -36,6 +36,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import uuid
@@ -66,6 +67,11 @@ EMITTERS = {
 }
 
 SPEC = "https://openlineage.io/spec/2-0-2/OpenLineage.json#/$defs/RunEvent"
+
+#: The one repository the platform lives in. Commits are derived from the job
+#: and the day, so they are stable and look like commits without being any.
+REPO = "https://github.com/acme-finanz/data-platform"
+BRANCH = "main"
 FACET_SPEC = "https://openlineage.io/spec/facets/1-2-0"
 
 #: The Art. 30 facet as this repository publishes it. Matches the `$id` in
@@ -196,6 +202,10 @@ class Pipeline:
     #: lineage with nothing failing in it is not production lineage.
     fails_on: tuple[int, ...] = ()
     sql: str = ""
+    #: Path in the platform repository. The `sourceCodeLocation` job facet is
+    #: standard OpenLineage and dbt, Airflow and Spark all emit it — which is
+    #: what lets the provenance chain name a commit without anything of ours.
+    code_path: str = ""
     #: Data-quality assertions this job makes, and the dataset they are about.
     #: Emitted as the standard `dataQualityAssertions` **input** facet, which is
     #: where Great Expectations and dbt put them: the claim is about one run's
@@ -219,6 +229,7 @@ PIPELINES = (
     Pipeline(
         domain="fraud",
         name="transactions-scored-daily",
+        code_path="models/fraud/transactions_scored.sql",
         emitter="dbt",
         hour=2,
         minute=15,
@@ -235,6 +246,7 @@ PIPELINES = (
     Pipeline(
         domain="fraud",
         name="scores-validated",
+        code_path="dags/fraud/scores_validated.py",
         emitter="airflow",
         hour=2,
         minute=45,
@@ -257,6 +269,7 @@ PIPELINES = (
     Pipeline(
         domain="crm",
         name="customers-curated",
+        code_path="models/crm/customers.sql",
         emitter="dbt",
         hour=1,
         minute=30,
@@ -275,6 +288,7 @@ PIPELINES = (
     Pipeline(
         domain="crm",
         name="consent-sync",
+        code_path="jobs/crm/consent_sync.scala",
         emitter="spark",
         hour=3,
         minute=5,
@@ -287,6 +301,7 @@ PIPELINES = (
     Pipeline(
         domain="billing",
         name="invoices-nightly",
+        code_path="dags/billing/invoices_nightly.py",
         emitter="airflow",
         hour=4,
         minute=0,
@@ -298,6 +313,7 @@ PIPELINES = (
     Pipeline(
         domain="billing",
         name="dunning-weekly",
+        code_path="models/billing/dunning_cases.sql",
         emitter="dbt",
         hour=5,
         minute=20,
@@ -384,7 +400,18 @@ def _dataset(name: str, producer: str, assertions: dict | None = None) -> dict:
     return out
 
 
-def _job(pipeline: Pipeline, producer: str, *, declared: bool) -> dict:
+def _commit(pipeline: Pipeline, day: int) -> str:
+    """A stable fake commit SHA.
+
+    Changes when the code changes rather than every day — a pipeline whose
+    commit moved nightly would make the provenance chain look like churn, and
+    real ones do not.
+    """
+    seed = f"{pipeline.key}@{day // 7}"
+    return hashlib.sha1(seed.encode()).hexdigest()
+
+
+def _job(pipeline: Pipeline, producer: str, day: int, *, declared: bool) -> dict:
     facets = {
         "jobType": _facet(
             {
@@ -401,6 +428,19 @@ def _job(pipeline: Pipeline, producer: str, *, declared: bool) -> dict:
             {"query": pipeline.sql},
             producer,
             f"{FACET_SPEC}/SQLJobFacet.json#/$defs/SQLJobFacet",
+        )
+    if pipeline.code_path:
+        facets["sourceCodeLocation"] = _facet(
+            {
+                "type": "git",
+                "repoUrl": REPO,
+                "url": f"{REPO}/blob/{BRANCH}/{pipeline.code_path}",
+                "path": pipeline.code_path,
+                "version": _commit(pipeline, day),
+                "branch": BRANCH,
+            },
+            producer,
+            f"{FACET_SPEC}/SourceCodeLocationJobFacet.json#/$defs/SourceCodeLocationJobFacet",
         )
     if declared:
         # The whole difference between the two estates.
@@ -437,7 +477,7 @@ def _events(pipeline: Pipeline, day: int, *, declared: bool) -> list[dict]:
     failed = day in pipeline.fails_on
 
     run = _run(pipeline, day, started, producer)
-    job = _job(pipeline, producer, declared=declared)
+    job = _job(pipeline, producer, day, declared=declared)
 
     def envelope(event_type: str, when: datetime) -> dict:
         return {

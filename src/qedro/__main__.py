@@ -19,9 +19,9 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, quality, render, ropa, vocabulary, words
+from . import __version__, provenance, quality, render, ropa, vocabulary, words
 from . import config as config_module
-from .errors import QedroError, UsageError
+from .errors import ConfigError, QedroError, UsageError
 from .mark import Completeness
 from .sources import read
 
@@ -180,6 +180,52 @@ def _quality(
     return _emit(record, fmt=fmt, out=out, symbol=symbol)
 
 
+def _provenance(
+    source: str,
+    *,
+    symbol: bool,
+    since: datetime | None,
+    until: datetime | None,
+    dataset: str,
+    depth: int,
+    config_path: str | None,
+    fmt: str | None,
+    out: str | None,
+) -> int:
+    fmt = _format(fmt, out)
+    settings = config_module.load(config_module.find(config_path))
+
+    events, report = read(source, since=since, until=until)
+    events = list(events)
+
+    # Nobody types the namespace, so a bare name is matched — but an ambiguous
+    # one is handed back as a question. Picking the first would produce a chain
+    # for a dataset the user did not ask about, and nothing downstream would
+    # ever say so.
+    matches = provenance.resolve(events, dataset)
+    if not matches:
+        raise ConfigError(
+            f"no dataset named {dataset!r} appears in {report.origin or source} "
+            "— check the spelling, or widen the window"
+        )
+    if len(matches) > 1:
+        listed = "\n    ".join(matches)
+        raise ConfigError(
+            f"{dataset!r} matches more than one dataset. Name one in full:\n    {listed}"
+        )
+
+    record = provenance.build(
+        events,
+        dataset=matches[0],
+        config=settings,
+        report=report,
+        since=since,
+        until=until,
+        depth=depth,
+    )
+    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+
+
 def _format(fmt: str | None, out: str | None) -> str:
     """Resolve the output format before a single event is read.
 
@@ -325,6 +371,47 @@ def main(argv: list[str] | None = None) -> int:
     )
     quality_cmd.add_argument("--out", help="write to this file instead of standard output")
 
+    provenance_cmd = sub.add_parser(
+        "provenance",
+        parents=[common],
+        help="the chain from a dataset back to the commits that produced it",
+    )
+    provenance_cmd.add_argument(
+        "source",
+        help="a directory of .json, .ndjson or .jsonl events, "
+        "or the base URL of a Marquez-compatible API",
+    )
+    provenance_cmd.add_argument(
+        "--dataset",
+        required=True,
+        help="the dataset to trace. A bare name is enough unless it is ambiguous",
+    )
+    provenance_cmd.add_argument(
+        "--depth",
+        type=int,
+        default=provenance.DEPTH,
+        help=f"how many hops upstream to follow (default {provenance.DEPTH})",
+    )
+    provenance_cmd.add_argument("--since", type=_instant, help="ignore events before this date")
+    provenance_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
+    provenance_cmd.add_argument(
+        "--days",
+        type=int,
+        help="shorthand for --since N days before --until (or before now)",
+    )
+    provenance_cmd.add_argument(
+        "--config",
+        help="qedro.yaml (or .json/.toml). Defaults to one beside the working directory",
+    )
+    provenance_cmd.add_argument(
+        "--format",
+        dest="fmt",
+        choices=sorted(render.names()),
+        default=None,
+        help="output format. Defaults to the one implied by --out, else text",
+    )
+    provenance_cmd.add_argument("--out", help="write to this file instead of standard output")
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     # The env var is for CI logs and containers, where nobody is around to
@@ -342,6 +429,19 @@ def main(argv: list[str] | None = None) -> int:
                 since=since,
                 until=until,
                 domains=args.domains,
+                config_path=args.config,
+                fmt=args.fmt,
+                out=args.out,
+            )
+        if args.command == "provenance":
+            since, until = _window(args)
+            return _provenance(
+                args.source,
+                symbol=not no_symbol,
+                since=since,
+                until=until,
+                dataset=args.dataset,
+                depth=args.depth,
                 config_path=args.config,
                 fmt=args.fmt,
                 out=args.out,
