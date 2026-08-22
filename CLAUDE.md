@@ -96,8 +96,13 @@ the pin, which is the one thing the test exists to catch.
   push` — and let it write the git commits; the repo-level jj config carries the same
   identity and SSH signing key, so a change made either way is indistinguishable in the
   history. Plain `git` still reads and writes the same working copy.
-- `ruff check` + `ruff format` + `pytest`. CI runs 3.12 and 3.13, and asserts the
-  wordmark keeps `role="img"`, `aria-label` and a `<title>`.
+- `ruff check` + `ruff format` + `pytest`. CI runs 3.12, 3.13 and 3.14, and asserts
+  the wordmark keeps `role="img"`, `aria-label` and a `<title>`.
+- **`demo/` is generated.** `tools/seed.py` writes both estates and CI runs it with
+  `--check`; editing an event by hand looks like it worked until the next
+  regeneration reverts it. The two estates must stay identical apart from the
+  `processing` facet — that equivalence is the whole demonstration, and
+  `tests/test_demo.py` asserts it.
 - Python floor is 3.12. `datetime.fromisoformat` handles `Z` natively there; do not
   add normalising workarounds for older versions.
 

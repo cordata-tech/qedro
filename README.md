@@ -16,6 +16,21 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 > four output formats work. `quality` and `provenance` do not exist yet. Watch the
 > repository rather than depending on it.
 
+## Try it
+
+[`demo/`](demo/) holds a committed synthetic estate — fourteen days of dbt, Airflow
+and Spark lineage from a company that does not exist, with no AWS anywhere in it.
+
+```console
+$ qedro ropa demo/lineage --config demo/qedro.yaml            # asserted, no mark
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml   # evidenced      ∎
+```
+
+Same jobs, same runs, same fourteen days. The only difference between the two
+estates is whether the pipelines declare their purpose and lawful basis — and it
+is the difference between a record somebody asserts and a record that stands on
+its own evidence. [`demo/README.md`](demo/README.md) walks through it.
+
 ## The Art. 30 record
 
 `qedro ropa` produces one activity per job, with the purpose and lawful basis that

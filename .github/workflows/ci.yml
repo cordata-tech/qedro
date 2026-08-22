@@ -14,9 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.12 is the floor the published code needs; 3.13 catches the
-        # deprecations that turn into breakage a release later.
-        python-version: ["3.12", "3.13"]
+        # 3.12 is the floor the published code needs. The two above it are
+        # what catches a deprecation while it is still a warning rather than a
+        # release later, when it is somebody's failed upgrade.
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +50,12 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+      # The committed demo estate is generated. Editing an event by hand looks
+      # like it worked until the next regeneration silently reverts it, and the
+      # acceptance criteria in #2 are asserted against these exact files.
+      - name: The demo estate matches its generator
+        run: python tools/seed.py --check
 
       - name: The wordmark is a valid SVG and carries a text alternative
         run: |

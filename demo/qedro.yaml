@@ -1,0 +1,49 @@
+# The demo estate's configuration.
+#
+# Written the way an organisation writes one on the first afternoon: the
+# controller, the domains that should be in the record, and a mapping for the
+# pipelines that do not declare anything yet.
+#
+# Note what is *not* here. `acme.crm/consent-sync` matches none of the patterns
+# below, because it was added to the platform after this file was written and
+# nobody came back to it. That is not a mistake in the demo — it is the failure
+# mode a register maintained by hand always has, and the record says so instead
+# of hiding it.
+
+controller:
+  name: ACME Finanz GmbH
+  contact: datenschutz@acme-finanz.example
+  dpo: Dr. R. Voss, Datenschutzbeauftragte
+  representative: ACME Finanz GmbH, Bockenheimer Landstraße 1, 60325 Frankfurt am Main
+
+# Named so that a domain producing no lineage in the window is visible in the
+# output rather than silently absent.
+domains:
+  - fraud
+  - billing
+  - crm
+
+# The fallback. Every value here is an assertion by whoever wrote this file,
+# never evidence produced by the thing that ran — so any record relying on it
+# is marked as asserted and does not claim to be a proof. An emitted facet
+# always wins over anything below.
+jobs:
+  "acme.fraud/transactions-*":
+    purpose: fraud-detection
+    legal_basis: legitimate-interest
+
+  "acme.fraud/*-validated":
+    purpose: data-quality-validation
+    legal_basis: legitimate-interest
+
+  "acme.crm/customers-*":
+    purpose: customer-administration
+    legal_basis: contract
+
+  "acme.billing/invoices-*":
+    purpose: invoicing
+    legal_basis: contract
+
+  "acme.billing/dunning-*":
+    purpose: debt-collection
+    legal_basis: legitimate-interest
