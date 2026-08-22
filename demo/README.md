@@ -1,6 +1,6 @@
 # The demo estate
 
-Fourteen days of OpenLineage from a company that does not exist. Everything here
+Three weeks of OpenLineage from a company that does not exist. Everything here
 is synthetic and committed, so `qedro` can be run against something real-shaped
 without anyone needing a warehouse, an account, or a client's data.
 
@@ -14,7 +14,7 @@ stack would prove the opposite.
 demo/
   qedro.yaml           the controller, the domains, and a mapping fallback
   lineage/             the estate as it is today — no Art. 30 facet anywhere
-  lineage-declared/    the same fourteen days once the pipelines declare
+  lineage-declared/    the same three weeks once the pipelines declare
 ```
 
 The two estates are **identical** — same jobs, same datasets, same runs, same
@@ -86,6 +86,25 @@ purpose and every lawful basis came from the job that ran, in the same event tha
 proves it ran — so the record stands on its own evidence, and the run finishes the
 product's name.
 
+## The assertion history, on the same estate
+
+```console
+$ qedro quality demo/lineage --config demo/qedro.yaml
+```
+
+Two datasets carry assertions and ten do not. `scores-validated` checks five
+expectations on `fraud_curated.transactions_scored` every night, and the row-count
+expectation failed twice — on the 6th and the 10th, when scoring volume dropped.
+`dunning-weekly` checks three expectations on `billing_curated.invoices`, on its own
+weekly cadence, and asserted twice rather than three times because one Monday's run
+failed before it got there.
+
+The other ten datasets appear under **Not checked**, and that is the point of the
+projection: nothing failed on them because nothing ran on them.
+
+Note what does *not* withhold the mark here — the failing expectation. The mark says
+the history is complete, not that the data is good.
+
 ## Worth noticing
 
 **The scope statement is on all three**, including the one that earns the mark.
@@ -94,15 +113,21 @@ covering pipelines is a complete record of the pipeline-borne subset and never o
 everything a controller does, and printing that only when coverage was poor would
 teach a reader that its absence means full coverage.
 
-**Two runs failed** — one `scores-validated`, one `dunning-weekly`. A fortnight of
+**Two runs failed** — one `scores-validated`, one `dunning-weekly`. Three weeks of
 production lineage with nothing failing in it is not production lineage. They are
-visible in `qedro events demo/lineage` as `fail 2` and they do not affect the
-record, because a failed run is still processing that happened.
+visible in `qedro events demo/lineage` as `fail 2`, they do not affect the Art. 30
+record because a failed run is still processing that happened, and they are why the
+weekly job asserted twice rather than three times.
 
 **The events carry facets nothing here reads** — `sql`, `jobType`, `nominalTime`,
 `dataSource`, `errorMessage`. They are in the estate because real events carry
 them, and they arrive intact through a reader that models none of them. That is
 the shallow-model rule working rather than being asserted.
+
+**The assertions are an *input* facet**, which is where Great Expectations and dbt
+put them, and it is the reason the history can speak in dates. *This table has a
+unique key* is a claim about the table; *the run on the 10th checked it and it held*
+is evidence about a run.
 
 ## Regenerating
 

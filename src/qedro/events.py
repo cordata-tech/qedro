@@ -32,17 +32,44 @@ KNOWN_EVENT_TYPES = frozenset({"START", "RUNNING", "COMPLETE", "ABORT", "FAIL", 
 
 @dataclass(frozen=True)
 class Dataset:
-    """One side of a job's edge — an input or an output."""
+    """One side of a job's edge — an input or an output.
+
+    Two kinds of facet, kept apart because they answer different questions.
+    ``facets`` describes the dataset itself and is true whoever is looking:
+    its schema, where it lives. ``input_facets`` and ``output_facets`` describe
+    **this run's use of it** — what one job asserted about it on one day.
+
+    Merging them would be convenient and wrong. *This table has a unique
+    `tx_id`* is a property of the table; *the run on the 14th checked that
+    `tx_id` was unique and it held* is an event. The second is evidence and
+    the first is a claim, which is the distinction the whole project turns on.
+    """
 
     namespace: str
     name: str
     facets: Mapping[str, Any] = field(default_factory=dict)
+    input_facets: Mapping[str, Any] = field(default_factory=dict)
+    output_facets: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def key(self) -> str:
         """Stable identity across events. Namespace matters: two warehouses
         can hold a `customer` table and they are not the same dataset."""
         return f"{self.namespace}/{self.name}"
+
+    def facet(self, name: str) -> Mapping[str, Any] | None:
+        """A facet of the dataset itself."""
+        return _facet(self.facets, name)
+
+    def run_facet(self, name: str) -> Mapping[str, Any] | None:
+        """A facet of this run's use of the dataset.
+
+        Only one of the two sides is ever populated for a given dataset — it
+        arrived as an input or as an output — so this asks both rather than
+        making every caller know which.
+        """
+        found = _facet(self.input_facets, name)
+        return found if found is not None else _facet(self.output_facets, name)
 
     def field_names(self) -> list[str]:
         """Column names from the standard schema facet, or empty.
@@ -136,9 +163,23 @@ def _datasets(raw: Any) -> tuple[Dataset, ...]:
         name, namespace = d.get("name"), d.get("namespace")
         if not isinstance(name, str) or not isinstance(namespace, str):
             continue  # a dataset without identity cannot be joined to anything
-        facets = d.get("facets")
-        out.append(Dataset(namespace, name, facets if isinstance(facets, Mapping) else {}))
+        out.append(
+            Dataset(
+                namespace,
+                name,
+                _mapping(d.get("facets")),
+                # Dropped until the quality projection needed them, which is
+                # how `dataQualityAssertions` went missing: it is an *input*
+                # facet, not a dataset facet, and nothing was reading that side.
+                _mapping(d.get("inputFacets")),
+                _mapping(d.get("outputFacets")),
+            )
+        )
     return tuple(out)
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
 
 
 def parse_event(raw: Any) -> Event | None:

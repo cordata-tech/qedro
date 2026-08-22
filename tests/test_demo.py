@@ -99,7 +99,7 @@ class TestLineageAlone:
     def test_it_finds_the_estate(self, capsys):
         payload = record(PLAIN, capsys=capsys)
         assert len(payload["activities"]) == 6
-        assert payload["scope"]["events"] == 144
+        assert payload["scope"]["events"] == 216
 
     def test_but_cannot_say_why_any_of_it_happened(self, capsys):
         payload = record(PLAIN, capsys=capsys)
@@ -184,3 +184,58 @@ class TestTheWholeThingAsAnAuditorReceivesIt:
         assert "stands on emitted evidence" in sheet["A4"].value
         # Six activities under one header row.
         assert sheet.max_row == 12
+
+
+class TestTheAssertionHistory:
+    """`quality` against the same estate — and the half of it that is absence.
+
+    The demo has two datasets with assertions and ten without, which is the
+    proportion that makes the point: a report showing two green datasets out
+    of twelve, without saying so, would be the invisible hole again.
+    """
+
+    def history(self, *argv, capsys) -> dict:
+        assert main(["quality", *argv, "--format", "json"]) == 0
+        return json.loads(capsys.readouterr().out)
+
+    def test_it_finds_the_assertions_in_both_estates(self, capsys):
+        # The two estates differ only in the Art. 30 facet, so the assertion
+        # history must be identical across them.
+        plain = self.history(PLAIN, "--config", CONFIG, capsys=capsys)
+        declared = self.history(DECLARED, "--config", CONFIG, capsys=capsys)
+        assert plain["datasets"] == declared["datasets"]
+        assert plain["unchecked"] == declared["unchecked"]
+
+    def test_two_datasets_are_checked_and_ten_are_not(self, capsys):
+        payload = self.history(PLAIN, "--config", CONFIG, capsys=capsys)
+        assert payload["scope"]["checked"] == 2
+        assert payload["scope"]["unchecked"] == 10
+        assert len(payload["unchecked"]) == 10
+
+    def test_the_row_count_expectation_failed_twice_and_says_when(self, capsys):
+        payload = self.history(PLAIN, "--config", CONFIG, capsys=capsys)
+        [scored] = [d for d in payload["datasets"] if d["dataset"].endswith("transactions_scored")]
+        [failing] = [e for e in scored["expectations"] if not e["holds"]]
+        assert failing["assertion"] == "expect_table_row_count_to_be_between"
+        assert failing["failures"] == 2
+        assert failing["last_failure"].startswith("2026-06-10")
+
+    def test_a_failing_expectation_does_not_withhold_the_mark(self, capsys):
+        # It is withheld here, but for the unchecked datasets — not for the
+        # failure. The mark says the history is complete, not that the data
+        # is good.
+        payload = self.history(PLAIN, "--config", CONFIG, capsys=capsys)
+        assert payload["complete"] is False
+        assert not any("failed" in r for r in payload["reasons"])
+        assert any("carry no assertions" in r for r in payload["reasons"])
+
+    def test_the_domain_filter_narrows_both_halves(self, capsys):
+        payload = self.history(PLAIN, "--config", CONFIG, "--domain", "billing", capsys=capsys)
+        assert [d["dataset"] for d in payload["datasets"]] == ["warehouse/billing_curated.invoices"]
+        assert all("billing" in key for key in payload["unchecked"])
+
+    def test_the_weekly_job_asserted_on_its_own_cadence(self, capsys):
+        # Three weeks of Mondays, one of which failed before it could assert.
+        payload = self.history(PLAIN, "--config", CONFIG, capsys=capsys)
+        [invoices] = [d for d in payload["datasets"] if d["dataset"].endswith("invoices")]
+        assert invoices["runs"] == 2

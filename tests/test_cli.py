@@ -332,3 +332,111 @@ class TestTheWorkbook:
         out = tmp_path / "ropa.xlsx"
         assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
         assert TOMBSTONE in capsys.readouterr().out
+
+
+class TestQuality:
+    """The assertion history, through the CLI people actually type."""
+
+    def test_it_reports_what_was_checked_and_what_was_not(self, tmp_path, capsys):
+        events, config = _asserting_estate(tmp_path)
+        assert main(["quality", str(events), "--config", str(config), "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+
+        assert [d["dataset"] for d in payload["datasets"]] == ["wh/scores"]
+        assert payload["unchecked"] == ["wh/checked_nothing"]
+        assert payload["complete"] is False
+
+    def test_the_domain_filter_is_repeatable(self, tmp_path, capsys):
+        events, config = _asserting_estate(tmp_path)
+        assert (
+            main(
+                [
+                    "quality",
+                    str(events),
+                    "--config",
+                    str(config),
+                    "--domain",
+                    "fraud",
+                    "--domain",
+                    "billing",
+                    "--format",
+                    "json",
+                ]
+            )
+            == 0
+        )
+        assert json.loads(capsys.readouterr().out)["scope"]["domains_seen"]
+
+    def test_a_domain_nobody_emitted_for_is_an_empty_history_not_a_crash(self, tmp_path, capsys):
+        events, config = _asserting_estate(tmp_path)
+        argv = ["quality", str(events), "--config", str(config), "--domain", "nowhere"]
+        assert main([*argv, "--format", "json"]) == 0
+        assert json.loads(capsys.readouterr().out)["datasets"] == []
+
+    def test_days_is_shorthand_for_since(self, tmp_path, capsys):
+        # `--days 90` is how anybody asks for a quarter of history.
+        events, config = _asserting_estate(tmp_path)
+        assert main(["quality", str(events), "--config", str(config), "--days", "3650"]) == 0
+        assert "assertion history" in capsys.readouterr().out
+
+    def test_an_explicit_since_beats_days(self, tmp_path, capsys):
+        # Two flags meaning the same thing must not silently disagree, and the
+        # one the user typed is the one they meant.
+        events, config = _asserting_estate(tmp_path)
+        argv = ["quality", str(events), "--config", str(config), "--format", "json"]
+        assert main([*argv, "--since", "2026-03-01", "--days", "1"]) == 0
+        assert json.loads(capsys.readouterr().out)["scope"]["window"]["since"].startswith(
+            "2026-03-01T00:00:00"
+        )
+
+    def test_every_format_is_reachable(self, tmp_path, capsys):
+        events, config = _asserting_estate(tmp_path)
+        for fmt in sorted(render.names()):
+            argv = ["quality", str(events), "--config", str(config), "--format", fmt]
+            if render.is_binary(fmt):
+                out = tmp_path / f"history.{fmt}"
+                assert main([*argv, "--out", str(out)]) == 0
+                assert load_workbook(out).sheetnames == ["Assertions", "Not checked", "Scope"]
+            else:
+                assert main(argv) == 0
+                assert capsys.readouterr().out.strip()
+
+    def test_the_mark_is_earned_when_everything_in_view_was_checked(self, tmp_path, capsys):
+        events, config = _asserting_estate(tmp_path, complete=True)
+        assert main(["quality", str(events), "--config", str(config)]) == 0
+        assert TOMBSTONE in capsys.readouterr().out
+
+
+def _asserting_estate(tmp_path, *, complete: bool = False):
+    """A job that asserts things, and (unless `complete`) one that does not."""
+    events = tmp_path / "quality-events"
+    events.mkdir(exist_ok=True)
+
+    def event(job, reads, assertions=None):
+        raw = {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-03-01T10:00:00Z",
+            "run": {"runId": job},
+            "job": {"namespace": "acme.fraud", "name": job},
+            "inputs": [{"namespace": "wh", "name": reads}],
+        }
+        if assertions:
+            raw["inputs"][0]["inputFacets"] = {"dataQualityAssertions": {"assertions": assertions}}
+        return raw
+
+    rows = [
+        event(
+            "validate",
+            "scores",
+            [{"assertion": "expect_column_values_to_not_be_null", "column": "id", "success": True}],
+        )
+    ]
+    if not complete:
+        rows.append(event("load", "checked_nothing"))
+
+    (events / "e.ndjson").write_text(
+        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8"
+    )
+    config = tmp_path / "qedro.yaml"
+    config.write_text("controller: ACME GmbH\n", encoding="utf-8")
+    return events, config

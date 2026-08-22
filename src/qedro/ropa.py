@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from . import scope, words
 from .config import Config, Controller, Rule
 from .events import Event
 from .mark import Completeness
@@ -114,34 +115,21 @@ class Activity:
 
 
 @dataclass(frozen=True)
-class Scope:
-    """What the run looked at, and what it could never have looked at.
+class Scope(scope.Scope):
+    """What the Art. 30 run looked at.
 
-    Printed on **every** run, including one that earns the tombstone. The mark is
-    conditional and means *is what I found trustworthy*; this is unconditional
-    and means *what did I look at*. A scope statement that appeared only when
-    something was wrong would teach a reader that its absence means full
-    coverage, which is the invisible hole one level up. See
-    cordata-tech/qedro#3.
+    The window, the source and the domains live in the base; what is added
+    here is what *coverage* means for this projection — how many jobs, how
+    many datasets, and how the provenance of their fields divided up.
     """
 
-    source: str = ""
-    since: datetime | None = None
-    until: datetime | None = None
-    events: int = 0
     jobs: int = 0
     datasets: int = 0
     namespaces: tuple[str, ...] = ()
-    domains_declared: tuple[str, ...] = ()
-    domains_seen: tuple[str, ...] = ()
     evidenced: int = 0
     from_mapping: int = 0
     undeclared: int = 0
 
-    #: The standing sentence. Deliberately factual about what was not examined
-    #: rather than advisory about what that means for compliance — the second
-    #: would be a legal interpretation, which is a judgement a lawyer signs off
-    #: and not one a CLI makes. See the open question on cordata-tech/qedro#3.
     OUT_OF_VIEW = (
         "This record covers processing performed by pipelines that emit lineage. "
         "Systems that do not emit lineage — CRM, HR, ticketing, marketing tools, "
@@ -149,23 +137,22 @@ class Scope:
         "record is not evidence of their absence from the organisation."
     )
 
-    @property
-    def domains_silent(self) -> tuple[str, ...]:
-        """Declared domains that produced nothing.
-
-        The difference between *nothing happened* and *nothing was recorded*,
-        which is invisible in the output unless something says it.
-        """
-        seen = set(self.domains_seen)
-        return tuple(d for d in self.domains_declared if d not in seen)
-
-    def window(self) -> str:
-        """The window as resolved, not as typed."""
-        if self.since is None and self.until is None:
-            return "all events available from the source"
-        start = self.since.isoformat() if self.since else "the earliest event available"
-        end = self.until.isoformat() if self.until else "the latest event available"
-        return f"{start} to {end}"
+    def lines(self) -> tuple[tuple[str, str], ...]:
+        out = [
+            ("in view", f"{self.jobs} jobs, {self.datasets} datasets, {self.events} events"),
+        ]
+        if self.namespaces:
+            out.append(("namespaces", ", ".join(self.namespaces)))
+        out.append(
+            (
+                "provenance",
+                (
+                    f"{self.evidenced} evidenced, {self.from_mapping} from the mapping "
+                    f"file, {self.undeclared} undeclared"
+                ),
+            )
+        )
+        return tuple(out)
 
 
 @dataclass
@@ -250,7 +237,7 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
     return Activity(
         namespace=first.job.namespace,
         name=first.job.name,
-        domain=_domain(first.job.namespace, rule),
+        domain=config.domain_for(first.job.namespace, rule),
         purpose=purpose,
         legal_basis=legal_basis,
         inputs=tuple(sorted(inputs)),
@@ -276,22 +263,6 @@ def _sourced(
         return Sourced(mapped, Provenance.MAPPING, vocabulary.unrecognised(key, mapped))
 
     return Sourced("", Provenance.ABSENT)
-
-
-def _domain(namespace: str, rule: Rule | None) -> str:
-    """Which domain a job belongs to.
-
-    A heuristic — the last segment of the job namespace, so `cordata.fraud`
-    reads as `fraud` — and a mapping rule's `domain:` overrides it. Kept simple
-    and overridable rather than clever, because a wrong guess here silently
-    changes which domains look silent.
-    """
-    if rule and rule.domain:
-        return rule.domain
-    for separator in ("/", "."):
-        if separator in namespace:
-            return namespace.rsplit(separator, 1)[-1]
-    return namespace
 
 
 def _scope(
@@ -325,17 +296,6 @@ def _scope(
         ),
         undeclared=sum(1 for a in activities if not a.purpose or not a.legal_basis),
     )
-
-
-def _plural(count: int, singular: str, plural: str) -> str:
-    """`1 of 4 activities relies`, not `1 of 4 activities rely`.
-
-    The same care as `_count` in the CLI, and for the same reason: an artefact
-    arguing that a reader should take its numbers seriously cannot print a verb
-    that disagrees with one. Note that in `n of m`, the noun agrees with *m*
-    and the verb with *n* — so the two are asked for separately.
-    """
-    return singular if count == 1 else plural
 
 
 def _completeness(
@@ -378,9 +338,9 @@ def _completeness(
     if mapped:
         n = len(mapped)
         completeness = completeness.degraded(
-            f"{n} of {total} {_plural(total, 'activity', 'activities')} "
-            f"{_plural(n, 'relies', 'rely')} on the mapping file rather than on an emitted "
-            f"facet, so {_plural(n, 'that entry is', 'those entries are')} asserted rather "
+            f"{n} of {total} {words.plural(total, 'activity', 'activities')} "
+            f"{words.plural(n, 'relies', 'rely')} on the mapping file rather than on an emitted "
+            f"facet, so {words.plural(n, 'that entry is', 'those entries are')} asserted rather "
             "than proven"
         )
 
@@ -388,15 +348,15 @@ def _completeness(
     if silent_fields:
         n = len(silent_fields)
         completeness = completeness.degraded(
-            f"{n} of {total} {_plural(total, 'activity', 'activities')} "
-            f"{_plural(n, 'has', 'have')} no purpose or no legal basis from any source"
+            f"{n} of {total} {words.plural(total, 'activity', 'activities')} "
+            f"{words.plural(n, 'has', 'have')} no purpose or no legal basis from any source"
         )
 
     unrecognised = [a for a in activities if a.purpose.unrecognised or a.legal_basis.unrecognised]
     if unrecognised:
         n = len(unrecognised)
         completeness = completeness.degraded(
-            f"{n} {_plural(n, 'activity carries', 'activities carry')} "
+            f"{n} {words.plural(n, 'activity carries', 'activities carry')} "
             "a value the vocabulary does not define"
         )
 

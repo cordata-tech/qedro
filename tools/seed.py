@@ -49,11 +49,12 @@ DEMO = ROOT / "demo"
 #: A company that does not exist, in a sector where the record matters.
 CONTROLLER = "ACME Finanz GmbH"
 
-#: Fourteen days is enough for run counts to look like a schedule rather than
-#: a sample, and short enough that the committed estate stays a few hundred
-#: kilobytes.
+#: Three weeks, chosen by the weekly job rather than by the daily ones. A
+#: fortnight gives `dunning-weekly` two runs, one of which fails, which leaves
+#: a single assertion in the quality history — enough to be correct and not
+#: enough to look like a schedule. Three weeks gives it three.
 START = datetime(2026, 6, 1, tzinfo=UTC)
-DAYS = 14
+DAYS = 21
 
 #: Real OpenLineage producer strings. The integrations are named because the
 #: whole claim is that this works against what people already run — an estate
@@ -161,6 +162,20 @@ SCHEMAS: dict[str, list[tuple[str, str]]] = {
 
 
 @dataclass(frozen=True)
+class Expectation:
+    """One data-quality assertion a job makes about a dataset it reads.
+
+    `fails_on` is the list of days it does not hold. A fortnight of assertions
+    that all pass demonstrates the happy path and nothing else — the whole
+    reason to look at an assertion history is the day one stopped holding.
+    """
+
+    assertion: str
+    column: str = ""
+    fails_on: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
 class Pipeline:
     """One scheduled job, and what it would declare if it declared anything."""
 
@@ -181,6 +196,12 @@ class Pipeline:
     #: lineage with nothing failing in it is not production lineage.
     fails_on: tuple[int, ...] = ()
     sql: str = ""
+    #: Data-quality assertions this job makes, and the dataset they are about.
+    #: Emitted as the standard `dataQualityAssertions` **input** facet, which is
+    #: where Great Expectations and dbt put them: the claim is about one run's
+    #: use of the dataset, not about the dataset.
+    asserts_on: str = ""
+    asserts: tuple[Expectation, ...] = ()
 
     @property
     def namespace(self) -> str:
@@ -222,6 +243,16 @@ PIPELINES = (
         purpose="data-quality-validation",
         legal_basis="legitimate-interest",
         fails_on=(3,),
+        asserts_on="fraud_curated.transactions_scored",
+        asserts=(
+            Expectation("expect_column_values_to_not_be_null", "tx_id"),
+            Expectation("expect_column_values_to_be_unique", "tx_id"),
+            Expectation("expect_column_values_to_be_between", "fraud_score"),
+            Expectation("expect_column_values_to_not_be_null", "account_id"),
+            # The interesting one. Scoring volume drops on two days and the
+            # row-count expectation catches it.
+            Expectation("expect_table_row_count_to_be_between", fails_on=(5, 9)),
+        ),
     ),
     Pipeline(
         domain="crm",
@@ -276,6 +307,12 @@ PIPELINES = (
         legal_basis="legitimate-interest",
         weekly=True,
         fails_on=(7,),
+        asserts_on="billing_curated.invoices",
+        asserts=(
+            Expectation("expect_column_values_to_not_be_null", "invoice_id"),
+            Expectation("expect_column_values_to_be_unique", "invoice_id"),
+            Expectation("expect_column_values_to_be_between", "amount_eur"),
+        ),
         sql=(
             "select invoice_id, account_id, dunning_stage(due_on) as stage "
             "from billing_curated.invoices where due_on < current_date"
@@ -304,7 +341,25 @@ def _facet(payload: dict, producer: str, schema: str) -> dict:
     return {"_producer": producer, "_schemaURL": schema, **payload}
 
 
-def _dataset(name: str, producer: str) -> dict:
+def _assertions(pipeline: Pipeline, day: int, producer: str) -> dict:
+    return _facet(
+        {
+            "assertions": [
+                {
+                    "assertion": e.assertion,
+                    **({"column": e.column} if e.column else {}),
+                    "success": day not in e.fails_on,
+                }
+                for e in pipeline.asserts
+            ]
+        },
+        producer,
+        f"{FACET_SPEC}/DataQualityAssertionsDatasetFacet.json"
+        "#/$defs/DataQualityAssertionsDatasetFacet",
+    )
+
+
+def _dataset(name: str, producer: str, assertions: dict | None = None) -> dict:
     facets = {
         "dataSource": _facet(
             {
@@ -321,7 +376,12 @@ def _dataset(name: str, producer: str) -> dict:
             producer,
             f"{FACET_SPEC}/SchemaDatasetFacet.json#/$defs/SchemaDatasetFacet",
         )
-    return {"namespace": "warehouse", "name": name, "facets": facets}
+    out: dict = {"namespace": "warehouse", "name": name, "facets": facets}
+    if assertions is not None:
+        # An *input* facet, not a dataset facet. The distinction is the whole
+        # reason the assertion history can speak in dates.
+        out["inputFacets"] = {"dataQualityAssertions": assertions}
+    return out
 
 
 def _job(pipeline: Pipeline, producer: str, *, declared: bool) -> dict:
@@ -413,8 +473,12 @@ def _events(pipeline: Pipeline, day: int, *, declared: bool) -> list[dict]:
         events.append(terminal)
         return events
 
+    asserted = _assertions(pipeline, day, producer) if pipeline.asserts else None
     complete = envelope("COMPLETE", finished)
-    complete["inputs"] = [_dataset(name, producer) for name in pipeline.inputs]
+    complete["inputs"] = [
+        _dataset(name, producer, asserted if name == pipeline.asserts_on else None)
+        for name in pipeline.inputs
+    ]
     complete["outputs"] = [_dataset(name, producer) for name in pipeline.outputs]
     events.append(complete)
     return events

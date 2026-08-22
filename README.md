@@ -12,13 +12,13 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. The reader, the facet spec, the Art. 30 projection and all
-> four output formats work. `quality` and `provenance` do not exist yet. Watch the
-> repository rather than depending on it.
+> Early development. The reader, the facet spec, the Art. 30 record, the assertion
+> history and all four output formats work. `provenance` does not exist yet. Watch
+> the repository rather than depending on it.
 
 ## Try it
 
-[`demo/`](demo/) holds a committed synthetic estate — fourteen days of dbt, Airflow
+[`demo/`](demo/) holds a committed synthetic estate — three weeks of dbt, Airflow
 and Spark lineage from a company that does not exist, with no AWS anywhere in it.
 
 ```console
@@ -26,7 +26,7 @@ $ qedro ropa demo/lineage --config demo/qedro.yaml            # asserted, no mar
 $ qedro ropa demo/lineage-declared --config demo/qedro.yaml   # evidenced      ∎
 ```
 
-Same jobs, same runs, same fourteen days. The only difference between the two
+Same jobs, same runs, same three weeks. The only difference between the two
 estates is whether the pipelines declare their purpose and lawful basis — and it
 is the difference between a record somebody asserts and a record that stands on
 its own evidence. [`demo/README.md`](demo/README.md) walks through it.
@@ -123,6 +123,38 @@ Point `--vocabulary` at your own and the shipped one is replaced wholesale — w
 what makes an organisation's own ontology possible later without a rewrite. A value
 outside a closed term is flagged and still reported; refusing to read what an emitter
 actually sent would hide the finding that matters.
+
+## The assertion history
+
+`qedro quality` reports what was actually checked about each dataset, and when — and
+it gives equal weight to what was not:
+
+```console
+$ qedro quality demo/lineage --config demo/qedro.yaml
+  warehouse/fraud_curated.transactions_scored  (fraud)
+    asserted by   acme.fraud/scores-validated
+    runs          20 in window, last 2026-06-21T02:51:00+00:00
+    expectations  5 — 4 held, 1 failed
+      held    expect_column_values_to_be_unique on tx_id           20 runs
+      FAILED  expect_table_row_count_to_be_between                 20 runs, 2 failed, last 2026-06-10
+
+  Not checked — 10 datasets carry no assertions at all
+    warehouse/billing_raw.orders
+    ...
+```
+
+**A dataset with no failures and a dataset with no checks look identical in every
+summary anybody writes, and they are opposites.** So the unchecked list is half the
+artefact rather than a footnote, and it is a reason the mark is withheld.
+
+A *failing* expectation is not. The mark says this account of what was checked is
+complete, not that the data is good — and withholding it for a failure would give
+somebody a reason to stop emitting the assertion that fails.
+
+The evidence is the standard OpenLineage `dataQualityAssertions` facet, which Great
+Expectations already emits. Nothing Cordata-specific is involved.
+
+`--domain fraud` narrows it, repeatably, and `--days 90` is shorthand for the window.
 
 ## The reader
 

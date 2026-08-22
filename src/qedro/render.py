@@ -6,6 +6,14 @@ spreadsheet and will not be talked out of it. The first three are strings; xlsx
 is bytes and lives in its own module, because a workbook is layout as well as
 content and mixing that in here would bury the two rules below.
 
+**Each format is one function that dispatches on the artefact it is given.**
+`ropa` and `quality` are different records and want different tables, but they
+share a scope statement, a mark and a set of reasons — and the rules below are
+about exactly those. A second registry per projection would have let four
+formats times three projections drift into twelve slightly different
+summaries; `singledispatch` keeps the shared parts shared and the tests
+parametrised over both axes.
+
 **Every format prints the scope statement**, and none of them may make it
 conditional. A renderer that skips it on a clean run has quietly taught the
 reader that its absence means full coverage. See cordata-tech/qedro#3.
@@ -21,9 +29,12 @@ from __future__ import annotations
 import json as _json
 from collections.abc import Iterable
 from datetime import datetime
+from functools import singledispatch
 
-from . import TOMBSTONE
-from .ropa import Activity, Record, Scope
+from . import TOMBSTONE, words
+from . import quality as quality_module
+from .ropa import Activity, Record
+from .scope import Scope
 
 #: What each provenance looks like in a rendered table. The evidenced case gets
 #: no decoration: it is the normal case, and marking it would make the record
@@ -46,8 +57,14 @@ def _field(sourced) -> str:
     return f"{sourced.value}{BADGE.get(str(sourced.provenance), '')}{flag}"
 
 
-def text(record: Record, *, symbol: bool = True, width: int = 88) -> str:
+@singledispatch
+def text(record: object, *, symbol: bool = True, width: int = 88) -> str:
     """The terminal rendering. Dense, and readable without scrolling."""
+    raise TypeError(f"no text rendering for {type(record).__name__}")
+
+
+@text.register
+def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
     out: list[str] = []
     controller = record.controller.name or "— no controller declared"
     out.append(f"Record of processing activities — {controller}")
@@ -68,34 +85,30 @@ def text(record: Record, *, symbol: bool = True, width: int = 88) -> str:
 
     out.extend(_scope_text(record.scope, width=width))
     out.append("")
-
-    if record.complete:
-        mark = TOMBSTONE if symbol else "[complete]"
-        out.append(f"  every activity stands on emitted evidence   {mark}")
-    else:
-        out.append("  this record does not claim to be a proof:")
-        out.extend(f"    ! {reason}" for reason in record.completeness.reasons)
+    out.extend(_verdict_text(record, "every activity stands on emitted evidence", symbol=symbol))
 
     return "\n".join(out) + "\n"
 
 
-def _scope_text(scope: Scope, *, width: int) -> list[str]:
-    out = ["  Scope of this record", f"    source        {scope.source or 'unknown'}"]
+def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record") -> list[str]:
+    """Shared by every projection. The labels come from the scope itself."""
+    out = [f"  {title}", f"    source        {scope.source or 'unknown'}"]
     out.append(f"    window        {scope.window()}")
-    out.append(
-        f"    in view       {scope.jobs} jobs, {scope.datasets} datasets, {scope.events} events"
-    )
-    if scope.namespaces:
-        out.append(f"    namespaces    {', '.join(scope.namespaces)}")
-    out.append(
-        f"    provenance    {scope.evidenced} evidenced, {scope.from_mapping} from the "
-        f"mapping file, {scope.undeclared} undeclared"
-    )
+    out.extend(f"    {label:<13} {value}" for label, value in scope.lines())
     if scope.domains_silent:
         out.append(f"    silent        {', '.join(scope.domains_silent)} (in scope, no lineage)")
     for line in _wrap(scope.OUT_OF_VIEW, width - 4):
         out.append(f"    {line}")
     return out
+
+
+def _verdict_text(record, earned: str, *, symbol: bool, withheld: str = "record") -> list[str]:
+    """The mark, or the reasons it was withheld. Never a bare boolean."""
+    if record.complete:
+        return [f"  {earned}   {TOMBSTONE if symbol else '[complete]'}"]
+    return [f"  this {withheld} does not claim to be a proof:"] + [
+        f"    ! {reason}" for reason in record.completeness.reasons
+    ]
 
 
 def _wrap(paragraph: str, width: int) -> list[str]:
@@ -111,8 +124,14 @@ def _wrap(paragraph: str, width: int) -> list[str]:
     return lines
 
 
-def markdown(record: Record) -> str:
+@singledispatch
+def markdown(record: object) -> str:
     """For a repository, a wiki, or a document somebody prints."""
+    raise TypeError(f"no markdown rendering for {type(record).__name__}")
+
+
+@markdown.register
+def _(record: Record) -> str:
     controller = record.controller.name or "_no controller declared_"
     out = [f"# Record of processing activities — {controller}", ""]
     if record.controller.contact:
@@ -128,32 +147,32 @@ def markdown(record: Record) -> str:
             f"| {_provenance_cell(a)} | {len(a.inputs)} | {len(a.outputs)} | {a.runs} |"
         )
 
-    out += ["", "## Scope of this record", ""]
-    out += [
-        f"- **Source** — {record.scope.source or 'unknown'}",
-        f"- **Window** — {record.scope.window()}",
-        (
-            f"- **In view** — {record.scope.jobs} jobs, "
-            f"{record.scope.datasets} datasets, {record.scope.events} events"
-        ),
-        (
-            f"- **Provenance** — {record.scope.evidenced} evidenced, "
-            f"{record.scope.from_mapping} from the mapping file, "
-            f"{record.scope.undeclared} undeclared"
-        ),
-    ]
-    if record.scope.domains_silent:
-        out.append(f"- **Declared in scope but silent** — {', '.join(record.scope.domains_silent)}")
-    out += ["", record.scope.OUT_OF_VIEW, ""]
-
-    if record.complete:
-        out += [f"Every activity in this record stands on emitted evidence. {TOMBSTONE}", ""]
-    else:
-        out += ["**This record does not claim to be a proof.**", ""]
-        out += [f"- {reason}" for reason in record.completeness.reasons]
-        out.append("")
+    out += _scope_markdown(record.scope)
+    out += _verdict_markdown(record, "Every activity in this record stands on emitted evidence.")
 
     return "\n".join(out)
+
+
+def _scope_markdown(scope: Scope) -> list[str]:
+    out = ["", "## Scope of this record", ""]
+    out += [
+        f"- **Source** — {scope.source or 'unknown'}",
+        f"- **Window** — {scope.window()}",
+    ]
+    out += [f"- **{label[0].upper()}{label[1:]}** — {value}" for label, value in scope.lines()]
+    if scope.domains_silent:
+        out.append(f"- **Declared in scope but silent** — {', '.join(scope.domains_silent)}")
+    return out + ["", scope.OUT_OF_VIEW, ""]
+
+
+def _verdict_markdown(record, earned: str, *, withheld: str = "record") -> list[str]:
+    if record.complete:
+        return [f"{earned} {TOMBSTONE}", ""]
+    return (
+        [f"**This {withheld} does not claim to be a proof.**", ""]
+        + [f"- {reason}" for reason in record.completeness.reasons]
+        + [""]
+    )
 
 
 def _provenance_cell(activity: Activity) -> str:
@@ -165,12 +184,22 @@ def _provenance_cell(activity: Activity) -> str:
     return "not declared"
 
 
-def json(record: Record, *, indent: int = 2) -> str:
+@singledispatch
+def json(record: object, *, indent: int = 2) -> str:
     """For whatever consumes this next.
 
     Provenance is a field per value rather than a summary, so a consumer can
     make the evidenced/asserted distinction without re-deriving it.
+
+    Deliberately *not* generated from `scope.lines()`: those labels are prose
+    for a reader, and a machine consumer needs the numbers separately rather
+    than a sentence to parse back apart.
     """
+    raise TypeError(f"no json rendering for {type(record).__name__}")
+
+
+@json.register
+def _(record: Record, *, indent: int = 2) -> str:
     payload = {
         "controller": {
             "name": record.controller.name,
@@ -233,16 +262,195 @@ def _activity_json(activity: Activity) -> dict[str, object]:
     }
 
 
-def xlsx(record: Record) -> bytes:
+@singledispatch
+def xlsx(record: object) -> bytes:
     """The workbook, as bytes.
 
-    openpyxl is imported here rather than at module scope so that `qedro
-    events`, and every text rendering, pays nothing for a format they do not
-    produce.
+    openpyxl is imported inside each implementation rather than at module
+    scope so that `qedro events`, and every text rendering, pays nothing for a
+    format they do not produce.
     """
+    raise TypeError(f"no workbook for {type(record).__name__}")
+
+
+@xlsx.register
+def _(record: Record) -> bytes:
     from .xlsx import workbook
 
     return workbook(record)
+
+
+@xlsx.register
+def _(record: quality_module.Record) -> bytes:
+    from .xlsx import quality_workbook
+
+    return quality_workbook(record)
+
+
+#: How many unchecked datasets to name before summarising the rest. A list that
+#: simply stops looks like the whole list, so the remainder is always counted.
+UNCHECKED_SHOWN = 25
+
+
+@text.register
+def _(record: quality_module.Record, *, symbol: bool = True, width: int = 88) -> str:
+    out: list[str] = []
+    controller = record.controller.name or "— no controller declared"
+    out.append(f"Data quality assertion history — {controller}")
+    out.append("")
+
+    for dataset in record.datasets:
+        domain = f"  ({dataset.domain})" if dataset.domain else ""
+        out.append(f"  {dataset.key}{domain}")
+        out.append(f"    asserted by   {', '.join(dataset.asserted_by)}")
+        out.append(f"    runs          {dataset.runs} in window, last {_when(dataset.last_seen)}")
+        held = len(dataset.expectations) - len(dataset.failing())
+        out.append(
+            f"    expectations  {len(dataset.expectations)} — "
+            f"{held} held, {len(dataset.failing())} failed"
+        )
+        out.extend(f"      {line}" for line in _expectations_text(dataset))
+        out.append("")
+
+    out.extend(_unchecked_text(record))
+    out.extend(_scope_text(record.scope, width=width, title="Scope of this history"))
+    out.append("")
+    out.extend(
+        _verdict_text(
+            record,
+            "this history accounts for every dataset in view",
+            symbol=symbol,
+            withheld="history",
+        )
+    )
+
+    return "\n".join(out) + "\n"
+
+
+def _expectations_text(dataset) -> list[str]:
+    """One line per expectation.
+
+    Words rather than tick and cross glyphs: this file already has one
+    character whose font coverage is thin, and a result nobody can read is
+    worse than a longer line.
+    """
+    out = []
+    for e in dataset.expectations:
+        marker = "held  " if e.holds else "FAILED"
+        detail = words.count(e.runs, "run")
+        if not e.holds:
+            detail += f", {e.failures} failed, last {_when(e.last_failure)}"
+        out.append(f"{marker}  {e.describe:<52} {detail}")
+    return out
+
+
+def _unchecked_text(record: quality_module.Record) -> list[str]:
+    """The half of the artefact that is about absence.
+
+    Not a footnote. A dataset with no assertions and a dataset with no
+    failures read identically in any summary, and they are opposites.
+    """
+    if not record.unchecked:
+        return []
+    out = [f"  Not checked — {len(record.unchecked)} datasets carry no assertions at all"]
+    for key in record.unchecked[:UNCHECKED_SHOWN]:
+        out.append(f"    {key}")
+    if len(record.unchecked) > UNCHECKED_SHOWN:
+        out.append(f"    … and {len(record.unchecked) - UNCHECKED_SHOWN} more")
+    return out + [""]
+
+
+@markdown.register
+def _(record: quality_module.Record) -> str:
+    controller = record.controller.name or "_no controller declared_"
+    out = [f"# Data quality assertion history — {controller}", ""]
+
+    out += [
+        "| Dataset | Domain | Expectations | Runs | Failed | Last asserted |",
+        "|---|---|---|---|---|---|",
+    ]
+    for d in record.datasets:
+        out.append(
+            f"| `{d.key}` | {d.domain or '—'} | {len(d.expectations)} | {d.runs} "
+            f"| {len(d.failing())} | {_when(d.last_seen)} |"
+        )
+
+    if record.unchecked:
+        out += ["", f"## Not checked — {len(record.unchecked)} datasets", ""]
+        out += [
+            (
+                "These appeared in lineage and carry no assertions. "
+                "**Not checked is not the same as passed.**"
+            ),
+            "",
+        ]
+        out += [f"- `{key}`" for key in record.unchecked[:UNCHECKED_SHOWN]]
+        if len(record.unchecked) > UNCHECKED_SHOWN:
+            out.append(f"- … and {len(record.unchecked) - UNCHECKED_SHOWN} more")
+
+    out += _scope_markdown(record.scope)
+    out += _verdict_markdown(
+        record, "This history accounts for every dataset in view.", withheld="history"
+    )
+
+    return "\n".join(out)
+
+
+@json.register
+def _(record: quality_module.Record, *, indent: int = 2) -> str:
+    payload = {
+        "controller": {
+            "name": record.controller.name,
+            "contact": record.controller.contact,
+        },
+        "datasets": [
+            {
+                "dataset": d.key,
+                "domain": d.domain,
+                "asserted_by": list(d.asserted_by),
+                "runs": d.runs,
+                "checks": d.checks,
+                "failures": d.failures,
+                "holds": d.holds,
+                "first_seen": _when(d.first_seen),
+                "last_seen": _when(d.last_seen),
+                "expectations": [
+                    {
+                        "assertion": e.assertion,
+                        "column": e.column,
+                        "runs": e.runs,
+                        "failures": e.failures,
+                        "holds": e.holds,
+                        "first_seen": _when(e.first_seen),
+                        "last_seen": _when(e.last_seen),
+                        "last_failure": _when(e.last_failure),
+                    }
+                    for e in d.expectations
+                ],
+            }
+            for d in record.datasets
+        ],
+        # A list rather than a count. The count is what a reader reacts to and
+        # the names are what they act on, and a consumer needs the names.
+        "unchecked": list(record.unchecked),
+        "scope": {
+            "source": record.scope.source,
+            "window": {"since": _when(record.scope.since), "until": _when(record.scope.until)},
+            "events": record.scope.events,
+            "datasets": record.scope.datasets,
+            "checked": record.scope.checked,
+            "unchecked": record.scope.unchecked,
+            "checks": record.scope.checks,
+            "failures": record.scope.failures,
+            "domains_declared": list(record.scope.domains_declared),
+            "domains_seen": list(record.scope.domains_seen),
+            "domains_silent": list(record.scope.domains_silent),
+            "out_of_view": record.scope.OUT_OF_VIEW,
+        },
+        "complete": record.complete,
+        "reasons": list(record.completeness.reasons),
+    }
+    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
 
 
 #: Public name to renderer. The CLI's `--format` choices come from this, so a

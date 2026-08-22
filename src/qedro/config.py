@@ -106,6 +106,25 @@ class Config:
                 return rule
         return None
 
+    def domain_for(self, namespace: str, rule: Rule | None = None) -> str:
+        """Which domain a job in *namespace* belongs to.
+
+        A heuristic — the last segment, so `acme.fraud` reads as `fraud` — and
+        a mapping rule's `domain:` overrides it. Kept simple and overridable
+        rather than clever, because a wrong guess here silently changes which
+        domains look silent.
+
+        Lives on `Config` because more than one projection needs the same
+        answer, and two projections disagreeing about which domain a job is in
+        would be a bug nobody would think to look for.
+        """
+        if rule is not None and rule.domain:
+            return rule.domain
+        for separator in ("/", "."):
+            if separator in namespace:
+                return namespace.rsplit(separator, 1)[-1]
+        return namespace
+
 
 def find(explicit: str | Path | None, *, start: Path | None = None) -> Path | None:
     """Locate a config file.

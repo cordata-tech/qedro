@@ -1,4 +1,4 @@
-"""Rendering, and the two properties every format has to keep.
+"""Rendering, and the two properties every format has to keep — for every projection.
 
 **The scope statement is unconditional.** A format that prints it only when
 something went wrong has taught the reader that its absence means full coverage.
@@ -7,8 +7,11 @@ something went wrong has taught the reader that its absence means full coverage.
 *typed into a file* has thrown away the only thing that makes this record
 different from one a person maintained by hand.
 
-Both are asserted per format rather than once, because a renderer added later
-is exactly where they get dropped.
+Both are asserted per format **and per projection**, because the renderers
+dispatch on the artefact: a `quality` implementation that forgot the scope
+statement would be invisible to a test that only ever passed it a `ropa`
+record. A renderer added later, or a projection added later, is exactly where
+these get dropped.
 """
 
 from __future__ import annotations
@@ -19,9 +22,11 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from qedro import TOMBSTONE, config, render, vocabulary
+from qedro import TOMBSTONE, config, quality, render, vocabulary
 from qedro.ropa import build
 
+from .test_quality import check
+from .test_quality import event as quality_event
 from .test_ropa import EVIDENCED, event
 
 WORDS = vocabulary.load()
@@ -32,6 +37,23 @@ def record(events, cfg="controller: ACME GmbH\n"):
     return build(events, config=config.parse(cfg), vocabulary=WORDS, report=None)
 
 
+def ropa_record(cfg="controller: ACME GmbH\n"):
+    return record([event(facet=EVIDENCED)], cfg)
+
+
+def quality_record(cfg="controller: ACME GmbH\n"):
+    return quality.build(
+        [quality_event(assertions=[check()]), quality_event(reads="wh/unchecked")],
+        config=config.parse(cfg),
+    )
+
+
+#: Every artefact a renderer can be handed. The properties below hold for all
+#: of them or they are not properties.
+PROJECTIONS = {"ropa": ropa_record, "quality": quality_record}
+CASES = [(p, f) for p in sorted(PROJECTIONS) for f in FORMATS]
+
+
 def readable(record, fmt):
     """Any format as searchable text, so one property can be asserted of all of them.
 
@@ -40,16 +62,18 @@ def readable(record, fmt):
     flattened rather than skipped.
     """
     out = render.FORMATS[fmt](record)
-    if not isinstance(out, bytes):
-        return out
-    book = load_workbook(BytesIO(out))
-    return "\n".join(
-        str(cell.value)
-        for sheet in book.worksheets
-        for row in sheet.iter_rows()
-        for cell in row
-        if cell.value is not None
-    )
+    if isinstance(out, bytes):
+        book = load_workbook(BytesIO(out))
+        out = "\n".join(
+            str(cell.value)
+            for sheet in book.worksheets
+            for row in sheet.iter_rows()
+            for cell in row
+            if cell.value is not None
+        )
+    # Whitespace-normalised, because the terminal format wraps its paragraphs
+    # and a phrase that straddles a line break is still present in the output.
+    return " ".join(out.split())
 
 
 def rendered(events, fmt, cfg="controller: ACME GmbH\n"):
@@ -181,3 +205,75 @@ class TestFormatInference:
     def test_a_path_with_dots_in_the_directory(self):
         # `./out.d/ropa` has a dot but no suffix on the filename.
         assert render.infer("out.d/ropa") == "text"
+
+
+class TestEveryProjectionKeepsTheProperties:
+    """The renderers dispatch on the artefact, so both axes are asserted.
+
+    A `quality` renderer that dropped the scope statement would sail past a
+    test that only ever handed it a `ropa` record — which is the failure mode
+    `singledispatch` introduces and this class exists to close.
+    """
+
+    @pytest.mark.parametrize(("projection", "fmt"), CASES)
+    def test_the_scope_statement_is_printed(self, projection, fmt):
+        built = PROJECTIONS[projection]()
+        out = readable(built, fmt)
+        # Its own sentence, not a shared one: each projection's out-of-view
+        # paragraph has to be true of that artefact.
+        assert " ".join(built.scope.OUT_OF_VIEW.split()) in out
+
+    @pytest.mark.parametrize(("projection", "fmt"), CASES)
+    def test_the_window_is_stated(self, projection, fmt):
+        assert "2026-03-01" in readable(PROJECTIONS[projection](), fmt)
+
+    @pytest.mark.parametrize(("projection", "fmt"), CASES)
+    def test_a_silent_domain_is_named(self, projection, fmt):
+        cfg = "controller: ACME GmbH\ndomains: [fraud, marketing]\n"
+        assert "marketing" in readable(PROJECTIONS[projection](cfg), fmt)
+
+    @pytest.mark.parametrize(("projection", "fmt"), CASES)
+    def test_a_withheld_mark_carries_its_reasons(self, projection, fmt):
+        cfg = "controller: ACME GmbH\ndomains: [fraud, marketing]\n"
+        built = PROJECTIONS[projection](cfg)
+        assert not built.complete
+        out = readable(built, fmt)
+        for reason in built.completeness.reasons:
+            assert " ".join(reason.split()) in out, f"{projection}/{fmt} dropped a reason"
+
+
+class TestQualityRendering:
+    """What only this projection can get wrong."""
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_unchecked_datasets_are_named_not_only_counted(self, fmt):
+        # The names are what somebody acts on. A count alone is a fact nobody
+        # can do anything with.
+        assert "wh/unchecked" in readable(quality_record(), fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_failure_is_distinguishable_from_a_pass(self, fmt):
+        failing = quality.build(
+            [quality_event(assertions=[check(success=False)])],
+            config=config.parse("controller: A\n"),
+        )
+        holding = quality.build(
+            [quality_event(assertions=[check()])], config=config.parse("controller: A\n")
+        )
+        assert readable(failing, fmt) != readable(holding, fmt)
+        assert "fail" in readable(failing, fmt).lower()
+
+    def test_the_text_form_says_not_checked_in_words(self):
+        out = render.text(quality_record())
+        assert "Not checked" in out
+
+    def test_json_carries_the_unchecked_list_not_a_number(self):
+        payload = json_lib.loads(render.json(quality_record()))
+        assert payload["unchecked"] == ["wh/unchecked"]
+        assert payload["scope"]["checked"] == 1
+
+    def test_a_renderer_refuses_an_artefact_it_does_not_know(self):
+        # singledispatch falls back to the base implementation, which must not
+        # quietly render something wrong.
+        with pytest.raises(TypeError):
+            render.text(object())

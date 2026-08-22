@@ -3,7 +3,7 @@
 Turns emitted evidence into the artefacts an auditor asks for. Reads OpenLineage,
 produces a DSGVO Art. 30 record of processing activities, an assertion history, and
 the provenance chain from a published number back to the signed commit that
-authorised it.
+authorised it. `ropa` and `quality` are built; `provenance` is not.
 
 Planning lives in this repository: **#1** is the epic, **#2** is v1, **#3** constrains
 what any projection's output must contain. Read #2 before starting anything
@@ -50,6 +50,13 @@ holes are invisible*. See `qedro/mark.py`, and do not make it unconditional.
 could acquire one. Not a policy — a property of what the code is able to reach.
 
 ## Facets, and why the model is shallow
+
+**Three kinds of facet, and the difference matters.** Job and run facets describe
+what ran. Dataset facets describe the dataset and are true whoever is looking.
+**Input and output facets describe one run's use of a dataset** — `dataQualityAssertions`
+lives there, which is why `quality` can speak in dates and why the parser dropped it
+until that projection needed it. Do not merge the two: *this table has a unique key*
+is a claim, *the run on the 10th checked it and it held* is evidence.
 
 Core event fields are typed; **facets stay raw dictionaries**. OpenLineage has a long
 tail of facets and every emitter populates a different subset, so modelling them all
@@ -98,6 +105,12 @@ the pin, which is the one thing the test exists to catch.
   history. Plain `git` still reads and writes the same working copy.
 - `ruff check` + `ruff format` + `pytest`. CI runs 3.12, 3.13 and 3.14, and asserts
   the wordmark keeps `role="img"`, `aria-label` and a `<title>`.
+- **Shared shapes live in shared modules.** `scope.py` (what a run looked at),
+  `words.py` (saying a number correctly) and `Config.domain_for` were each three
+  copies before they were one. A renderer is one `singledispatch` function per
+  format, so a projection added later inherits the scope statement and the mark
+  rather than reimplementing them — `tests/test_render.py` parametrises over
+  format *and* projection for exactly that reason.
 - **`demo/` is generated.** `tools/seed.py` writes both estates and CI runs it with
   `--check`; editing an event by hand looks like it worked until the next
   regeneration reverts it. The two estates must stay identical apart from the

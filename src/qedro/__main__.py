@@ -16,10 +16,10 @@ import argparse
 import os
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, render, ropa, vocabulary
+from . import __version__, quality, render, ropa, vocabulary, words
 from . import config as config_module
 from .errors import QedroError, UsageError
 from .mark import Completeness
@@ -41,14 +41,19 @@ def _instant(value: str) -> datetime:
         ) from None
 
 
-def _count(n: int, noun: str) -> str:
-    """`1 file`, not `1 files`.
+def _window(args: argparse.Namespace) -> tuple[datetime | None, datetime | None]:
+    """`--days 90`, resolved against `--until` or against now.
 
-    Small, and the kind of small that costs a tool its authority. An artefact
-    that argues for care about what a number means cannot print a plural it
-    does not mean.
+    Sugar over `--since`, because *the last quarter* is how anybody asks for an
+    assertion history and computing the date by hand is a papercut. An explicit
+    `--since` wins: two flags meaning the same thing must not silently
+    disagree, and the one the user typed is the one they meant.
     """
-    return f"{n:,} {noun if n == 1 else noun + 's'}"
+    since, until = args.since, args.until
+    if args.days is not None and since is None:
+        end = until or datetime.now(UTC)
+        since = end - timedelta(days=args.days)
+    return since, until
 
 
 def _events(target: str, *, symbol: bool, since: datetime | None, until: datetime | None) -> int:
@@ -81,12 +86,14 @@ def _events(target: str, *, symbol: bool, since: datetime | None, until: datetim
 
     # One of the two is always zero — a directory has files and an API has
     # pages, and naming the wrong one reads as a bug in the tool.
-    fetched = _count(report.files, "file") if report.files else _count(report.pages, "page")
+    fetched = (
+        words.count(report.files, "file") if report.files else words.count(report.pages, "page")
+    )
     summary = " · ".join(
         [
-            _count(report.events, "event"),
-            _count(len(jobs), "job"),
-            _count(len(datasets), "dataset"),
+            words.count(report.events, "event"),
+            words.count(len(jobs), "job"),
+            words.count(len(datasets), "dataset"),
             fetched,
         ]
     )
@@ -115,17 +122,7 @@ def _ropa(
     fmt: str | None,
     out: str | None,
 ) -> int:
-    # Resolved first, before a single event is read. An explicit `--format`
-    # wins; otherwise `--out ropa.md` means markdown and `--out ropa.xlsx`
-    # means a workbook. A combination that cannot work should fail in the first
-    # millisecond rather than after a long read against a remote backend.
-    fmt = fmt or render.infer(out)
-    if render.is_binary(fmt) and not out:
-        raise UsageError(
-            f"--format {fmt} produces a file rather than text, and there is nowhere "
-            f"to put it — add --out record.{fmt}"
-        )
-
+    fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
     # `--vocabulary` beats `vocabulary:` in the config, which beats the shipped
     # default. The flag is what someone reaches for while trying one out.
@@ -148,24 +145,79 @@ def _ropa(
             print(f"  {reason}", file=sys.stderr)
         return 1
 
+    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+
+
+def _quality(
+    source: str,
+    *,
+    symbol: bool,
+    since: datetime | None,
+    until: datetime | None,
+    domains: list[str],
+    config_path: str | None,
+    fmt: str | None,
+    out: str | None,
+) -> int:
+    fmt = _format(fmt, out)
+    settings = config_module.load(config_module.find(config_path))
+
+    events, report = read(source, since=since, until=until)
+    record = quality.build(
+        events,
+        config=settings,
+        report=report,
+        since=since,
+        until=until,
+        domains=domains,
+    )
+
+    if not record.datasets and not record.unchecked and not report.clean:
+        for reason in report.reasons():
+            print(f"  {reason}", file=sys.stderr)
+        return 1
+
+    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+
+
+def _format(fmt: str | None, out: str | None) -> str:
+    """Resolve the output format before a single event is read.
+
+    An explicit `--format` wins; otherwise `--out history.md` means markdown
+    and `--out history.xlsx` means a workbook. A combination that cannot work
+    should fail in the first millisecond rather than after a long read against
+    a remote backend.
+    """
+    fmt = fmt or render.infer(out)
+    if render.is_binary(fmt) and not out:
+        raise UsageError(
+            f"--format {fmt} produces a file rather than text, and there is nowhere "
+            f"to put it — add --out record.{fmt}"
+        )
+    return fmt
+
+
+def _emit(record, *, fmt: str, out: str | None, symbol: bool) -> int:
+    """Render and deliver, the same way for every projection."""
     renderer = render.FORMATS[fmt]
     rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
 
-    if out:
-        path = Path(out)
-        if isinstance(rendered, bytes):
-            path.write_bytes(rendered)
-        else:
-            path.write_text(rendered, encoding="utf-8")
-        mark = record.completeness.suffix(symbol=symbol)
-        print(f"  wrote {out}{'  ' + mark if mark else ''}")
-        # Reasons go to stderr even when the file was written. The run
-        # succeeded; the artefact simply does not claim to be a proof.
-        for reason in record.completeness.reasons:
-            print(f"  ! {reason}", file=sys.stderr)
-    else:
+    if not out:
         print(rendered, end="")
+        return 0
 
+    path = Path(out)
+    if isinstance(rendered, bytes):
+        path.write_bytes(rendered)
+    else:
+        path.write_text(rendered, encoding="utf-8")
+
+    mark = record.completeness.suffix(symbol=symbol)
+    print(f"  wrote {out}{'  ' + mark if mark else ''}")
+    # Reasons go to stderr even when the file was written. The run succeeded;
+    # the artefact simply does not claim to be a proof.
+    for reason in record.completeness.reasons:
+        print(f"  ! {reason}", file=sys.stderr)
     return 0
 
 
@@ -235,6 +287,44 @@ def main(argv: list[str] | None = None) -> int:
     )
     ropa_cmd.add_argument("--out", help="write to this file instead of standard output")
 
+    quality_cmd = sub.add_parser(
+        "quality",
+        parents=[common],
+        help="what was asserted about each dataset, and what was never checked",
+    )
+    quality_cmd.add_argument(
+        "source",
+        help="a directory of .json, .ndjson or .jsonl events, "
+        "or the base URL of a Marquez-compatible API",
+    )
+    quality_cmd.add_argument("--since", type=_instant, help="ignore events before this date")
+    quality_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
+    quality_cmd.add_argument(
+        "--days",
+        type=int,
+        help="shorthand for --since N days before --until (or before now)",
+    )
+    quality_cmd.add_argument(
+        "--domain",
+        action="append",
+        default=[],
+        dest="domains",
+        metavar="NAME",
+        help="only datasets in this domain. Repeatable",
+    )
+    quality_cmd.add_argument(
+        "--config",
+        help="qedro.yaml (or .json/.toml). Defaults to one beside the working directory",
+    )
+    quality_cmd.add_argument(
+        "--format",
+        dest="fmt",
+        choices=sorted(render.names()),
+        default=None,
+        help="output format. Defaults to the one implied by --out, else text",
+    )
+    quality_cmd.add_argument("--out", help="write to this file instead of standard output")
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     # The env var is for CI logs and containers, where nobody is around to
@@ -244,6 +334,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "events":
             return _events(args.source, symbol=not no_symbol, since=args.since, until=args.until)
+        if args.command == "quality":
+            since, until = _window(args)
+            return _quality(
+                args.source,
+                symbol=not no_symbol,
+                since=since,
+                until=until,
+                domains=args.domains,
+                config_path=args.config,
+                fmt=args.fmt,
+                out=args.out,
+            )
         if args.command == "ropa":
             return _ropa(
                 args.source,

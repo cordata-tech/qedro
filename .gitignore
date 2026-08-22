@@ -11,3 +11,4 @@ dist/
 # Stays in the working copy until the target architecture is agreed. A pushed
 # diagram is a claim about the design; this one is still a proposal.
 docs/architecture.md
+docs/architecture.pdf

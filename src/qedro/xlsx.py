@@ -26,8 +26,9 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any
 
-from . import TOMBSTONE
+from . import TOMBSTONE, words
 from .errors import QedroError
+from .quality import Record as QualityRecord
 from .ropa import Activity, Record, Sourced
 
 try:
@@ -171,9 +172,10 @@ def _row(sheet: Any, row: int, activity: Activity) -> None:
 def _verdict(record: Record) -> str:
     if record.complete:
         return f"Every activity in this record stands on emitted evidence. {TOMBSTONE}"
-    count = len(record.completeness.reasons)
-    noun = "reason" if count == 1 else "reasons"
-    return f"This record does not claim to be a proof — {count} {noun} on the Scope sheet."
+    n = len(record.completeness.reasons)
+    return (
+        f"This record does not claim to be a proof — {words.count(n, 'reason')} on the Scope sheet."
+    )
 
 
 def _source(sourced: Sourced) -> str:
@@ -246,6 +248,161 @@ def _scope(sheet: Any, record: Record) -> None:
         return
 
     sheet.cell(row=row, column=2, value="This record does not claim to be a proof.").font = STRONG
+    for reason in record.completeness.reasons:
+        row += 1
+        sheet.cell(row=row, column=2, value=reason).alignment = WRAP
+
+
+# --- the assertion history -------------------------------------------------
+
+#: One row per expectation rather than per dataset. A reader filtering for
+#: `FAILED` wants the expectation that failed, not the table it was on.
+QUALITY_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("Dataset", 44),
+    ("Domain", 14),
+    ("Expectation", 40),
+    ("Column", 20),
+    ("Result", 12),
+    ("Runs", 8),
+    ("Failed", 8),
+    ("Last failure", 26),
+    ("Last asserted", 26),
+    ("Asserted by", 34),
+)
+
+QUALITY_AT = {heading: index for index, (heading, _) in enumerate(QUALITY_COLUMNS, start=1)}
+
+
+def quality_workbook(record: QualityRecord) -> bytes:
+    """The assertion history as ``.xlsx`` bytes.
+
+    Three sheets, and the middle one is the point. *Not checked* is a sheet of
+    its own rather than a note at the bottom of the first, because a reader who
+    stops after the green table has been misled — and a tab they have to
+    dismiss is harder to stop at than a paragraph they can skim past.
+    """
+    book = Workbook()
+    book.properties.creator = "qedro"
+    book.properties.title = "Data quality assertion history"
+    book.properties.description = record.scope.OUT_OF_VIEW
+
+    _expectations(book.active, record)
+    _unchecked(book.create_sheet("Not checked"), record)
+    _quality_scope(book.create_sheet("Scope"), record)
+
+    buffer = BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def _expectations(sheet: Any, record: QualityRecord) -> None:
+    sheet.title = "Assertions"
+
+    sheet["A1"] = "Data quality assertion history"
+    sheet["A1"].font = TITLE
+    sheet["A2"] = record.controller.name or "No controller is declared"
+    sheet["A2"].font = STRONG
+    sheet["A3"] = (
+        f"{record.scope.checked} datasets checked, "
+        f"{record.scope.unchecked} with no assertions at all"
+    )
+    sheet["A4"] = _quality_verdict(record)
+    sheet["A4"].font = STRONG
+
+    for index, (heading, width) in enumerate(QUALITY_COLUMNS, start=1):
+        cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)
+        cell.font = HEADING
+        cell.fill = HEADING_FILL
+        cell.alignment = WRAP
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
+    row = HEADER_ROW
+    for dataset in record.datasets:
+        for expectation in dataset.expectations:
+            row += 1
+            values = (
+                dataset.key,
+                dataset.domain,
+                expectation.assertion,
+                expectation.column,
+                "held" if expectation.holds else "FAILED",
+                expectation.runs,
+                expectation.failures,
+                _when(expectation.last_failure),
+                _when(expectation.last_seen),
+                ", ".join(dataset.asserted_by),
+            )
+            for index, value in enumerate(values, start=1):
+                cell = sheet.cell(row=row, column=index, value=value)
+                cell.alignment = TOP
+            if not expectation.holds:
+                sheet.cell(row=row, column=QUALITY_AT["Result"]).fill = ASSERTED_FILL
+
+    sheet.auto_filter.ref = (
+        f"A{HEADER_ROW}:{get_column_letter(len(QUALITY_COLUMNS))}{max(row, HEADER_ROW)}"
+    )
+    sheet.freeze_panes = f"A{HEADER_ROW + 1}"
+
+
+def _quality_verdict(record: QualityRecord) -> str:
+    if record.complete:
+        return f"This history accounts for every dataset in view. {TOMBSTONE}"
+    n = len(record.completeness.reasons)
+    return (
+        f"This history does not claim to be complete — "
+        f"{words.count(n, 'reason')} on the Scope sheet."
+    )
+
+
+def _unchecked(sheet: Any, record: QualityRecord) -> None:
+    sheet.column_dimensions["A"].width = 60
+
+    sheet["A1"] = "Datasets with no assertions"
+    sheet["A1"].font = TITLE
+    sheet["A2"] = (
+        "These appeared in lineage in the window and nothing asserted anything "
+        "about them. Not checked is not the same as passed."
+    )
+    sheet["A2"].alignment = WRAP
+    sheet.row_dimensions[2].height = 32
+
+    # Every one of them, not a sample: this is the sheet somebody works
+    # through, and a truncated work list is a finished work list.
+    for offset, key in enumerate(record.unchecked):
+        sheet.cell(row=4 + offset, column=1, value=key).alignment = TOP
+
+
+def _quality_scope(sheet: Any, record: QualityRecord) -> None:
+    scope = record.scope
+    sheet.column_dimensions["A"].width = 26
+    sheet.column_dimensions["B"].width = 96
+
+    sheet["A1"] = "Scope of this history"
+    sheet["A1"].font = TITLE
+
+    rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
+    rows += list(scope.lines())
+    if scope.domains_silent:
+        rows.append(("Declared but silent", ", ".join(scope.domains_silent)))
+
+    row = 3
+    for label, value in rows:
+        sheet.cell(row=row, column=1, value=label[0].upper() + label[1:]).font = STRONG
+        sheet.cell(row=row, column=2, value=value).alignment = WRAP
+        row += 1
+
+    row += 1
+    sheet.cell(row=row, column=1, value="Not covered").font = STRONG
+    sheet.cell(row=row, column=2, value=scope.OUT_OF_VIEW).alignment = WRAP
+    sheet.row_dimensions[row].height = 64
+
+    row += 2
+    sheet.cell(row=row, column=1, value="Completeness").font = STRONG
+    if record.complete:
+        sheet.cell(row=row, column=2, value=_quality_verdict(record))
+        return
+
+    sheet.cell(row=row, column=2, value="This history does not claim to be complete.").font = STRONG
     for reason in record.completeness.reasons:
         row += 1
         sheet.cell(row=row, column=2, value=reason).alignment = WRAP
