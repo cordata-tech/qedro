@@ -6,7 +6,7 @@ Artefacts that published writing quotes. Each one was captured from a real run, 
 
 The transcript of `qedro ropa --view deployer` that `cordata-tech/platform#48` § 13 quotes, captured on 2026-09-17 at commit `e284804`. A script runs the installed CLI from the repository root and writes what each command printed, unedited, together with its exit status. The script refuses to run on a dirty working tree, so the commit named in the file is the code that produced the output.
 
-The three runs share one config and change one input each: `demo/lineage`, where purpose and legal basis come from the mapping file; `demo/lineage-declared`, where the pipelines emit them and the view earns the mark; and the same with `demo/activities.yaml`, where one declared AI use is marked `declared, no lineage` and the mark is withheld. `tests/test_demo.py::TestTheDeployerViewOnTheDemo` asserts the same facts, so the transcript and the code cannot drift apart without a test failing.
+The three runs share one config and change one input each: `demo/lineage`, where purpose and legal basis come from the mapping file; `demo/lineage-declared`, where the pipelines emit them and the view earns the mark; and the same with `demo/activities.yaml`, where one declared AI use is marked `declared, no lineage` and the mark is withheld. `tests/test_demo.py::TestTheDeployerViewOnTheDemo` asserts the same facts — the use case, both model versions and their run counts, the inputs, the provenance of purpose and legal basis, and whether the mark is earned — but not the wording. A later change to how the output reads leaves this file describing the commit it names, which is why it names one.
 
 ## `fraud-events.captured.ndjson` and `fraud-event.trimmed.json`
 
