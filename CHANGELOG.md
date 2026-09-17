@@ -49,6 +49,10 @@ adoption of anything required beyond lineage a platform already emits.
   and carries no `processing` facet, is named in the scope statement instead. The job
   count still includes it, and it does not withhold the mark. Found against real dbt
   lineage, where the invocation job showed up as an extra activity.
+- **Activities that read datasets and wrote none are named** on a `read only` line in
+  the Art. 30 scope statement, and in JSON as `scope.read_only`. They stay listed, and
+  the mark is not withheld for them. Found against real Spark lineage, where the
+  integration emits a job for each schema-reading action.
 - **File datasets print as a URI**, `file:///data/raw/orders.csv`, instead of
   `file//data/raw/orders.csv`. The Airflow provider and the Spark integration emit
   the bare namespace `file` where the OpenLineage naming conventions give

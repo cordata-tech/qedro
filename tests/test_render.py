@@ -143,6 +143,20 @@ class TestEveryFormatStatesItsScope:
             assert "(g) security measures" in out
 
     @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_read_only_activity_is_named(self, fmt):
+        # See #22. JSON carries the list; the others carry the sentence.
+        from .test_ropa import reading
+
+        built = record([reading("monitor")])
+        if fmt == "json":
+            scope = json_lib.loads(render.FORMATS[fmt](built))["scope"]
+            assert scope["read_only"] == ["acme.fraud/monitor"]
+        else:
+            assert "1 activity read datasets and wrote none: acme.fraud/monitor" in readable(
+                built, fmt
+            )
+
+    @pytest.mark.parametrize("fmt", FORMATS)
     def test_a_silent_domain_is_named(self, fmt):
         out = rendered(
             [event(facet=EVIDENCED)], fmt, "controller: ACME GmbH\ndomains: [fraud, marketing]\n"

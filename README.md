@@ -115,6 +115,18 @@ on dbt's naming. A backend that drops the `parent` facet, as Snowflake's externa
 lineage does, leaves the invocation listed. The reasoning is on
 [#8](https://github.com/cordata-tech/qedro/issues/8).
 
+A job that read datasets and wrote none stays listed, and is named on its own line.
+Spark's integration emits one such job for each action it runs to infer a schema, and
+the events do not tell those apart from a real job that only reads, such as an export
+or a monitoring count. Which of them is a processing activity is left to the reader:
+
+```console
+    read only     3 activities read datasets and wrote none:
+                  default/orders_enrichment.collect_limit,
+                  default/orders_enrichment.deserialize_to_object,
+                  default/orders_enrichment.map_partitions_parallel_collection
+```
+
 ### Declared activities
 
 Processing that emits no lineage — a payroll SaaS, staff using a vendor's assistant,

@@ -162,6 +162,11 @@ class Scope(scope.Scope):
     #: orchestration parents — see `_parents`. Named rather than counted, so the
     #: omission is itself visible. See cordata-tech/qedro#8.
     parents: tuple[str, ...] = ()
+    #: Activities that read datasets and wrote none. Listed rather than dropped:
+    #: Spark's schema inference and a genuine read-only job look the same in the
+    #: events, and which of them is a processing activity is the reader's call.
+    #: See cordata-tech/qedro#22.
+    read_only: tuple[str, ...] = ()
 
     #: Unconditional, per #3, and worded to be true whether or not anything is
     #: declared. Printing it only when nothing was declared would make it
@@ -201,6 +206,17 @@ class Scope(scope.Scope):
                         f"{words.plural(n, 'an activity', 'activities')} — "
                         f"{words.plural(n, 'a parent run', 'parent runs')} with no datasets "
                         f"and no processing facet: {', '.join(self.parents)}"
+                    ),
+                )
+            )
+        if self.read_only:
+            n = len(self.read_only)
+            out.append(
+                (
+                    "read only",
+                    (
+                        f"{n} {words.plural(n, 'activity', 'activities')} read datasets "
+                        f"and wrote none: {', '.join(self.read_only)}"
                     ),
                 )
             )
@@ -462,6 +478,7 @@ def _scope(
         undeclared=sum(1 for a in activities if not a.purpose or not a.legal_basis),
         declared=declared,
         parents=tuple(sorted(parents)),
+        read_only=tuple(a.key for a in activities if a.inputs and not a.outputs),
     )
 
 

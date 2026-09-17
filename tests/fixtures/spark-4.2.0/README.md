@@ -19,7 +19,9 @@ Three more child jobs are actions Spark ran on its own to read the CSV headers
 and the Parquet schema: `collect_limit` and `deserialize_to_object` (two runs
 each) and `map_partitions_parallel_collection`. They report inputs and no
 outputs, so Qedro lists them as activities, which turns an application that wrote
-two datasets into five activities (#22).
+two datasets into five activities. Since #22 the scope statement names all three on a
+`read only` line; they are not dropped, because the events cannot tell them from a real
+job that only reads.
 
 What it is here for (cordata-tech/qedro#10): #8's parent rule against a third
 emitter, where the application run must be left out of the activities. The

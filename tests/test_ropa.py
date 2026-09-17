@@ -566,3 +566,59 @@ class TestTheArt30ItemsAreStated:
 
         monkeypatch.setattr(ropa, "ART30_COVERED", frozenset("abcdefg"))
         assert "none for" not in ropa.art30_coverage()
+
+
+def reading(name, reads=("wh/raw.customers",), writes=(), run="r1"):
+    """A COMPLETE event for a job with explicit inputs and outputs."""
+    parsed = parse_event(
+        {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-03-01T10:00:00Z",
+            "run": {"runId": run},
+            "job": {"namespace": "acme.fraud", "name": name, "facets": {}},
+            "inputs": [{"namespace": n.split("/")[0], "name": n.split("/")[1]} for n in reads],
+            "outputs": [{"namespace": n.split("/")[0], "name": n.split("/")[1]} for n in writes],
+        }
+    )
+    assert parsed is not None
+    return parsed
+
+
+class TestReadOnlyActivitiesAreNamed:
+    """Activities that read datasets and wrote none. See cordata-tech/qedro#22."""
+
+    def test_a_job_that_only_reads_is_still_listed_and_named_in_the_scope(self):
+        # No writing sibling and no parent: a genuine read-only job, such as an
+        # export or a monitoring count. It stays an activity.
+        out = record([reading("monitor")])
+        assert [a.key for a in out.activities] == ["acme.fraud/monitor"]
+        assert out.scope.read_only == ("acme.fraud/monitor",)
+        [line] = [v for k, v in out.scope.lines() if k == "read only"]
+        assert line == "1 activity read datasets and wrote none: acme.fraud/monitor"
+
+    def test_a_job_that_writes_is_not_named(self):
+        out = record([reading("score", writes=("wh/curated.scores",))])
+        assert out.scope.read_only == ()
+        assert not [k for k, _ in out.scope.lines() if k == "read only"]
+
+    def test_a_job_with_no_datasets_is_not_called_read_only(self):
+        assert record([reading("notify", reads=())]).scope.read_only == ()
+
+    def test_it_is_not_a_reason_to_withhold_the_mark(self):
+        out = record([reading("monitor")], cfg='jobs:\n  "*": {purpose: p, legal_basis: consent}\n')
+        assert not any("read" in r and "wrote" in r for r in out.completeness.reasons)
+
+    def test_against_real_spark_lineage(self):
+        # Spark's own schema-reading actions are named; the two actions that
+        # wrote are not, and nothing is dropped from the activities.
+        out = real("spark-4.2.0")
+        assert out.scope.read_only == (
+            "default/orders_enrichment.collect_limit",
+            "default/orders_enrichment.deserialize_to_object",
+            "default/orders_enrichment.map_partitions_parallel_collection",
+        )
+        assert len(out.activities) == 5
+
+    def test_the_other_captures_have_none(self):
+        assert real("airflow-3.3.1").scope.read_only == ()
+        assert real("dbt-1.53").scope.read_only == ()
