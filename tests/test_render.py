@@ -453,3 +453,23 @@ class TestArt26ReferencesAreContextNotEvidence:
         out = " ".join(render.text(deployer_record()).split())
         assert "not a check of relevance or representativeness" in out
         assert "not a retention policy or a compliance finding" in out
+
+
+class TestOrchestrationParentsAreNamedInEveryFormat:
+    """cordata-tech/qedro#8: a job left out of the activities is named in the scope."""
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_the_parent_is_named(self, fmt):
+        from .test_ropa import orchestrated
+
+        built = build(orchestrated(), config=config.parse("controller: A\n"), vocabulary=WORDS)
+        out = readable(built, fmt)
+        assert "dbt/dbt-run-project" in out
+
+    def test_json_lists_the_parents(self):
+        from .test_ropa import orchestrated
+
+        built = build(orchestrated(), config=config.parse("controller: A\n"), vocabulary=WORDS)
+        payload = json_lib.loads(render.json(built))
+        assert payload["scope"]["parents"] == ["dbt/dbt-run-project"]
+        assert [a["job"] for a in payload["activities"]] == ["dbt/model.orders"]

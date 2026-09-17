@@ -140,6 +140,10 @@ class Scope(scope.Scope):
     #: which describes what was looked at — a declared activity was written
     #: down, not looked at. See cordata-tech/qedro#6.
     declared: int = 0
+    #: Jobs that were looked at and not listed as activities, because they are
+    #: orchestration parents — see `_parents`. Named rather than counted, so the
+    #: omission is itself visible. See cordata-tech/qedro#8.
+    parents: tuple[str, ...] = ()
 
     #: Unconditional, per #3, and worded to be true whether or not anything is
     #: declared. Printing it only when nothing was declared would make it
@@ -169,6 +173,19 @@ class Scope(scope.Scope):
                 ),
             )
         )
+        if self.parents:
+            n = len(self.parents)
+            out.append(
+                (
+                    "parents",
+                    (
+                        f"{n} {words.plural(n, 'job', 'jobs')} not listed as "
+                        f"{words.plural(n, 'an activity', 'activities')} — "
+                        f"{words.plural(n, 'a parent run', 'parent runs')} with no datasets "
+                        f"and no processing facet: {', '.join(self.parents)}"
+                    ),
+                )
+            )
         if self.declared:
             out.append(
                 (
@@ -223,9 +240,11 @@ def build(
     for event in events:
         grouped.setdefault(event.job.key, []).append(event)
 
+    parents = _parents(grouped)
     activities = tuple(
         _activity(job_events, config=config, vocabulary=vocabulary)
-        for _, job_events in sorted(grouped.items())
+        for key, job_events in sorted(grouped.items())
+        if key not in parents
     )
 
     scope = _scope(
@@ -235,6 +254,7 @@ def build(
         since=since,
         until=until,
         declared=len(declared),
+        parents={key: grouped[key] for key in parents},
     )
     completeness = _completeness(
         activities,
@@ -309,6 +329,51 @@ def _sourced(
     return Sourced("", Provenance.ABSENT)
 
 
+def _parents(grouped: Mapping[str, Sequence[Event]]) -> tuple[str, ...]:
+    """Jobs that are orchestration parents rather than processing.
+
+    dbt emits a job for the invocation and one per model, and each model's run
+    names the invocation's run in the standard `ParentRunFacet`. Listing the
+    invocation as its own Art. 30 activity adds a row that reads and writes
+    nothing and can never be evidenced. See cordata-tech/qedro#8.
+
+    A job is a parent only when all three hold:
+
+    - a run in view names one of its runs as parent, matched on
+      `ParentRunFacet.run.runId` — the emitter's own statement of the
+      relationship, not a guess from the job name;
+    - it read and wrote no datasets in the window, so a parent that also
+      processes data stays listed;
+    - it carries no `processing` facet, so a declaration made on a parent is
+      never hidden by tidying the row away.
+
+    Nothing here reads dbt's `jobType` values or its `dbt-run-` naming, so an
+    Airflow DAG run or a Spark application run is treated the same way. A
+    backend that drops the `parent` facet — Snowflake's external lineage does —
+    leaves the invocation listed, which is the behaviour before this rule and
+    not a wrong answer.
+    """
+    parent_runs: set[str] = set()
+    for job_events in grouped.values():
+        for event in job_events:
+            facet = event.run_facet("parent") or {}
+            run = facet.get("run")
+            if isinstance(run, Mapping) and isinstance(run.get("runId"), str):
+                parent_runs.add(run["runId"])
+
+    out = []
+    for key, job_events in grouped.items():
+        runs = {e.run.run_id for e in job_events if e.run.run_id}
+        if not runs & parent_runs:
+            continue
+        if any(e.inputs or e.outputs for e in job_events):
+            continue
+        if any(e.job_facet(FACET) for e in job_events):
+            continue
+        out.append(key)
+    return tuple(sorted(out))
+
+
 def _scope(
     activities: Sequence[Activity],
     *,
@@ -317,8 +382,13 @@ def _scope(
     since: datetime | None,
     until: datetime | None,
     declared: int = 0,
+    parents: Mapping[str, Sequence[Event]] | None = None,
 ) -> Scope:
+    parents = parents or {}
+    # A parent's events were looked at, so they count toward the window even
+    # though the job is not listed.
     times = [t for a in activities for t in (a.first_seen, a.last_seen) if t is not None]
+    times += [e.event_time for evs in parents.values() for e in evs if e.event_time is not None]
     datasets = {d for a in activities for d in a.inputs + a.outputs}
 
     return Scope(
@@ -328,7 +398,7 @@ def _scope(
         since=since if since is not None else (min(times) if times else None),
         until=until if until is not None else (max(times) if times else None),
         events=report.events if report else sum(a.events for a in activities),
-        jobs=len(activities),
+        jobs=len(activities) + len(parents),
         datasets=len(datasets),
         namespaces=tuple(sorted({a.namespace for a in activities})),
         domains_declared=config.domains,
@@ -341,6 +411,7 @@ def _scope(
         ),
         undeclared=sum(1 for a in activities if not a.purpose or not a.legal_basis),
         declared=declared,
+        parents=tuple(sorted(parents)),
     )
 
 

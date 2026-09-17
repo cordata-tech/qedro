@@ -339,3 +339,96 @@ class TestDeclaredActivities:
         out = record([event(facet=EVIDENCED)], declared=two)
         assert any("2 activities are declared" in r for r in out.completeness.reasons)
         assert ("declared", "2 activities declared with no lineage") in out.scope.lines()
+
+
+def orchestrated(
+    *,
+    parent_datasets=False,
+    parent_facet=None,
+    child_names_run="parent-run",
+    child_facet=EVIDENCED,
+):
+    """An invocation job and one child whose run names the invocation's run."""
+    parent = {
+        "eventType": "COMPLETE",
+        "eventTime": "2026-03-01T09:59:00Z",
+        "run": {"runId": "parent-run"},
+        "job": {"namespace": "dbt", "name": "dbt-run-project", "facets": {}},
+    }
+    if parent_datasets:
+        parent["outputs"] = [{"namespace": "wh", "name": "run_log"}]
+    if parent_facet:
+        parent["job"]["facets"]["processing"] = parent_facet
+    child = {
+        "eventType": "COMPLETE",
+        "eventTime": "2026-03-01T10:00:00Z",
+        "run": {
+            "runId": "child-run",
+            "facets": {
+                "parent": {
+                    "run": {"runId": child_names_run},
+                    "job": {"namespace": "dbt", "name": "dbt-run-project"},
+                }
+            },
+        },
+        "job": {"namespace": "dbt", "name": "model.orders", "facets": {}},
+        "inputs": [{"namespace": "wh", "name": "raw.orders"}],
+        "outputs": [{"namespace": "wh", "name": "orders"}],
+    }
+    if child_facet:
+        child["job"]["facets"]["processing"] = child_facet
+    return [parse_event(parent), parse_event(child)]
+
+
+class TestOrchestrationParents:
+    """cordata-tech/qedro#8: dbt's invocation job is not a processing activity."""
+
+    def test_a_parent_with_no_datasets_and_no_facet_is_not_listed(self):
+        out = record(orchestrated())
+        assert [a.key for a in out.activities] == ["dbt/model.orders"]
+        assert out.scope.parents == ("dbt/dbt-run-project",)
+
+    def test_it_is_still_counted_as_a_job_that_was_looked_at(self):
+        out = record(orchestrated())
+        assert out.scope.jobs == 2
+
+    def test_and_named_in_the_scope_statement(self):
+        out = record(orchestrated())
+        [line] = [value for label, value in out.scope.lines() if label == "parents"]
+        assert "dbt/dbt-run-project" in line
+        assert line.startswith("1 job not listed as an activity — a parent run")
+
+    def test_collapsing_it_does_not_withhold_the_mark(self):
+        assert record(orchestrated()).complete
+
+    def test_a_parent_with_datasets_of_its_own_stays_listed(self):
+        out = record(orchestrated(parent_datasets=True))
+        assert "dbt/dbt-run-project" in [a.key for a in out.activities]
+        assert out.scope.parents == ()
+
+    def test_a_parent_that_declares_purpose_and_basis_stays_listed(self):
+        # A declaration made on a parent is never hidden by tidying the row away.
+        out = record(orchestrated(parent_facet=EVIDENCED))
+        assert "dbt/dbt-run-project" in [a.key for a in out.activities]
+
+    def test_the_link_is_the_run_id_not_the_job_name(self):
+        # The child names the parent job but a run that is not in view, so
+        # nothing here states that this invocation is its parent.
+        out = record(orchestrated(child_names_run="some-other-run"))
+        assert "dbt/dbt-run-project" in [a.key for a in out.activities]
+
+    def test_the_window_still_includes_the_parent_s_events(self):
+        out = record(orchestrated())
+        assert out.scope.since == datetime(2026, 3, 1, 9, 59, tzinfo=UTC)
+
+    def test_against_real_dbt_lineage(self):
+        from pathlib import Path
+
+        from qedro.sources import read_dir
+
+        events, report = read_dir(Path("tests/fixtures/dbt-1.53"))
+        out = build(events, config=config.parse(CONTROLLER), vocabulary=WORDS, report=report)
+        assert out.scope.parents == ("dbt/dbt-run-dbtprobe",)
+        assert len(out.activities) == 4
+        assert out.scope.jobs == 5
+        assert all(a.inputs or a.outputs for a in out.activities)

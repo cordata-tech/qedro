@@ -81,6 +81,26 @@ the **pipeline-borne subset** plus whatever has been declared, never the whole t
 Printing it only when something went wrong would teach a reader that its absence means
 full coverage.
 
+### Orchestration parents are not activities
+
+dbt emits a job for each invocation as well as one per model, and Airflow and Spark
+emit a job for a DAG run or an application run in the same way. When a job's run is
+named as the parent of other runs in view, through the standard OpenLineage
+`ParentRunFacet`, and the job itself read and wrote nothing and declares no purpose,
+it is left out of the activity list and named in the scope statement instead:
+
+```console
+    in view       5 jobs, 4 datasets, 10 events
+    parents       1 job not listed as an activity — a parent run with no datasets and
+                  no processing facet: dbt/dbt-run-dbtprobe
+```
+
+A parent that has datasets of its own, or declares purpose and legal basis, stays
+listed. The match is on the parent's run id, not on the job's name, so nothing depends
+on dbt's naming. A backend that drops the `parent` facet, as Snowflake's external
+lineage does, leaves the invocation listed. The reasoning is on
+[#8](https://github.com/cordata-tech/qedro/issues/8).
+
 ### Declared activities
 
 Processing that emits no lineage — a payroll SaaS, staff using a vendor's assistant,

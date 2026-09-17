@@ -184,3 +184,24 @@ class TestTheThingsOnlyASpreadsheetGetsWrong:
 def _tinted(sheet, row, heading) -> bool:
     fill = sheet.cell(row=row, column=AT[heading]).fill
     return bool(fill and fill.start_color and fill.start_color.rgb == "FFFDF0D5")
+
+
+class TestTheScopeSheetCarriesEveryScopeLine:
+    """The Art. 30 Scope sheet listed its own rows, and so never printed the
+    declared count from #6. It now prints `scope.lines()` like every format."""
+
+    def test_the_declared_count_reaches_the_workbook(self):
+        from qedro import declared
+
+        entries = declared.parse(
+            {"activities": {"payroll": {"purpose": "payroll"}}}, origin="t", vocabulary=WORDS
+        )
+        record = build(
+            [event(facet=EVIDENCED)],
+            config=config.parse(CONTROLLER),
+            vocabulary=WORDS,
+            declared=entries,
+        )
+        sheet = load_workbook(BytesIO(workbook(record)))["Scope"]
+        text = "\n".join(str(c.value) for row in sheet.iter_rows() for c in row if c.value)
+        assert "1 activity declared with no lineage" in text

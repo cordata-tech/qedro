@@ -44,6 +44,11 @@ adoption of anything required beyond lineage a platform already emits.
 - The Art. 30 processing facet is published as a spec in
   `schemas/openlineage-art30-processing-facet.json`, generated from
   `pipeline_runtime.descriptor.Processing` rather than written beside it.
+- **Orchestration parents are not listed as activities.** A job whose run is named
+  as a parent through the standard `ParentRunFacet`, and which read and wrote nothing
+  and carries no `processing` facet, is named in the scope statement instead. The job
+  count still includes it, and it does not withhold the mark. Found against real dbt
+  lineage, where the invocation job showed up as an extra activity.
 - `--activities` reads a separate document of **declared activities**, meaning
   processing that emits no lineage. They appear beside the evidenced activities with
   every field marked `declared` and `no lineage` where the events would have spoken,

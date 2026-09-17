@@ -240,20 +240,12 @@ def _scope(sheet: Any, record: Record) -> None:
     sheet["A1"] = "Scope of this record"
     sheet["A1"].font = TITLE
 
-    rows = [
-        ("Source", scope.source or "unknown"),
-        ("Window", scope.window()),
-        ("In view", f"{scope.jobs} jobs, {scope.datasets} datasets, {scope.events} events"),
-        ("Namespaces", ", ".join(scope.namespaces)),
-        (
-            "Provenance",
-            (
-                f"{scope.evidenced} evidenced, {scope.from_mapping} from the mapping file, "
-                f"{scope.undeclared} undeclared"
-            ),
-        ),
-        ("Vocabulary", record.vocabulary),
-    ]
+    # From `scope.lines()`, as the other projections' sheets already were. This
+    # sheet listed its rows itself, which is how the declared count from #6 never
+    # reached the workbook while every other format printed it.
+    rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
+    rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
+    rows.append(("Vocabulary", record.vocabulary))
     if scope.domains_silent:
         rows.append(("Declared but silent", ", ".join(scope.domains_silent)))
 

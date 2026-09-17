@@ -243,6 +243,7 @@ def _(record: Record, *, indent: int = 2) -> str:
             },
             "events": record.scope.events,
             "jobs": record.scope.jobs,
+            "parents": list(record.scope.parents),
             "declared": record.scope.declared,
             "datasets": record.scope.datasets,
             "namespaces": list(record.scope.namespaces),

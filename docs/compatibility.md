@@ -62,6 +62,7 @@ another source adapter.
 | `dataQualityAssertions` (standard, input facet) | **works** | `quality` |
 | `sourceCodeLocation` (standard, job facet) | **works** | `provenance` |
 | `schema` (standard, dataset facet) | **works** | dataset columns |
+| `parent` (standard, run facet) | **works** | `ropa`, to leave orchestration parents out of the activities — `tests/test_ropa.py::TestOrchestrationParents`, including against real dbt 1.53 lineage in `tests/fixtures/dbt-1.53` |
 | A model version per run | **works** for the standard `tags` run facet (key `model_version`) and `cordata_provenance.step_params.*.model_version` | `ropa --view deployer` — `tests/test_deployer.py`, including against the captured `pipeline-runtime` event in `docs/evidence/`. There is **no standard facet** for this, which is why the list is short and documented |
 | A signed-commit report | **works** for `cordata_provenance`, `gitProvenance`, `provenance` | `provenance`. There is **no standard spelling** for this, which is why the common answer is *unknown* |
 | Everything else | **works** | Nothing. Facets are raw dictionaries and unknown ones arrive intact — the shallow-model rule, and why this table is short |
