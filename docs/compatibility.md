@@ -41,12 +41,19 @@ the output.
 
 | | Lineage | Art. 30 `processing` facet | `dataQualityAssertions` | `sourceCodeLocation` |
 |---|---|---|---|---|
-| dbt | **works** | no | emits it | emits it |
-| Airflow | **works** | no | via the GX integration | emits it |
-| Spark | **works** | no | via the GX integration | emits it |
+| dbt | **works** — openlineage-dbt 1.53.0, `tests/fixtures/dbt-1.53` | no | not in the captured `dbt-ol run`, which ran no tests | not in the capture |
+| Airflow | **works** — provider 2.20.1 on Airflow 3.3.1, `tests/fixtures/airflow-3.3.1` | no | not in the capture; a Great Expectations operator would send it | not in the capture: the provider sent `sourceCode`, the bash command itself |
+| Spark | **works** — openlineage-spark 1.53.0 on Spark 4.2.0, `tests/fixtures/spark-4.2.0` | no | not in the capture | not in the capture |
 | Flink, Dagster, Trino | **candidate** | no | — | — |
 | `pipeline-runtime` | **works** | **works** — the only emitter that does | **works** | no |
 | Anything else, via a few lines | — | **candidate** | — | — |
+
+Each `works` in the first column is a real capture from that emitter, run through
+all three projections, with `tests/test_ropa.py::TestOrchestrationParents` naming the
+fixture. The other columns say what the capture contained rather than what the
+integration can emit in some configuration: until 2026-09-17 they said *emits it*
+for `sourceCodeLocation` on dbt, Airflow and Spark, and none of the three captures
+carries it. What the captures found is tracked in #8, #9, #22 and #23.
 
 The gap in the second column is the product problem rather than a coverage
 problem. A pipeline emitting lineage but no `processing` facet produces a record
@@ -62,7 +69,7 @@ another source adapter.
 | `dataQualityAssertions` (standard, input facet) | **works** | `quality` |
 | `sourceCodeLocation` (standard, job facet) | **works** | `provenance` |
 | `schema` (standard, dataset facet) | **works** | dataset columns |
-| `parent` (standard, run facet) | **works** | `ropa`, to leave orchestration parents out of the activities — `tests/test_ropa.py::TestOrchestrationParents`, including against real dbt 1.53 lineage in `tests/fixtures/dbt-1.53` |
+| `parent` (standard, run facet) | **works** | `ropa`, to leave orchestration parents out of the activities — `tests/test_ropa.py::TestOrchestrationParents`, against real dbt, Airflow and Spark lineage: the dbt invocation, the Airflow DAG run, and the Spark application run |
 | A model version per run | **works** for the standard `tags` run facet (key `model_version`) and `cordata_provenance.step_params.*.model_version` | `ropa --view deployer` — `tests/test_deployer.py`, including against the captured `pipeline-runtime` event in `docs/evidence/`. There is **no standard facet** for this, which is why the list is short and documented |
 | A signed-commit report | **works** for `cordata_provenance`, `gitProvenance`, `provenance` | `provenance`. There is **no standard spelling** for this, which is why the common answer is *unknown* |
 | Everything else | **works** | Nothing. Facets are raw dictionaries and unknown ones arrive intact — the shallow-model rule, and why this table is short |

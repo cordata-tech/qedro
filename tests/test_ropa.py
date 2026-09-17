@@ -433,6 +433,42 @@ class TestOrchestrationParents:
         assert out.scope.jobs == 5
         assert all(a.inputs or a.outputs for a in out.activities)
 
+    def test_against_real_airflow_lineage(self):
+        # The DAG run is the parent. `notify` reads and writes nothing and is
+        # not a parent, so it stays listed: no datasets alone is not the rule.
+        out = real("airflow-3.3.1")
+        assert out.scope.parents == ("default/orders_daily",)
+        assert [a.key for a in out.activities] == [
+            "default/orders_daily.extract_orders",
+            "default/orders_daily.notify",
+            "default/orders_daily.score_orders",
+        ]
+        assert out.scope.jobs == 4
+
+    def test_against_real_spark_lineage(self):
+        # The application run is the parent of every action. Spark's own
+        # schema-reading actions are still listed; that is #22, and this test
+        # asserts only what #8 decided, so #22 can change the count.
+        out = real("spark-4.2.0")
+        assert out.scope.parents == ("default/orders_enrichment",)
+        keys = {a.key for a in out.activities}
+        assert "default/orders_enrichment" not in keys
+        assert {
+            "default/orders_enrichment.adaptive_spark_plan.out_orders_enriched",
+            "default/orders_enrichment.adaptive_spark_plan.out_revenue_by_region",
+        } <= keys
+
+
+def real(fixture):
+    """A record from a captured fixture, which must read with nothing skipped."""
+    from pathlib import Path
+
+    from qedro.sources import read_dir
+
+    events, report = read_dir(Path("tests/fixtures") / fixture)
+    assert report.clean, f"{fixture}: {report.reasons()}"
+    return build(events, config=config.parse(CONTROLLER), vocabulary=WORDS, report=report)
+
 
 class TestTheDomainGuessIsStated:
     """A job guessed into the wrong domain makes a declared one look silent.

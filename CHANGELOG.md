@@ -49,6 +49,12 @@ adoption of anything required beyond lineage a platform already emits.
   and carries no `processing` facet, is named in the scope statement instead. The job
   count still includes it, and it does not withhold the mark. Found against real dbt
   lineage, where the invocation job showed up as an extra activity.
+- **Real Airflow and Spark lineage as test fixtures**, beside the dbt capture:
+  Airflow 3.3.1 with the OpenLineage provider 2.20.1, and Spark 4.2.0 with
+  openlineage-spark 1.53.0. The parent rule leaves out the Airflow DAG run and the
+  Spark application run. `docs/compatibility.md` now names the captures, and no
+  longer says dbt, Airflow and Spark emit `sourceCodeLocation`, which none of the
+  captures carries.
 - **The Art. 30 record states which Art. 30(1) items it has fields for**, on every
   run including one that earns the mark: (a) the controller and (b) the purposes, and
   none for (c) to (g). It is a scope line rather than a reason to withhold the mark,
