@@ -1,0 +1,39 @@
+{
+  "eventType": "COMPLETE",
+  "eventTime": "2026-09-17T07:36:41.740346+00:00",
+  "producer": "https://github.com/cordata-tech/pipeline-runtime/tree/0.1.0",
+  "job": {
+    "namespace": "cordata.fraud",
+    "name": "transactions-scored-daily",
+    "facets": {
+      "processing": {
+        "purpose": "fraud-detection",
+        "legal_basis": "legitimate-interest"
+      }
+    }
+  },
+  "run": {
+    "runId": "8ea56885-df09-4694-b730-98a39d900644",
+    "facets": {
+      "cordata_provenance": {
+        "step_params": {
+          "score": {
+            "model_version": "2026-07-fraud-v3"
+          }
+        }
+      }
+    }
+  },
+  "inputs": [
+    {
+      "namespace": "cordata://fraud",
+      "name": "fraud_raw.transactions"
+    }
+  ],
+  "outputs": [
+    {
+      "namespace": "cordata://fraud",
+      "name": "fraud_curated.transactions_scored"
+    }
+  ]
+}
