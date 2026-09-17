@@ -3,7 +3,7 @@
   "$id": "https://github.com/cordata-tech/qedro/blob/main/schemas/openlineage-art30-processing-facet.json",
   "$comment": "Generated from pipeline_runtime.descriptor.Processing by tools/facet_schema.py. Do not edit by hand — the model is the source of truth and this file is a projection of it.",
   "title": "ProcessingJobFacet",
-  "description": "DSGVO Art. 30 fields for one processing activity, carried on the job that performs it. A job facet rather than a run facet: purpose and legal basis are properties of the pipeline, not of one execution of it. Occupies the `processing` key in `job.facets`.",
+  "description": "GDPR Art. 30 fields for one processing activity, carried on the job that performs it. A job facet rather than a run facet: purpose and legal basis are properties of the pipeline, not of one execution of it. Occupies the `processing` key in `job.facets`.",
   "type": "object",
   "allOf": [
     {

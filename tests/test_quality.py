@@ -355,3 +355,16 @@ class TestTheDomainFilterIsStated:
         assert any(
             "4 in dbt (guessed from the job namespace)" in r for r in out.completeness.reasons
         )
+
+
+def test_assertions_are_read_from_the_pipeline_runtime_capture():
+    # The emitter row in docs/compatibility.md says `pipeline-runtime` sends
+    # `dataQualityAssertions`; this is the test that row names.
+    from pathlib import Path
+
+    from qedro.sources import read_dir
+
+    events, report = read_dir(Path("tests/fixtures/events"))
+    out = build(events, config=config.parse(CONTROLLER), report=report)
+    assert out.scope.checks > 0
+    assert out.datasets

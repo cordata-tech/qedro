@@ -325,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     ropa_cmd = sub.add_parser(
         "ropa",
         parents=[common],
-        help="produce a DSGVO Art. 30 record of processing activities",
+        help="produce a GDPR Art. 30 record of processing activities",
     )
     ropa_cmd.add_argument(
         "source",
@@ -340,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ropa_cmd.add_argument(
         "--vocabulary",
-        help="a vocabulary document to read terms from, instead of the shipped DSGVO baseline",
+        help="a vocabulary document to read terms from, instead of the shipped GDPR baseline",
     )
     ropa_cmd.add_argument(
         "--format",
@@ -354,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         "--view",
         choices=("art30", "deployer"),
         default="art30",
-        help="art30: the DSGVO Art. 30 record (default). deployer: the same record, "
+        help="art30: the GDPR Art. 30 record (default). deployer: the same record, "
         "per AI use case, with the model version, inputs and run records a deployer "
         "under the AI Act is asked about",
     )

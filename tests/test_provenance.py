@@ -385,3 +385,37 @@ def test_no_existing_key_changed():
         datasets = [d for e in events for d in e.datasets]
         assert datasets, source
         assert all(d.key == d.legacy_key for d in datasets), source
+
+
+class TestEverySignatureSpellingIsRead:
+    """`docs/compatibility.md` says three facet names report a signed commit.
+
+    Only `cordata_provenance` had a test, and a row may only say `works` when a
+    test names it.
+    """
+
+    @staticmethod
+    def signed_by(facet_name):
+        parsed = parse_event(
+            {
+                "eventType": "COMPLETE",
+                "eventTime": "2026-03-01T10:00:00Z",
+                "run": {
+                    "runId": "r1",
+                    "facets": {facet_name: {"descriptor_git_commit_signed": True}},
+                },
+                "job": {"namespace": "acme.fraud", "name": "scored"},
+                "outputs": [{"namespace": "wh", "name": "scores"}],
+            }
+        )
+        assert parsed is not None
+        return parsed
+
+    def test_each_spelling_reports_a_signature(self):
+        from qedro.provenance import SIGNATURE_FACETS
+
+        assert SIGNATURE_FACETS == ("cordata_provenance", "gitProvenance", "provenance")
+        for name in SIGNATURE_FACETS:
+            out = chain([self.signed_by(name)], "wh/scores")
+            signature = out.steps[0].production.signature
+            assert (signature.signed, signature.reported_by) == (True, name), name

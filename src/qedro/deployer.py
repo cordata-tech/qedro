@@ -27,7 +27,7 @@ than implying the duty applies.
 carry no retention policy. What can be shown is the span of run records in view,
 which is a lower bound on what the source kept — or, when `--since` or `--until`
 was given, only the width of the query. Art. 26(6) sets a minimum for logs a
-deployer controls while DSGVO Art. 5(1)(e) storage limitation pulls the other way
+deployer controls while GDPR Art. 5(1)(e) storage limitation pulls the other way
 for personal data, and this view shows the span without resolving either. A
 short span does not withhold the mark: doing so would imply Art. 26(6) applies
 today.
@@ -141,7 +141,7 @@ class Scope(scope_module.Scope):
         "no lineage and is not declared is not represented here. The retention shown "
         "is the span of run records in view, not the source's retention policy, which "
         "the events do not carry. Art. 26(6) sets a minimum period for logs under a "
-        "deployer's control while DSGVO Art. 5(1)(e) storage limitation pulls the "
+        "deployer's control while GDPR Art. 5(1)(e) storage limitation pulls the "
         "other way for personal data, and this view resolves neither."
     )
 
@@ -347,7 +347,7 @@ def _completeness(
 
     if not controller:
         completeness = completeness.degraded(
-            "no controller is declared, and Art. 30(1)(a) DSGVO requires one — "
+            "no controller is declared, and Art. 30(1)(a) GDPR requires one — "
             "set `controller:` in qedro.yaml"
         )
 

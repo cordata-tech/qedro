@@ -2,9 +2,16 @@
 
 **Turns emitted evidence into the artefacts an auditor asks for.**
 
-Point it at OpenLineage events you already emit. Get back a DSGVO Art. 30 record of
+Point it at OpenLineage events you already emit. Get back a GDPR Art. 30 record of
 processing activities, an assertion history, and the provenance chain from a published
 number to the signed commit that authorised it.
+
+The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
+known in German as the *DSGVO*. Its Article 30 requires an organisation that processes
+personal data, or processes it on another's behalf, to keep a written record of its
+processing activities: who is responsible, for what purposes, which categories of people
+and data, who receives it, and more. Supervisory authorities can ask to see that record,
+and Qedro generates the parts of it that lineage can evidence.
 
 ```console
 $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
@@ -248,7 +255,7 @@ Three limits are stated in every format rather than left to the reader:
   (CELEX 02024R1689-20260727). Nothing in the events says whether a system is
   high-risk, so the view does not decide it.
 - **Retention is the span of run records in view**, not a retention policy, which the
-  events do not carry. Art. 26(6) sets a minimum period for logs, and DSGVO storage
+  events do not carry. Art. 26(6) sets a minimum period for logs, and GDPR storage
   limitation pulls the other way for personal data, so the view reports the span and
   resolves neither. A short span does not withhold the mark, because withholding it
   would imply Art. 26(6) applies today.
@@ -413,7 +420,7 @@ cites.
 **Q.E.D.** — *quod erat demonstrandum*, "that which was to be demonstrated". The phrase
 that closes a proof.
 
-It is not decoration. [Art. 5(2) GDPR](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679)
+It is not decoration. [Art. 5(2) GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj)
 places a duty on the controller to be able to **demonstrate** compliance — not to
 achieve it quietly, but to show it on request. That is a *demonstrandum*, and producing
 it from evidence rather than from assertion is the entire job of this tool.

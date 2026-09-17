@@ -1,4 +1,6 @@
-# The DSGVO baseline vocabulary.
+# The GDPR baseline vocabulary. The file keeps the German name, DSGVO, because
+# `dsgvo-baseline` is the vocabulary name every record prints and a changed name
+# would read as a different vocabulary.
 #
 # This file is DATA, not configuration and not a schema. Qedro loads it at
 # runtime and has no compiled knowledge of anything in it — which is what makes

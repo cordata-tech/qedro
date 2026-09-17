@@ -1,7 +1,7 @@
 # Qedro — working notes
 
 Turns emitted evidence into the artefacts an auditor asks for. Reads OpenLineage,
-produces a DSGVO Art. 30 record of processing activities, an assertion history, and
+produces a GDPR (DSGVO) Art. 30 record of processing activities, an assertion history, and
 the provenance chain from a published number back to the signed commit that
 authorised it. All three projections are built.
 
@@ -97,16 +97,15 @@ the pin, which is the one thing the test exists to catch.
 - **Apache-2.0.** Everything open, including the parts that would be a commercial tier
   elsewhere. `pipeline-runtime` is MIT and that inconsistency is deliberate — the
   patent grant is what DACH enterprise legal review looks for.
-- **Private until v0.1.** The repo opens when the reader works, a projection produces
-  real output, and a release cadence exists — not before. A public repo with no
-  commits behind it signals less than no repo. **All three conditions are now met**
-  (`CONTRIBUTING.md` § Releases, `.github/workflows/release.yml`), so opening it is a
-  decision waiting to be taken rather than a bar still to clear — and on 2026-08-22
-  Laszlo decided **not yet**: run it against real work first and let it mature before
-  anything is shown publicly. `v0.1.0` is tagged locally and unpushed, `CHANGELOG.md`
-  marks it unreleased, and the release workflow refuses to ship an entry still marked
-  that way. **Publishing to PyPI is opening**, whatever GitHub says — the sdist
+- **Private until the v0.2 checkpoint.** On 2026-08-22 Laszlo decided not to publish
+  v0.1.0 and to run Qedro against real work first. On 2026-09-17 the decision point
+  became a checkpoint at the end of v0.2, with four conditions in that milestone's
+  description, and **the first public release would be 0.2.0**: `qedro.__version__` is
+  0.2.0, `CHANGELOG.md` marks it unreleased and says 0.1.0 never was, and the release
+  workflow refuses to ship an entry still marked that way. `v0.1.0` stays a local,
+  unpushed tag. **Publishing to PyPI is opening**, whatever GitHub says — the sdist
   carries the full source and test suite — so there is no half step available here.
+  Pushing `main` to the private origin is routine; pushing a `v*` tag is publishing.
 - **The version has one source**, `qedro.__version__`; `pyproject.toml` reads it with
   `dynamic = ["version"]`. The release workflow fails if the tag disagrees with it, or
   if `CHANGELOG.md` has no entry for it.

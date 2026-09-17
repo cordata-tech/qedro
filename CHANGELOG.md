@@ -6,12 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## 0.1.0 — unreleased
+## 0.2.0 — unreleased
 
-> Tagged and complete, and deliberately not published. The decision on
-> 2026-08-22 was to run it against real work first and let it mature before
-> anything is shown publicly — so the code below exists and the artefact does
-> not. The date goes in when the tag is pushed.
+> Prepared as the first public release, and not published. Whether to publish is
+> decided at the checkpoint in the v0.2 milestone, and the date goes in when the tag
+> is pushed.
+>
+> **0.1.0 was never released.** It was tagged locally on 2026-08-22 and deliberately
+> not published, so that Qedro could first be run against real work. That run found
+> the orchestration-parent, guessed-domain, Art. 30(1), file-naming and read-only
+> changes below, and publishing 0.1.0 would have shipped a record that overstated
+> what it covers. Everything that was in 0.1.0 is included in this entry, and there
+> is no separate 0.1.0 to upgrade from.
 
 First release. Three projections over OpenLineage, four output formats, and no
 adoption of anything required beyond lineage a platform already emits.

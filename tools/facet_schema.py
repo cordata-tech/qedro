@@ -52,7 +52,7 @@ JOB_FACET = "https://openlineage.io/spec/2-0-2/OpenLineage.json#/$defs/JobFacet"
 TITLE = "ProcessingJobFacet"
 
 DESCRIPTION = (
-    "DSGVO Art. 30 fields for one processing activity, carried on the job that "
+    "GDPR Art. 30 fields for one processing activity, carried on the job that "
     "performs it. A job facet rather than a run facet: purpose and legal basis "
     "are properties of the pipeline, not of one execution of it. Occupies the "
     f"`{FACET_KEY}` key in `job.facets`."

@@ -622,3 +622,11 @@ class TestReadOnlyActivitiesAreNamed:
     def test_the_other_captures_have_none(self):
         assert real("airflow-3.3.1").scope.read_only == ()
         assert real("dbt-1.53").scope.read_only == ()
+
+
+def test_the_processing_facet_is_read_from_the_pipeline_runtime_capture():
+    # The facet row in docs/compatibility.md; the emitter itself is the only one
+    # that sends `processing`. Its `.validate` sub-jobs do not carry it, so not
+    # every activity is evidenced, and this asserts only that some are.
+    out = real("events")
+    assert any(a.evidenced for a in out.activities)
