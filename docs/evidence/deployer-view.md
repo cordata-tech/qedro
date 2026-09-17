@@ -1,8 +1,8 @@
 # Transcript: `qedro ropa --view deployer`
 
-Captured by script from qedro 0.1.0, at commit `e284804` with a clean working tree, on Python 3.12.13. The output below is what the command printed, unedited. Run the same commands from the repository root to reproduce it.
+Captured by script from qedro 0.1.0, at commit `0fc4e54` with a clean working tree, on Python 3.12.13. The output below is what the command printed, unedited. Run the same commands from the repository root to reproduce it.
 
-The three runs use the same config and differ in one thing each. The first reads `demo/lineage`, where purpose and legal basis come from the mapping file. The second reads `demo/lineage-declared`, where the pipelines emit them. The third adds `demo/activities.yaml`, which declares an AI use that emits no lineage.
+The three runs use the same config and differ in one thing each. The first reads `demo/lineage`, where purpose and legal basis come from the mapping file. The second reads `demo/lineage-declared`, where the pipelines emit them. The third adds `demo/activities.yaml`, which declares two uses that emit no lineage: a support assistant, which names a model and is listed, and a payroll SaaS, which names none and belongs only in the Art. 30 record.
 
 ## 1. Lineage whose pipelines do not declare, with purpose and basis from the mapping file
 
@@ -18,19 +18,23 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
   acme.fraud/transactions-scored-daily  (fraud)
     purpose                  fraud-detection (mapping)
     legal basis              legitimate-interest (mapping)
-    model version            2026-06-fraud-v3    7 runs, 2026-06-15 to 2026-06-21
-                             2026-05-fraud-v2   14 runs, 2026-06-01 to 2026-06-14
+    model version            2026-07-fraud-v3    7 runs, 2026-07-20 to 2026-07-26
+                             2026-06-fraud-v2   14 runs, 2026-07-06 to 2026-07-19
                              reported in the tags run facet
-    latest run               2026-06-21T02:21:00+00:00, model 2026-06-fraud-v3
+    latest run               2026-07-26T02:21:00+00:00, model 2026-07-fraud-v3
                              run 78766c96-379c-5818-adc6-96c2f8f9e7d3
-    inputs read · Art. 26(4) warehouse/fraud_raw.device_events,
+    inputs read              warehouse/fraud_raw.device_events,
                              warehouse/fraud_raw.transactions
-    run records · Art. 26(6) 21 runs, 2026-06-01 to 2026-06-21 (20 days) — less than six
+                             context for Art. 26(4), not a check of relevance or
+                             representativeness
+    run records              21 runs, 2026-07-06 to 2026-07-26 (20 days) — less than six
                              months in view
+                             context for Art. 26(6), not a retention policy or a
+                             compliance finding
 
   Scope of this view
     source        demo/lineage
-    window        2026-06-01T01:30:00+00:00 to 2026-06-21T04:06:00+00:00
+    window        2026-07-06T01:30:00+00:00 to 2026-07-26T04:06:00+00:00
     in view       1 of 6 activities reported a model version, 0 declared, 216 events
     runs          21 runs of the listed use cases
     This view lists the activities in the Art. 30 record whose runs reported a model
@@ -61,19 +65,23 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
   acme.fraud/transactions-scored-daily  (fraud)
     purpose                  fraud-detection
     legal basis              legitimate-interest
-    model version            2026-06-fraud-v3    7 runs, 2026-06-15 to 2026-06-21
-                             2026-05-fraud-v2   14 runs, 2026-06-01 to 2026-06-14
+    model version            2026-07-fraud-v3    7 runs, 2026-07-20 to 2026-07-26
+                             2026-06-fraud-v2   14 runs, 2026-07-06 to 2026-07-19
                              reported in the tags run facet
-    latest run               2026-06-21T02:21:00+00:00, model 2026-06-fraud-v3
+    latest run               2026-07-26T02:21:00+00:00, model 2026-07-fraud-v3
                              run 78766c96-379c-5818-adc6-96c2f8f9e7d3
-    inputs read · Art. 26(4) warehouse/fraud_raw.device_events,
+    inputs read              warehouse/fraud_raw.device_events,
                              warehouse/fraud_raw.transactions
-    run records · Art. 26(6) 21 runs, 2026-06-01 to 2026-06-21 (20 days) — less than six
+                             context for Art. 26(4), not a check of relevance or
+                             representativeness
+    run records              21 runs, 2026-07-06 to 2026-07-26 (20 days) — less than six
                              months in view
+                             context for Art. 26(6), not a retention policy or a
+                             compliance finding
 
   Scope of this view
     source        demo/lineage-declared
-    window        2026-06-01T01:30:00+00:00 to 2026-06-21T04:06:00+00:00
+    window        2026-07-06T01:30:00+00:00 to 2026-07-26T04:06:00+00:00
     in view       1 of 6 activities reported a model version, 0 declared, 216 events
     runs          21 runs of the listed use cases
     This view lists the activities in the Art. 30 record whose runs reported a model
@@ -89,7 +97,7 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
 
 Exit status 0.
 
-## 3. The same record with one AI use declared that emits no lineage
+## 3. The same record with declared activities that emit no lineage
 
 ```console
 $ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer --activities demo/activities.yaml
@@ -103,30 +111,38 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
   acme.fraud/transactions-scored-daily  (fraud)
     purpose                  fraud-detection
     legal basis              legitimate-interest
-    model version            2026-06-fraud-v3    7 runs, 2026-06-15 to 2026-06-21
-                             2026-05-fraud-v2   14 runs, 2026-06-01 to 2026-06-14
+    model version            2026-07-fraud-v3    7 runs, 2026-07-20 to 2026-07-26
+                             2026-06-fraud-v2   14 runs, 2026-07-06 to 2026-07-19
                              reported in the tags run facet
-    latest run               2026-06-21T02:21:00+00:00, model 2026-06-fraud-v3
+    latest run               2026-07-26T02:21:00+00:00, model 2026-07-fraud-v3
                              run 78766c96-379c-5818-adc6-96c2f8f9e7d3
-    inputs read · Art. 26(4) warehouse/fraud_raw.device_events,
+    inputs read              warehouse/fraud_raw.device_events,
                              warehouse/fraud_raw.transactions
-    run records · Art. 26(6) 21 runs, 2026-06-01 to 2026-06-21 (20 days) — less than six
+                             context for Art. 26(4), not a check of relevance or
+                             representativeness
+    run records              21 runs, 2026-07-06 to 2026-07-26 (20 days) — less than six
                              months in view
+                             context for Art. 26(6), not a retention policy or a
+                             compliance finding
 
   support-reply-drafts  (crm)  — declared, no lineage
     purpose                  customer-support (declared)
     legal basis              contract (declared)
     model                    the support desk vendor's built-in assistant; version not
                              visible to ACME (declared)
-    inputs read · Art. 26(4) customer emails, support ticket history (declared)
-    run records · Art. 26(6) none — nothing emits lineage for this use
+    inputs read              customer emails, support ticket history (declared)
+                             context for Art. 26(4), not a check of relevance or
+                             representativeness
+    run records              none — nothing emits lineage for this use
+                             context for Art. 26(6), not a retention policy or a
+                             compliance finding
     note                     Support staff draft replies by pasting ticket text into the
                              vendor's UI. Nothing in the data platform emits lineage for
                              this.
 
   Scope of this view
     source        demo/lineage-declared
-    window        2026-06-01T01:30:00+00:00 to 2026-06-21T04:06:00+00:00
+    window        2026-07-06T01:30:00+00:00 to 2026-07-26T04:06:00+00:00
     in view       1 of 6 activities reported a model version, 1 declared, 216 events
     runs          21 runs of the listed use cases
     This view lists the activities in the Art. 30 record whose runs reported a model
