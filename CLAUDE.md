@@ -10,7 +10,9 @@ what any projection's output must contain. Read #2 before starting anything
 substantial — the scope and the sequencing are there, and the design constraints
 below were each argued out in its comments. `docs/architecture.md` is the map of
 the modules and the rule each one keeps — **untracked on purpose** until the target
-architecture is agreed, so it lives in the working copy and not in the history.
+architecture is agreed, so it lives in the working copy and not in the history. The same
+goes for `docs/architecture.pdf`; rebuild it with `python tools/architecture_pdf.py`
+whenever the markdown changes (needs `mmdc`, `pandoc` and `typst`).
 
 Both were transferred from `cordata-tech/platform` on 2026-08-21, so their comment
 history refers to them as `#25` and `#27` and to Qedro as *Atrium* and briefly
