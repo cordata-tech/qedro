@@ -84,6 +84,10 @@ class ReadReport:
     pages: int = 0
     events: int = 0
     skipped_records: int = 0
+    #: Rendered as `could not read {entry}`, so each entry names a thing
+    #: and puts its reason in parentheses — `events.ndjson (JSONDecodeError)`.
+    #: Two of these were sentences and read as `could not read /x does not
+    #: exist`.
     unreadable: tuple[str, ...] = ()
     truncated: bool = False
 
@@ -185,13 +189,25 @@ def read_dir(path: str | Path, *, recursive: bool = True) -> tuple[list[Event], 
     events: list[Event] = []
 
     if not root.exists():
-        return events, ReadReport(origin=str(root), unreadable=(f"{root} does not exist",))
+        return events, ReadReport(origin=str(root), unreadable=(f"{root} (does not exist)",))
 
-    files = sorted(
-        p
-        for p in (root.rglob("*") if recursive else root.glob("*"))
-        if p.is_file() and p.suffix in SUFFIXES
-    )
+    if root.is_file():
+        # Pointing at the file is what anyone does first, and `rglob` on a file
+        # yields nothing — so this used to report a clean zero and exit 0, with
+        # a reason that blamed the estate for what was really a path the reader
+        # would not read. Found by running it against a real dbt export.
+        if root.suffix not in SUFFIXES:
+            return events, ReadReport(
+                origin=str(root),
+                unreadable=(f"{root} (not one of {', '.join(SUFFIXES)})",),
+            )
+        files = [root]
+    else:
+        files = sorted(
+            p
+            for p in (root.rglob("*") if recursive else root.glob("*"))
+            if p.is_file() and p.suffix in SUFFIXES
+        )
 
     for f in files:
         report.files += 1

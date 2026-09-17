@@ -220,7 +220,15 @@ def resolve(events: Iterable[Event], wanted: str) -> list[str]:
     keys = {d.key for e in events for d in e.datasets}
     if wanted in keys:
         return [wanted]
-    return sorted(k for k in keys if k.rsplit("/", 1)[-1] == wanted)
+
+    by_name = sorted(k for k in keys if k.rsplit("/", 1)[-1] == wanted)
+    if by_name:
+        return by_name
+
+    # Real emitters qualify the name: dbt writes `probe.main.orders_explicit`,
+    # so the table somebody types is the last dotted segment rather than the
+    # whole thing. Tried last, so a fully qualified name still wins outright.
+    return sorted(k for k in keys if k.rsplit("/", 1)[-1].rsplit(".", 1)[-1] == wanted)
 
 
 def build(
@@ -259,13 +267,19 @@ def build(
             e for e in found if e.event_time is None
         ]
         production = _production(ordered[0])
+        # Distinct runs, not events. Emitters routinely declare the outputs on
+        # START *and* on COMPLETE — dbt does — so counting events reported one
+        # run as two and printed "1 other run wrote this" about a run that had
+        # written it once. A false sentence in the artefact, found against a
+        # real dbt export.
+        others = max(len({e.run.run_id for e in found if e.run.run_id}) - 1, 0)
         if level >= depth:
             steps.append(
                 Step(
                     dataset=key,
                     depth=level,
                     production=production,
-                    also_produced_by=len(ordered) - 1,
+                    also_produced_by=others,
                     ended=f"the walk stopped at the depth limit of {depth}",
                 )
             )
@@ -276,7 +290,7 @@ def build(
                 dataset=key,
                 depth=level,
                 production=production,
-                also_produced_by=len(ordered) - 1,
+                also_produced_by=others,
             )
         )
         for upstream in production.reads:

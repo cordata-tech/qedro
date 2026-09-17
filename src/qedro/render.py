@@ -67,7 +67,7 @@ def text(record: object, *, symbol: bool = True, width: int = 88) -> str:
 @text.register
 def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
     out: list[str] = []
-    controller = record.controller.name or "— no controller declared"
+    controller = record.controller.name or "no controller declared"
     out.append(f"Record of processing activities — {controller}")
     if record.controller.contact:
         out.append(f"  contact: {record.controller.contact}")
@@ -296,7 +296,7 @@ UNCHECKED_SHOWN = 25
 @text.register
 def _(record: quality_module.Record, *, symbol: bool = True, width: int = 88) -> str:
     out: list[str] = []
-    controller = record.controller.name or "— no controller declared"
+    controller = record.controller.name or "no controller declared"
     out.append(f"Data quality assertion history — {controller}")
     out.append("")
 

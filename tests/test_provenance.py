@@ -274,3 +274,65 @@ class TestResolvingWhatTheUserTyped:
 
     def test_nothing_matching_is_an_empty_list_not_a_guess(self):
         assert resolve([event(writes=["scores"])], "nope") == []
+
+
+class TestOtherRunsMeansOtherRuns:
+    """Found against a real dbt export.
+
+    dbt declares a model's outputs on START *and* on COMPLETE, so counting
+    events rather than runs reported one run as two — and the chain printed
+    "1 other run wrote this in the window" about a run that had written it
+    once. A false sentence in the artefact, which is the one kind of bug this
+    project cannot tolerate.
+    """
+
+    def test_a_start_and_a_complete_of_one_run_are_one_run(self):
+        events = [
+            event(run="same", event_type="START", writes=["scores"]),
+            event(run="same", event_type="COMPLETE", writes=["scores"]),
+        ]
+        assert chain(events, "wh/scores").steps[0].also_produced_by == 0
+
+    def test_two_genuinely_different_runs_are_counted(self):
+        events = [
+            event(run="r1", when="2026-03-01T10:00:00Z", writes=["scores"]),
+            event(run="r2", when="2026-03-02T10:00:00Z", writes=["scores"]),
+        ]
+        assert chain(events, "wh/scores").steps[0].also_produced_by == 1
+
+    def test_and_the_run_followed_is_the_later_one(self):
+        events = [
+            event(run="old", when="2026-03-01T10:00:00Z", writes=["scores"], commit="a"),
+            event(run="new", when="2026-03-05T10:00:00Z", writes=["scores"], commit="b"),
+            event(run="new", when="2026-03-05T10:00:01Z", writes=["scores"], commit="b"),
+        ]
+        step = chain(events, "wh/scores").steps[0]
+        assert step.production.code.commit == "b"
+        assert step.also_produced_by == 1
+
+
+class TestResolvingAQualifiedName:
+    """Found against a real dbt export, where a dataset is
+    `duckdb://probe.duckdb/probe.main.orders_explicit` and the table anybody
+    types is `orders_explicit`. The README promised a bare name would do."""
+
+    def test_the_last_dotted_segment_matches(self):
+        events = [event(writes=["probe.main.orders_explicit"])]
+        assert resolve(events, "orders_explicit") == ["wh/probe.main.orders_explicit"]
+
+    def test_the_qualified_name_still_matches(self):
+        events = [event(writes=["probe.main.orders_explicit"])]
+        assert resolve(events, "probe.main.orders_explicit") == ["wh/probe.main.orders_explicit"]
+
+    def test_an_exact_name_beats_a_dotted_suffix(self):
+        # `orders` as a table in its own right must not lose to
+        # `warehouse.orders` just because the suffix also matches.
+        events = [event(job="a", writes=["orders"]), event(job="b", writes=["mart.orders"])]
+        assert resolve(events, "orders") == ["wh/orders"]
+
+    def test_an_ambiguous_suffix_returns_both(self):
+        events = [
+            event(job="a", writes=["raw.customers"]),
+            event(job="b", writes=["mart.customers"]),
+        ]
+        assert resolve(events, "customers") == ["wh/mart.customers", "wh/raw.customers"]

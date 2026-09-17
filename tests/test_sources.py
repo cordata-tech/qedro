@@ -378,3 +378,67 @@ class TestOneEntryPoint:
         (odd / "a.ndjson").write_text(json.dumps(event()))
         _, report = read(str(odd))
         assert report.files == 1
+
+
+class TestPointingAtAFile:
+    """Found against a real dbt export, which is one `.jsonl` file.
+
+    `rglob` on a file yields nothing, so this reported a clean zero and exited
+    0 — with a reason that blamed the estate for having emitted nothing. A
+    wrong reason is worse than no reason: it sends the reader to look in the
+    wrong place, and it is the exact failure this tool exists to prevent,
+    committed by the tool.
+    """
+
+    def test_a_single_file_is_read(self, tmp_path):
+        events = tmp_path / "events.jsonl"
+        events.write_text(
+            json.dumps(
+                {
+                    "eventType": "COMPLETE",
+                    "eventTime": "2026-03-01T10:00:00Z",
+                    "run": {"runId": "r"},
+                    "job": {"namespace": "n", "name": "j"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        found, report = read_dir(events)
+        assert len(found) == 1
+        assert report.files == 1
+        assert report.clean
+
+    def test_the_same_file_read_via_its_directory_agrees(self, tmp_path):
+        events = tmp_path / "events.ndjson"
+        events.write_text(
+            json.dumps(
+                {
+                    "eventType": "COMPLETE",
+                    "eventTime": "2026-03-01T10:00:00Z",
+                    "run": {"runId": "r"},
+                    "job": {"namespace": "n", "name": "j"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        direct, _ = read_dir(events)
+        via_dir, _ = read_dir(tmp_path)
+        assert [e.job.key for e in direct] == [e.job.key for e in via_dir]
+
+    def test_a_file_it_cannot_read_says_so_rather_than_returning_nothing(self, tmp_path):
+        other = tmp_path / "README.md"
+        other.write_text("not lineage", encoding="utf-8")
+        found, report = read_dir(other)
+        assert found == []
+        assert not report.clean
+        assert any("not one of" in r for r in report.reasons())
+
+    def test_the_reasons_read_as_sentences(self, tmp_path):
+        # `reasons()` renders these as "could not read {entry}", so an entry
+        # names a thing and parenthesises its reason. Both of these used to
+        # produce "could not read /x does not exist".
+        _, missing = read_dir(tmp_path / "nope")
+        assert "could not read" in missing.reasons()[0]
+        assert "(does not exist)" in missing.reasons()[0]
