@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from . import words
+
 
 @dataclass(frozen=True)
 class Scope:
@@ -32,6 +34,10 @@ class Scope:
     events: int = 0
     domains_declared: tuple[str, ...] = ()
     domains_seen: tuple[str, ...] = ()
+    #: Where each seen domain came from. A domain is in both when one job was
+    #: mapped to it and another guessed into it. See cordata-tech/qedro#9.
+    domains_guessed: tuple[str, ...] = ()
+    domains_mapped: tuple[str, ...] = ()
 
     #: The standing sentence, overridden per projection. Deliberately factual
     #: about what was not examined rather than advisory about what that means
@@ -53,6 +59,46 @@ class Scope:
         """
         seen = set(self.domains_seen)
         return tuple(d for d in self.domains_declared if d not in seen)
+
+    def domains_source(self) -> str:
+        """Which domains in view were guessed and which were mapped, or "".
+
+        Stated only when `domains:` is set, because that is when the guess
+        decides the verdict: a job guessed into the wrong domain makes a
+        declared one look silent, and without this line a wrong guess and a
+        silent domain read the same. See cordata-tech/qedro#9.
+        """
+        if not self.domains_declared or not self.domains_seen:
+            return ""
+        parts = []
+        if self.domains_guessed:
+            parts.append(f"{', '.join(self.domains_guessed)} guessed from the job namespace")
+        if self.domains_mapped:
+            parts.append(f"{', '.join(self.domains_mapped)} from a mapping rule")
+        return "; ".join(parts)
+
+    def silent_reason(self) -> str:
+        """The withholding reason for silent domains, or "" when none are.
+
+        One copy for every projection that has domains. When any domain in view
+        was guessed, the reason says so and names the override, since a wrong
+        guess is the other way a domain comes to look silent.
+        """
+        if not self.domains_silent:
+            return ""
+        reason = (
+            f"declared in scope but produced no lineage in the window: "
+            f"{', '.join(self.domains_silent)}"
+        )
+        if self.domains_guessed:
+            n = len(self.domains_guessed)
+            reason += (
+                f" — the {words.plural(n, 'domain', 'domains')} in view named "
+                f"{', '.join(self.domains_guessed)} {words.plural(n, 'was', 'were')} guessed "
+                "from the job namespace, and a wrong guess reads the same as silence; "
+                "`domain:` on a mapping rule overrides the guess"
+            )
+        return reason
 
     def window(self) -> str:
         """The window as resolved, not as typed."""

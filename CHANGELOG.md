@@ -49,6 +49,12 @@ adoption of anything required beyond lineage a platform already emits.
   and carries no `processing` facet, is named in the scope statement instead. The job
   count still includes it, and it does not withhold the mark. Found against real dbt
   lineage, where the invocation job showed up as an extra activity.
+- **A guessed domain is said to be guessed.** When `domains:` is set, the scope
+  statement names the domains guessed from the job namespace and those set by a
+  rule's `domain:`, and the silent-domain reason names the guess and the override.
+  JSON carries `domains_guessed`, `domains_mapped`, and a `domain_source` per
+  activity. Found against real dbt lineage, whose default namespace `dbt` made a
+  declared domain look silent.
 - `--activities` reads a separate document of **declared activities**, meaning
   processing that emits no lineage. They appear beside the evidenced activities with
   every field marked `declared` and `no lineage` where the events would have spoken,

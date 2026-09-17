@@ -432,3 +432,67 @@ class TestOrchestrationParents:
         assert len(out.activities) == 4
         assert out.scope.jobs == 5
         assert all(a.inputs or a.outputs for a in out.activities)
+
+
+class TestTheDomainGuessIsStated:
+    """A job guessed into the wrong domain makes a declared one look silent.
+
+    openlineage-dbt names its namespace `dbt`, so every model lands in domain
+    `dbt` and `domains: [orders]` reports orders as silent although its models
+    emitted lineage. The guess is left alone; what changes is that the record
+    says it guessed. See cordata-tech/qedro#9.
+    """
+
+    def test_a_namespace_domain_is_recorded_as_guessed(self):
+        out = record([event(namespace="acme.fraud")], cfg="domains: [fraud]\n")
+        assert out.activities[0].domain_guessed
+        assert (out.scope.domains_guessed, out.scope.domains_mapped) == (("fraud",), ())
+
+    def test_a_rule_s_domain_is_recorded_as_mapped(self):
+        out = record(
+            [event(namespace="weird_ns")],
+            cfg='domains: [fraud]\njobs:\n  "weird_ns/*": {domain: fraud}\n',
+        )
+        assert not out.activities[0].domain_guessed
+        assert (out.scope.domains_guessed, out.scope.domains_mapped) == ((), ("fraud",))
+
+    def test_a_domain_can_be_both(self):
+        out = record(
+            [event(namespace="acme.fraud"), event(namespace="weird_ns")],
+            cfg='domains: [fraud]\njobs:\n  "weird_ns/*": {domain: fraud}\n',
+        )
+        assert out.scope.domains_source() == (
+            "fraud guessed from the job namespace; fraud from a mapping rule"
+        )
+
+    def test_the_source_is_stated_only_when_domains_are_in_scope(self):
+        # Without `domains:` nothing in the verdict depends on the guess.
+        assert record([event()]).scope.domains_source() == ""
+
+    def test_a_silent_reason_names_the_guess_and_the_override(self):
+        out = record([event(namespace="dbt", facet=EVIDENCED)], cfg="domains: [orders]\n")
+        [reason] = out.completeness.reasons
+        assert reason.startswith("declared in scope but produced no lineage in the window: orders")
+        assert "the domain in view named dbt was guessed from the job namespace" in reason
+        assert "`domain:` on a mapping rule" in reason
+
+    def test_with_nothing_guessed_the_reason_stays_as_it_was(self):
+        out = record(
+            [event(namespace="weird_ns", facet=EVIDENCED)],
+            cfg='domains: [fraud, hr]\njobs:\n  "weird_ns/*": {domain: fraud}\n',
+        )
+        assert out.completeness.reasons == (
+            "declared in scope but produced no lineage in the window: hr",
+        )
+
+    def test_against_real_dbt_lineage(self):
+        from pathlib import Path
+
+        from qedro.sources import read_dir
+
+        events, report = read_dir(Path("tests/fixtures/dbt-1.53"))
+        cfg = config.parse(CONTROLLER + "domains: [orders]\n")
+        out = build(events, config=cfg, vocabulary=WORDS, report=report)
+        assert out.scope.domains_silent == ("orders",)
+        assert out.scope.domains_source() == "dbt guessed from the job namespace"
+        assert any("guessed from the job namespace" in r for r in out.completeness.reasons)

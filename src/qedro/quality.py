@@ -172,13 +172,14 @@ def build(
 ) -> Record:
     """Project events into an assertion history."""
     checks: dict[str, list[Check]] = {}
-    produced: dict[str, str] = {}
-    consumed: dict[str, str] = {}
+    # Domain and whether it was guessed, per dataset. See #9.
+    produced: dict[str, tuple[str, bool]] = {}
+    consumed: dict[str, tuple[str, bool]] = {}
     seen: set[str] = set()
 
     for event in events:
         rule = config.rule_for(event.job.namespace, event.job.name)
-        domain = config.domain_for(event.job.namespace, rule)
+        domain = (config.domain_for(event.job.namespace, rule), config.domain_guessed(rule))
         for dataset in event.datasets:
             seen.add(dataset.key)
             for check in _checks(dataset, event):
@@ -195,7 +196,8 @@ def build(
 
     # A dataset nothing ever wrote is a source table: the only domain that has
     # said anything about it is the one that reads it.
-    domain_of = {key: produced.get(key) or consumed.get(key, "") for key in seen}
+    assigned = {key: produced.get(key) or consumed.get(key) or ("", True) for key in seen}
+    domain_of = {key: domain for key, (domain, _) in assigned.items()}
 
     if domains:
         wanted = set(domains)
@@ -207,11 +209,14 @@ def build(
     )
     unchecked = tuple(sorted(seen - set(checks)))
 
+    in_view = [assigned[k] for k in seen]
     scope = _scope(
         datasets,
         unchecked=unchecked,
         config=config,
-        domains_seen=tuple(sorted({d for k, d in domain_of.items() if k in seen and d})),
+        domains_seen=tuple(sorted({d for d, _ in in_view if d})),
+        domains_guessed=tuple(sorted({d for d, guessed in in_view if d and guessed})),
+        domains_mapped=tuple(sorted({d for d, guessed in in_view if d and not guessed})),
         report=report,
         since=since,
         until=until,
@@ -304,6 +309,8 @@ def _scope(
     unchecked: Sequence[str],
     config: Config,
     domains_seen: tuple[str, ...],
+    domains_guessed: tuple[str, ...],
+    domains_mapped: tuple[str, ...],
     report: ReadReport | None,
     since: datetime | None,
     until: datetime | None,
@@ -316,6 +323,8 @@ def _scope(
         events=report.events if report else 0,
         domains_declared=config.domains,
         domains_seen=domains_seen,
+        domains_guessed=domains_guessed,
+        domains_mapped=domains_mapped,
         datasets=len(datasets) + len(unchecked),
         checked=len(datasets),
         unchecked=len(unchecked),
@@ -371,9 +380,6 @@ def _completeness(
         )
 
     if scope.domains_silent:
-        completeness = completeness.degraded(
-            f"declared in scope but produced no lineage in the window: "
-            f"{', '.join(scope.domains_silent)}"
-        )
+        completeness = completeness.degraded(scope.silent_reason())
 
     return completeness

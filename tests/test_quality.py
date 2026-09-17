@@ -270,3 +270,24 @@ class TestWhichDomainADatasetBelongsTo:
         # that has said anything about it at all.
         events = [event(namespace="acme.fraud", reads="wh/vendor_feed")]
         assert record(events, domains=["fraud"]).unchecked == ("wh/vendor_feed",)
+
+
+class TestTheDomainGuessIsStated:
+    """The same statement `ropa` makes, from the same `Config`. See #9."""
+
+    def test_a_mapped_writer_makes_the_dataset_s_domain_mapped(self):
+        events = [
+            event(namespace="weird_ns", job="curate", reads="wh/raw", writes="wh/customers"),
+            event(namespace="weird_ns", job="curate", reads="wh/customers", writes="wh/scores"),
+        ]
+        cfg = 'domains: [crm]\njobs:\n  "weird_ns/*": {domain: crm}\n'
+        out = record(events, cfg=cfg)
+        assert (out.scope.domains_guessed, out.scope.domains_mapped) == ((), ("crm",))
+
+    def test_the_silent_reason_is_the_shared_one(self):
+        events = [event(namespace="dbt", assertions=[check()])]
+        out = record(events, cfg="domains: [orders]\n")
+        assert out.scope.domains_source() == "dbt guessed from the job namespace"
+        assert any(
+            "the domain in view named dbt was guessed" in r for r in out.completeness.reasons
+        )

@@ -115,6 +115,8 @@ def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record"
     out = [f"  {title}", f"    source        {scope.source or 'unknown'}"]
     out.append(f"    window        {scope.window()}")
     out.extend(f"    {label:<13} {value}" for label, value in scope.lines())
+    if scope.domains_source():
+        out.append(f"    domains       {scope.domains_source()}")
     if scope.domains_silent:
         out.append(f"    silent        {', '.join(scope.domains_silent)} (in scope, no lineage)")
     for line in _wrap(scope.OUT_OF_VIEW, width - 4):
@@ -185,6 +187,8 @@ def _scope_markdown(scope: Scope, *, title: str = "Scope of this record") -> lis
         f"- **Window** — {scope.window()}",
     ]
     out += [f"- **{label[0].upper()}{label[1:]}** — {value}" for label, value in scope.lines()]
+    if scope.domains_source():
+        out.append(f"- **Domains** — {scope.domains_source()}")
     if scope.domains_silent:
         out.append(f"- **Declared in scope but silent** — {', '.join(scope.domains_silent)}")
     return out + ["", scope.OUT_OF_VIEW, ""]
@@ -249,6 +253,8 @@ def _(record: Record, *, indent: int = 2) -> str:
             "namespaces": list(record.scope.namespaces),
             "domains_declared": list(record.scope.domains_declared),
             "domains_seen": list(record.scope.domains_seen),
+            "domains_guessed": list(record.scope.domains_guessed),
+            "domains_mapped": list(record.scope.domains_mapped),
             "domains_silent": list(record.scope.domains_silent),
             "provenance": {
                 "evidenced": record.scope.evidenced,
@@ -295,6 +301,7 @@ def _activity_json(activity: Activity) -> dict[str, object]:
         "namespace": activity.namespace,
         "name": activity.name,
         "domain": activity.domain,
+        "domain_source": "namespace" if activity.domain_guessed else "mapping",
         "purpose": {
             "value": activity.purpose.value,
             "provenance": str(activity.purpose.provenance),
@@ -498,6 +505,8 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
             "failures": record.scope.failures,
             "domains_declared": list(record.scope.domains_declared),
             "domains_seen": list(record.scope.domains_seen),
+            "domains_guessed": list(record.scope.domains_guessed),
+            "domains_mapped": list(record.scope.domains_mapped),
             "domains_silent": list(record.scope.domains_silent),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },

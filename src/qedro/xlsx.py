@@ -246,6 +246,8 @@ def _scope(sheet: Any, record: Record) -> None:
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
     rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
     rows.append(("Vocabulary", record.vocabulary))
+    if scope.domains_source():
+        rows.append(("Domains", scope.domains_source()))
     if scope.domains_silent:
         rows.append(("Declared but silent", ", ".join(scope.domains_silent)))
 
@@ -407,6 +409,8 @@ def _quality_scope(sheet: Any, record: QualityRecord) -> None:
 
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
     rows += list(scope.lines())
+    if scope.domains_source():
+        rows.append(("Domains", scope.domains_source()))
     if scope.domains_silent:
         rows.append(("Declared but silent", ", ".join(scope.domains_silent)))
 

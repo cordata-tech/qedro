@@ -98,6 +98,8 @@ class Activity:
     events: int = 0
     first_seen: datetime | None = None
     last_seen: datetime | None = None
+    #: False when a mapping rule's `domain:` named the domain. See #9.
+    domain_guessed: bool = True
 
     @property
     def key(self) -> str:
@@ -302,6 +304,7 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
         namespace=first.job.namespace,
         name=first.job.name,
         domain=config.domain_for(first.job.namespace, rule),
+        domain_guessed=config.domain_guessed(rule),
         purpose=purpose,
         legal_basis=legal_basis,
         inputs=tuple(sorted(inputs)),
@@ -403,6 +406,12 @@ def _scope(
         namespaces=tuple(sorted({a.namespace for a in activities})),
         domains_declared=config.domains,
         domains_seen=tuple(sorted({a.domain for a in activities if a.domain})),
+        domains_guessed=tuple(
+            sorted({a.domain for a in activities if a.domain and a.domain_guessed})
+        ),
+        domains_mapped=tuple(
+            sorted({a.domain for a in activities if a.domain and not a.domain_guessed})
+        ),
         evidenced=sum(1 for a in activities if a.evidenced),
         from_mapping=sum(
             1
@@ -489,9 +498,6 @@ def _completeness(
         )
 
     if scope.domains_silent:
-        completeness = completeness.degraded(
-            f"declared in scope but produced no lineage in the window: "
-            f"{', '.join(scope.domains_silent)}"
-        )
+        completeness = completeness.degraded(scope.silent_reason())
 
     return completeness

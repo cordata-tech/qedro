@@ -66,6 +66,7 @@ ran, and the tombstone is withheld for the whole record when any entry relies on
     window        2026-01-01T00:00:00+00:00 to 2026-03-01T02:15:00+00:00
     in view       47 jobs, 112 datasets, 1,284 events
     provenance    41 evidenced, 6 from the mapping file, 0 undeclared
+    domains       fraud, billing guessed from the job namespace
     silent        marketing (in scope, no lineage)
     This record covers processing performed by pipelines that emit lineage, and any
     activities declared with no lineage. Systems that do not emit lineage — CRM, HR,
@@ -162,6 +163,20 @@ jobs:               # the fallback, for pipelines that emit no facet
 Patterns are fnmatch against `namespace/name` and then the bare name, first match in
 file order winning. A facet always beats the file: a config cannot silently rewrite
 what a pipeline emitted.
+
+A job's domain is guessed from the last segment of its namespace, so `acme.fraud` is in
+`fraud`, unless a rule sets `domain:`. The guess fails for an integration that names its
+namespace after itself: openlineage-dbt defaults to `dbt`, which puts every model in a
+domain called `dbt` and makes a declared `orders` look silent. When `domains:` is set,
+the scope statement says which domains were guessed and which came from a rule, and
+the silent-domain reason names the guess, so a wrong guess can be told apart from a
+domain that emitted nothing:
+
+```yaml
+jobs:
+  "dbt/*orders*":
+    domain: orders
+```
 
 ### The vocabulary is a document, not an enum
 

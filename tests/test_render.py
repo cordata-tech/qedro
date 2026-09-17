@@ -264,6 +264,18 @@ class TestEveryProjectionKeepsTheProperties:
         cfg = "controller: ACME GmbH\ndomains: [fraud, marketing]\n"
         assert "marketing" in readable(PROJECTIONS[projection](cfg), fmt)
 
+    @pytest.mark.parametrize(("projection", "fmt"), DOMAIN_CASES)
+    def test_a_guessed_domain_is_said_to_be_guessed(self, projection, fmt):
+        # Otherwise a wrong guess and a silent domain read the same. See #9.
+        # JSON carries the lists rather than the sentence, like every scope count.
+        cfg = "controller: ACME GmbH\ndomains: [fraud, marketing]\n"
+        built = PROJECTIONS[projection](cfg)
+        if fmt == "json":
+            scope = json_lib.loads(render.FORMATS[fmt](built))["scope"]
+            assert (scope["domains_guessed"], scope["domains_mapped"]) == (["fraud"], [])
+        else:
+            assert "fraud guessed from the job namespace" in readable(built, fmt)
+
     @pytest.mark.parametrize(("projection", "fmt"), CASES)
     def test_a_withheld_mark_carries_its_reasons(self, projection, fmt):
         # Every projection withholds here, for its own reasons: ropa and

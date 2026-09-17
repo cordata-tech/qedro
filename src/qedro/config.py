@@ -125,6 +125,17 @@ class Config:
                 return namespace.rsplit(separator, 1)[-1]
         return namespace
 
+    @staticmethod
+    def domain_guessed(rule: Rule | None) -> bool:
+        """Whether `domain_for` guessed, rather than read a rule's `domain:`.
+
+        An integration that names its namespace after itself — openlineage-dbt
+        defaults to `dbt` — puts every job in one guessed domain, and a declared
+        domain then looks silent although its jobs emitted lineage. The guess is
+        not improved here; it is made visible. See cordata-tech/qedro#9.
+        """
+        return not (rule is not None and rule.domain)
+
 
 def find(explicit: str | Path | None, *, start: Path | None = None) -> Path | None:
     """Locate a config file.
