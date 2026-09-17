@@ -336,3 +336,52 @@ class TestResolvingAQualifiedName:
             event(job="b", writes=["mart.customers"]),
         ]
         assert resolve(events, "customers") == ["wh/mart.customers", "wh/raw.customers"]
+
+
+class TestFileDatasetsAsTheCapturesSendThem:
+    """#23, against the two real captures that send `file` and absolute paths."""
+
+    def test_neither_capture_prints_a_double_slash_in_any_format(self):
+        from pathlib import Path
+
+        from qedro import render, vocabulary
+        from qedro import ropa as ropa_module
+        from qedro.sources import read_dir
+
+        for fixture in ("airflow-3.3.1", "spark-4.2.0"):
+            events, _ = read_dir(Path("tests/fixtures") / fixture)
+            record = ropa_module.build(
+                events, config=config.parse("controller: X\n"), vocabulary=vocabulary.load()
+            )
+            for fmt in ("text", "markdown", "json"):
+                out = render.FORMATS[fmt](record)
+                assert "file//" not in out, f"{fixture}/{fmt}"
+                # The markdown table counts datasets rather than naming them.
+                if fmt != "markdown":
+                    assert "file:///" in out, f"{fixture}/{fmt}"
+
+    def test_the_printed_spelling_the_file_name_and_the_old_spelling_all_resolve(self):
+        from pathlib import Path
+
+        from qedro.sources import read_dir
+
+        events, _ = read_dir(Path("tests/fixtures/airflow-3.3.1"))
+        wanted = ["file:///data/curated/orders_scored.parquet"]
+        assert resolve(events, "file:///data/curated/orders_scored.parquet") == wanted
+        assert resolve(events, "orders_scored.parquet") == wanted
+        assert resolve(events, "file//data/curated/orders_scored.parquet") == wanted
+
+
+def test_no_existing_key_changed():
+    # #23 changes a key only for the bare `file` namespace or an absolute name.
+    # The demo and the dbt capture have neither, so every key there must be
+    # exactly what it was.
+    from pathlib import Path
+
+    from qedro.sources import read_dir
+
+    for source in ("demo/lineage", "demo/lineage-declared", "tests/fixtures/dbt-1.53"):
+        events, _ = read_dir(Path(source))
+        datasets = [d for e in events for d in e.datasets]
+        assert datasets, source
+        assert all(d.key == d.legacy_key for d in datasets), source

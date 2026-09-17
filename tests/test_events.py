@@ -134,3 +134,33 @@ class TestFacets:
     def test_the_raw_event_survives_for_facets_nobody_modelled(self):
         raw = _event()
         assert parse_event(raw).raw is raw
+
+
+class TestTheDatasetKey:
+    """Namespace and name joined, without the double slash #23 found."""
+
+    def key(self, namespace, name):
+        return Dataset(namespace=namespace, name=name).key
+
+    def test_a_uri_namespace_and_a_relative_name_are_unchanged(self):
+        assert self.key("s3://bucket", "raw/orders.csv") == "s3://bucket/raw/orders.csv"
+        assert self.key("postgres://db:5432", "shop.public.orders") == (
+            "postgres://db:5432/shop.public.orders"
+        )
+        assert self.key("warehouse", "fraud_curated.scores") == "warehouse/fraud_curated.scores"
+
+    def test_an_absolute_path_is_not_given_a_second_slash(self):
+        assert self.key("hdfs://nn:8020", "/warehouse/orders") == "hdfs://nn:8020/warehouse/orders"
+        assert self.key("file://host", "/data/orders.csv") == "file://host/data/orders.csv"
+
+    def test_the_bare_file_namespace_is_written_as_the_spec_s_uri(self):
+        # Airflow's provider and the Spark integration emit `file`; the naming
+        # conventions give `file://{host}`, here with an empty host.
+        assert self.key("file", "/data/raw/orders.csv") == "file:///data/raw/orders.csv"
+
+    def test_file_and_file_with_an_empty_host_are_the_same_dataset(self):
+        assert self.key("file", "/data/x") == self.key("file://", "/data/x")
+
+    def test_only_the_legacy_key_keeps_the_old_spelling(self):
+        dataset = Dataset(namespace="file", name="/data/x")
+        assert dataset.legacy_key == "file//data/x"

@@ -49,6 +49,13 @@ adoption of anything required beyond lineage a platform already emits.
   and carries no `processing` facet, is named in the scope statement instead. The job
   count still includes it, and it does not withhold the mark. Found against real dbt
   lineage, where the invocation job showed up as an extra activity.
+- **File datasets print as a URI**, `file:///data/raw/orders.csv`, instead of
+  `file//data/raw/orders.csv`. The Airflow provider and the Spark integration emit
+  the bare namespace `file` where the OpenLineage naming conventions give
+  `file://{host}`, and an absolute path as the name; a name that starts with `/` is
+  no longer given a second one, which also covers HDFS. No other dataset key
+  changes, and `provenance --dataset` accepts the new spelling, the file name alone,
+  or the old spelling.
 - **Real Airflow and Spark lineage as test fixtures**, beside the dbt capture:
   Airflow 3.3.1 with the OpenLineage provider 2.20.1, and Spark 4.2.0 with
   openlineage-spark 1.53.0. The parent rule leaves out the Airflow DAG run and the

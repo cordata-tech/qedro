@@ -54,7 +54,27 @@ class Dataset:
     @property
     def key(self) -> str:
         """Stable identity across events. Namespace matters: two warehouses
-        can hold a `customer` table and they are not the same dataset."""
+        can hold a `customer` table and they are not the same dataset.
+
+        Namespace and name joined with `/`, which for most platforms in the
+        OpenLineage naming conventions is already a URI: `s3://bucket` and
+        `key`, `postgres://host:5432` and `db.schema.table`. Two cases would
+        otherwise print a double slash (cordata-tech/qedro#23):
+
+        - a name that is an absolute path, as the conventions give for the
+          local file system and HDFS, is joined without a second `/`;
+        - the bare namespace `file`, which the Airflow provider and the Spark
+          integration emit instead of the spec's `file://{host}`, is written
+          `file://`, the same namespace with an empty host.
+        """
+        namespace = "file://" if self.namespace == "file" else self.namespace
+        if self.name.startswith("/"):
+            return f"{namespace}{self.name}"
+        return f"{namespace}/{self.name}"
+
+    @property
+    def legacy_key(self) -> str:
+        """The key as it was before #23, so a note of it still resolves."""
         return f"{self.namespace}/{self.name}"
 
     def facet(self, name: str) -> Mapping[str, Any] | None:

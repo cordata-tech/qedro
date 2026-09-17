@@ -24,3 +24,5 @@ two datasets into five activities (#22).
 What it is here for (cordata-tech/qedro#10): #8's parent rule against a third
 emitter, where the application run must be left out of the activities. The
 namespace was left unset, so every job carries the listener's default, `default`.
+Files arrive as namespace `file` with an absolute path, as with Airflow; Qedro prints
+them as `file:///probe/...` since #23.

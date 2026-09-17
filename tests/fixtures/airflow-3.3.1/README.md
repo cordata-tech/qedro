@@ -26,4 +26,5 @@ Two things the capture showed that the synthetic demo could not:
 - The provider sends `sourceCode` (the bash command) and not
   `sourceCodeLocation`, so `provenance` reports no code location.
 - File datasets arrive as namespace `file` with an absolute path as the name,
-  which Qedro prints as `file//data/...` (#23).
+  where the OpenLineage naming conventions give `file://{host}`. Qedro printed
+  them as `file//data/...` until #23, and now as `file:///data/...`.

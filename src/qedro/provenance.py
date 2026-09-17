@@ -217,9 +217,16 @@ def resolve(events: Iterable[Event], wanted: str) -> list[str]:
     tiresome — and every candidate is returned rather than one picked, so an
     ambiguous name is a question rather than a silently wrong answer.
     """
-    keys = {d.key for e in events for d in e.datasets}
+    datasets = [d for e in events for d in e.datasets]
+    keys = {d.key for d in datasets}
     if wanted in keys:
         return [wanted]
+
+    # The spelling before #23, `file//data/x`, was never published; it still
+    # finds its dataset so a note of it does not read as *nothing produced it*.
+    legacy = sorted({d.key for d in datasets if d.legacy_key == wanted})
+    if legacy:
+        return legacy
 
     by_name = sorted(k for k in keys if k.rsplit("/", 1)[-1] == wanted)
     if by_name:
