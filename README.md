@@ -67,16 +67,44 @@ ran, and the tombstone is withheld for the whole record when any entry relies on
     in view       47 jobs, 112 datasets, 1,284 events
     provenance    41 evidenced, 6 from the mapping file, 0 undeclared
     silent        marketing (in scope, no lineage)
-    This record covers processing performed by pipelines that emit lineage.
-    Systems that do not emit lineage — CRM, HR, ticketing, marketing tools,
-    anything on paper — are not represented here, and their absence from this
-    record is not evidence of their absence from the organisation.
+    This record covers processing performed by pipelines that emit lineage, and any
+    activities declared with no lineage. Systems that do not emit lineage — CRM, HR,
+    ticketing, marketing tools, anything on paper — are not represented here unless
+    they are declared, a declared activity is an assertion rather than evidence, and
+    the absence of anything else from this record is not evidence of its absence
+    from the organisation.
 ```
 
 That paragraph is not boilerplate. Art. 30 covers everything a controller processes,
 and pipelines are a subset of that — so what this produces is a complete record of
-the **pipeline-borne subset**, never the whole thing. Printing it only when something
-went wrong would teach a reader that its absence means full coverage.
+the **pipeline-borne subset** plus whatever has been declared, never the whole thing.
+Printing it only when something went wrong would teach a reader that its absence means
+full coverage.
+
+### Declared activities
+
+Processing that emits no lineage — a payroll SaaS, staff using a vendor's assistant,
+anything on paper — can be written into a separate document and passed with
+`--activities`:
+
+```console
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --activities demo/activities.yaml
+  payroll-run  (hr)  — declared, no lineage
+    purpose       payroll (declared)
+    legal basis   legal-obligation (declared)
+    reads         no lineage — declared: employee master data, working time records
+    writes        no lineage
+    runs          no lineage
+```
+
+Every field of a declared activity is an assertion, since nothing in the events shows
+the processing happened. Where the events would have supplied a value, the output
+says `no lineage` rather than leaving a blank or printing `0`: a blank reads as
+*touches no data*, and `0` as *ran zero times*, and neither is known. Declared
+activities are counted on their own line in the scope statement and leave the
+evidenced counts unchanged. Any declared activity withholds the mark. The reasoning
+behind each of those choices is recorded on
+[#6](https://github.com/cordata-tech/qedro/issues/6).
 
 ### Output
 
@@ -162,10 +190,10 @@ Three limits are stated in every format rather than left to the reader:
   would imply Art. 26(6) applies today.
 - **Declared use cases are marked as declared.** Most AI use outside engineering teams
   emits no lineage, for example staff pasting text into a vendor's assistant.
-  `--activities` reads a separate document of such uses; every entry is shown as
-  `declared, no lineage` and withholds the mark. For now the flag works with
-  `--view deployer` only, and bringing declared activities into the Art. 30 view is
-  [#6](https://github.com/cordata-tech/qedro/issues/6).
+  The view takes declared activities from the Art. 30 record and lists the ones that
+  name a `model`; each is shown as `declared, no lineage` and withholds the mark. A
+  declared activity with no model, such as a payroll SaaS, stays in the Art. 30
+  record and is not an AI use case.
 
 The model version is read from two documented places: the standard OpenLineage `tags`
 run facet with key `model_version`, and `step_params.<step>.model_version` in the

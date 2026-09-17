@@ -13,9 +13,10 @@ options #6 left open. A list of every non-pipeline use in an organisation is kep
 by different people from a mapping rule and may be long, and keeping it separate
 means an existing config is untouched until someone opts in.
 
-For now only the deployer view reads this document. Carrying declared activities
-into the Art. 30 view raises #6's other questions — what the scope counts mean,
-and whether the out-of-view sentence stays true — and those are settled on #6.
+Both views read it. In the Art. 30 record declared activities sit in their own
+tuple beside the evidenced ones, are counted apart in the scope statement, and
+withhold the mark; the deployer view lists those that name a `model`. The
+reasoning for each of those is recorded on #6.
 """
 
 from __future__ import annotations

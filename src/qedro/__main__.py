@@ -125,16 +125,6 @@ def _ropa(
     activities_path: str | None = None,
 ) -> int:
     fmt = _format(fmt, out)
-    # Declared activities enter the Art. 30 view only once cordata-tech/qedro#6
-    # settles what they do to its scope counts and its out-of-view sentence.
-    # Until then a flag that silently did nothing there would be worse than one
-    # that refuses, so this is checked before anything is read.
-    if activities_path and view != "deployer":
-        raise UsageError(
-            "--activities is read by --view deployer only for now; declared activities "
-            "in the Art. 30 view are cordata-tech/qedro#6"
-        )
-
     settings = config_module.load(config_module.find(config_path))
     # `--vocabulary` beats `vocabulary:` in the config, which beats the shipped
     # default. The flag is what someone reaches for while trying one out.
@@ -151,6 +141,7 @@ def _ropa(
         report=report,
         since=since,
         until=until,
+        declared=declared_uses,
     )
 
     if not record.activities and not report.clean:
@@ -166,7 +157,6 @@ def _ropa(
         view_record = deployer.build(
             record,
             events,
-            declared=declared_uses,
             report=report,
             since=since,
             until=until,
@@ -372,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         "--activities",
         metavar="PATH",
         help="a document of declared activities — processing that emits no lineage. "
-        "Marked as declared in the output. With --view deployer only, for now",
+        "Marked as declared in the output, and never counted as evidence",
     )
 
     quality_cmd = sub.add_parser(

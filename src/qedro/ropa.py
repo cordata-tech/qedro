@@ -29,6 +29,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from . import scope, words
 from .config import Config, Controller, Rule
@@ -36,6 +37,9 @@ from .events import Event
 from .mark import Completeness
 from .sources import ReadReport
 from .vocabulary import Vocabulary
+
+if TYPE_CHECKING:  # declared.py builds on Provenance and Sourced from here
+    from .declared import Declared
 
 #: The job facet the Art. 30 fields travel in. Published as a spec in
 #: `schemas/openlineage-art30-processing-facet.json`.
@@ -132,12 +136,22 @@ class Scope(scope.Scope):
     evidenced: int = 0
     from_mapping: int = 0
     undeclared: int = 0
+    #: Activities declared with no lineage. Counted apart from everything above,
+    #: which describes what was looked at — a declared activity was written
+    #: down, not looked at. See cordata-tech/qedro#6.
+    declared: int = 0
 
+    #: Unconditional, per #3, and worded to be true whether or not anything is
+    #: declared. Printing it only when nothing was declared would make it
+    #: conditional; keeping the earlier wording beside declared entries would
+    #: make it false. See the decision on cordata-tech/qedro#6.
     OUT_OF_VIEW = (
-        "This record covers processing performed by pipelines that emit lineage. "
-        "Systems that do not emit lineage — CRM, HR, ticketing, marketing tools, "
-        "anything on paper — are not represented here, and their absence from this "
-        "record is not evidence of their absence from the organisation."
+        "This record covers processing performed by pipelines that emit lineage, and any "
+        "activities declared with no lineage. Systems that do not emit lineage — CRM, HR, "
+        "ticketing, marketing tools, anything on paper — are not represented here unless "
+        "they are declared, a declared activity is an assertion rather than evidence, and "
+        "the absence of anything else from this record is not evidence of its absence "
+        "from the organisation."
     )
 
     def lines(self) -> tuple[tuple[str, str], ...]:
@@ -155,6 +169,16 @@ class Scope(scope.Scope):
                 ),
             )
         )
+        if self.declared:
+            out.append(
+                (
+                    "declared",
+                    (
+                        f"{self.declared} {words.plural(self.declared, 'activity', 'activities')} "
+                        "declared with no lineage"
+                    ),
+                )
+            )
         return tuple(out)
 
 
@@ -168,6 +192,10 @@ class Record:
     completeness: Completeness = field(default_factory=Completeness)
     vocabulary: str = ""
     generated_from: str = ""
+    #: Processing that emits no lineage, as somebody declared it. Kept out of
+    #: `activities` so nothing that iterates over those — counts, domains, the
+    #: deployer view's use cases — can take a declared entry for an evidenced one.
+    declared: tuple[Declared, ...] = ()
 
     @property
     def complete(self) -> bool:
@@ -188,8 +216,9 @@ def build(
     report: ReadReport | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    declared: Sequence[Declared] = (),
 ) -> Record:
-    """Project events into an Art. 30 record."""
+    """Project events into an Art. 30 record, with any declared activities beside it."""
     grouped: dict[str, list[Event]] = {}
     for event in events:
         grouped.setdefault(event.job.key, []).append(event)
@@ -199,9 +228,20 @@ def build(
         for _, job_events in sorted(grouped.items())
     )
 
-    scope = _scope(activities, config=config, report=report, since=since, until=until)
+    scope = _scope(
+        activities,
+        config=config,
+        report=report,
+        since=since,
+        until=until,
+        declared=len(declared),
+    )
     completeness = _completeness(
-        activities, controller=config.controller, scope=scope, report=report
+        activities,
+        controller=config.controller,
+        scope=scope,
+        report=report,
+        declared=len(declared),
     )
 
     return Record(
@@ -211,6 +251,7 @@ def build(
         completeness=completeness,
         vocabulary=vocabulary.name,
         generated_from=report.origin if report else "",
+        declared=tuple(declared),
     )
 
 
@@ -275,6 +316,7 @@ def _scope(
     report: ReadReport | None,
     since: datetime | None,
     until: datetime | None,
+    declared: int = 0,
 ) -> Scope:
     times = [t for a in activities for t in (a.first_seen, a.last_seen) if t is not None]
     datasets = {d for a in activities for d in a.inputs + a.outputs}
@@ -298,6 +340,7 @@ def _scope(
             if Provenance.MAPPING in (a.purpose.provenance, a.legal_basis.provenance)
         ),
         undeclared=sum(1 for a in activities if not a.purpose or not a.legal_basis),
+        declared=declared,
     )
 
 
@@ -307,6 +350,7 @@ def _completeness(
     controller: Controller,
     scope: Scope,
     report: ReadReport | None,
+    declared: int = 0,
 ) -> Completeness:
     """When the artefact may claim to stand on its own evidence.
 
@@ -327,6 +371,16 @@ def _completeness(
         completeness = completeness.degraded(
             "no controller is declared, and Art. 30(1)(a) requires one — "
             "set `controller:` in qedro.yaml"
+        )
+
+    # Before the early return below, so a record made only of declared
+    # activities still says why it is no proof rather than only that no
+    # lineage was found.
+    if declared:
+        completeness = completeness.degraded(
+            f"{declared} {words.plural(declared, 'activity is', 'activities are')} declared "
+            f"with no lineage, so {words.plural(declared, 'it is', 'they are')} asserted — "
+            f"nothing in the events shows that {words.plural(declared, 'it', 'they')} happened"
         )
 
     if not activities:

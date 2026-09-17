@@ -86,6 +86,23 @@ def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
         out.append(f"    runs          {activity.runs} in window, last {_when(activity.last_seen)}")
         out.append("")
 
+    for entry in record.declared:
+        domain = f"  ({entry.domain})" if entry.domain else ""
+        out.append(f"  {entry.name}{domain}  — declared, no lineage")
+        out.append(f"    purpose       {_field(entry.purpose)}")
+        out.append(f"    legal basis   {_field(entry.legal_basis)}")
+        # "no lineage" rather than a blank or 0: a blank reads as *touches no
+        # data* and 0 as *ran zero times*, and neither is known.
+        reads = (
+            f"no lineage — declared: {', '.join(entry.inputs)}" if entry.inputs else "no lineage"
+        )
+        out.append(f"    reads         {reads}")
+        out.append("    writes        no lineage")
+        out.append("    runs          no lineage")
+        if entry.note:
+            out.append(f"    note          {entry.note}")
+        out.append("")
+
     out.extend(_scope_text(record.scope, width=width))
     out.append("")
     out.extend(_verdict_text(record, "every activity stands on emitted evidence", symbol=symbol))
@@ -148,6 +165,11 @@ def _(record: Record) -> str:
         out.append(
             f"| `{a.key}` | {a.purpose.value or '—'} | {a.legal_basis.value or '—'} "
             f"| {_provenance_cell(a)} | {len(a.inputs)} | {len(a.outputs)} | {a.runs} |"
+        )
+    for d in record.declared:
+        out.append(
+            f"| `{d.name}` | {d.purpose.value or '—'} | {d.legal_basis.value or '—'} "
+            "| **declared, no lineage** | no lineage | no lineage | no lineage |"
         )
 
     out += _scope_markdown(record.scope)
@@ -212,6 +234,7 @@ def _(record: Record, *, indent: int = 2) -> str:
         },
         "vocabulary": record.vocabulary,
         "activities": [_activity_json(a) for a in record.activities],
+        "declared": [_declared_json(d) for d in record.declared],
         "scope": {
             "source": record.scope.source,
             "window": {
@@ -220,6 +243,7 @@ def _(record: Record, *, indent: int = 2) -> str:
             },
             "events": record.scope.events,
             "jobs": record.scope.jobs,
+            "declared": record.scope.declared,
             "datasets": record.scope.datasets,
             "namespaces": list(record.scope.namespaces),
             "domains_declared": list(record.scope.domains_declared),
@@ -236,6 +260,32 @@ def _(record: Record, *, indent: int = 2) -> str:
         "reasons": list(record.completeness.reasons),
     }
     return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+
+
+def _declared_json(entry) -> dict[str, object]:
+    """A declared activity. `null` where the events would have spoken, because
+    nothing did — not an empty list, which would claim nothing was read."""
+    return {
+        "name": entry.name,
+        "domain": entry.domain,
+        "evidence": "declared",
+        "purpose": {
+            "value": entry.purpose.value,
+            "provenance": str(entry.purpose.provenance),
+            "unrecognised": entry.purpose.unrecognised,
+        },
+        "legal_basis": {
+            "value": entry.legal_basis.value,
+            "provenance": str(entry.legal_basis.provenance),
+            "unrecognised": entry.legal_basis.unrecognised,
+        },
+        "model": entry.model,
+        "inputs_declared": list(entry.inputs),
+        "note": entry.note,
+        "reads": None,
+        "writes": None,
+        "runs": None,
+    }
 
 
 def _activity_json(activity: Activity) -> dict[str, object]:

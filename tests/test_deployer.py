@@ -78,10 +78,10 @@ def view(events, *, cfg="", declared_uses=(), report=None, since=None, until=Non
     if "controller" not in cfg:
         cfg = CONTROLLER + cfg
     settings = config.parse(cfg)
-    record = ropa.build(events, config=settings, vocabulary=WORDS, report=report)
-    return record, deployer.build(
-        record, events, declared=declared_uses, report=report, since=since, until=until
+    record = ropa.build(
+        events, config=settings, vocabulary=WORDS, report=report, declared=declared_uses
     )
+    return record, deployer.build(record, events, report=report, since=since, until=until)
 
 
 def a_declared(**overrides):
@@ -333,3 +333,23 @@ class TestTheReasonsReadLikeSentences:
         [reason] = [r for r in out.completeness.reasons if "mapping file" in r]
         assert "2 of 2 use cases take" in reason
         assert "those entries are asserted" in reason
+
+
+class TestOnlyDeclaredAIUsesAreUseCases:
+    """A declared payroll SaaS is an Art. 30 activity and not an AI use case.
+
+    The same rule as for lineage: a job whose runs reported no model version is
+    in the record and not in this view.
+    """
+
+    def test_a_declared_activity_without_a_model_is_not_listed(self):
+        record, out = view([event(model="v1", facet=EVIDENCED)], declared_uses=a_declared(model=""))
+        assert len(record.declared) == 1
+        assert out.declared == ()
+        assert out.scope.declared == 0
+
+    def test_and_does_not_withhold_this_view_s_mark(self):
+        # It withholds the Art. 30 record's mark, which is where it belongs.
+        record, out = view([event(model="v1", facet=EVIDENCED)], declared_uses=a_declared(model=""))
+        assert out.complete
+        assert not record.complete

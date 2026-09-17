@@ -568,12 +568,24 @@ class TestTheDeployerView:
                 assert main(argv) == 0
                 assert capsys.readouterr().out.strip()
 
-    def test_activities_without_the_deployer_view_is_refused_before_reading(self, tmp_path, capsys):
-        # A flag that silently did nothing in the Art. 30 view would be worse
-        # than one that refuses. The source does not even exist.
-        argv = ["ropa", str(tmp_path / "nowhere"), "--activities", "x.yaml"]
+    def test_activities_are_read_in_the_art_30_view_too(self, tmp_path, capsys):
+        # Refused there until cordata-tech/qedro#6 settled what they mean for
+        # the record; now they are part of it.
+        events, config = _estate(tmp_path, facet=True)
+        doc = tmp_path / "activities.yaml"
+        doc.write_text("activities:\n  payroll: {purpose: payroll, legal_basis: contract}\n")
+        argv = ["ropa", str(events), "--config", str(config), "--activities", str(doc)]
+        assert main([*argv, "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert [d["name"] for d in payload["declared"]] == ["payroll"]
+        assert payload["complete"] is False
+
+    def test_a_bad_activities_document_fails_before_the_events_are_read(self, tmp_path, capsys):
+        bad = tmp_path / "activities.yaml"
+        bad.write_text("activities:\n  x: {purpos: p}\n", encoding="utf-8")
+        argv = ["ropa", str(tmp_path / "nowhere"), "--activities", str(bad)]
         assert main(argv) == 2
-        assert "--view deployer only" in capsys.readouterr().err
+        assert "unknown keys purpos" in capsys.readouterr().err
 
     def test_a_bad_activities_document_is_a_sentence(self, tmp_path, capsys):
         events, config = _estate(tmp_path, facet=True)

@@ -63,8 +63,8 @@ def deployer_record(cfg="controller: ACME GmbH\n"):
     # No processing facet, so the view always withholds the mark and the
     # reasons property has something to check in every format.
     events = [deployer_event(model="2026-06-fraud-v3")]
-    record = build(events, config=config.parse(cfg), vocabulary=WORDS)
-    return deployer.build(record, events, declared=a_declared())
+    record = build(events, config=config.parse(cfg), vocabulary=WORDS, declared=a_declared())
+    return deployer.build(record, events)
 
 
 #: Every artefact a renderer can be handed. The properties below hold for all
@@ -389,3 +389,48 @@ class TestDeployerRendering:
     def test_json_does_not_decide_the_risk_tier(self):
         payload = json_lib.loads(render.json(deployer_record()))
         assert payload["references"]["high_risk_decided"] is False
+
+
+def declared_art30_record():
+    """An Art. 30 record with one evidenced activity and one declared one."""
+    return build(
+        [event(facet=EVIDENCED)],
+        config=config.parse("controller: ACME GmbH\n"),
+        vocabulary=WORDS,
+        declared=a_declared(model=""),
+    )
+
+
+class TestDeclaredActivitiesInTheArt30View:
+    """cordata-tech/qedro#6, asserted in every format."""
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_declared_activity_is_named_and_marked(self, fmt):
+        out = readable(declared_art30_record(), fmt)
+        assert "support-reply-drafts" in out
+        assert "declared" in out
+
+    @pytest.mark.parametrize("fmt", [f for f in FORMATS if f != "json"])
+    def test_what_the_events_would_have_said_is_no_lineage_not_blank(self, fmt):
+        # An empty Reads cell reads as *touches no data* and 0 runs as *ran
+        # zero times*. Neither is known.
+        assert "no lineage" in readable(declared_art30_record(), fmt)
+
+    def test_json_uses_null_rather_than_an_empty_list(self):
+        payload = json_lib.loads(render.json(declared_art30_record()))
+        [entry] = payload["declared"]
+        assert entry["reads"] is None and entry["runs"] is None
+        assert entry["purpose"]["provenance"] == "declared"
+        assert payload["scope"]["declared"] == 1
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_the_scope_statement_is_still_printed_and_still_true(self, fmt):
+        built = declared_art30_record()
+        out = readable(built, fmt)
+        assert " ".join(built.scope.OUT_OF_VIEW.split()) in out
+        assert "unless they are declared" in out
+
+    def test_the_mark_is_withheld_with_its_reason_in_text(self):
+        out = render.text(declared_art30_record())
+        assert TOMBSTONE not in out
+        assert "declared with no lineage" in out

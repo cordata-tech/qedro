@@ -13,7 +13,7 @@ stack would prove the opposite.
 ```
 demo/
   qedro.yaml           the controller, the domains, and a mapping fallback
-  activities.yaml      one declared use of an AI assistant that emits no lineage
+  activities.yaml      two uses that emit no lineage: an AI assistant and a payroll SaaS
   lineage/             the estate as it is today — no Art. 30 facet anywhere
   lineage-declared/    the same three weeks once the pipelines declare
 ```
@@ -87,6 +87,20 @@ purpose and every lawful basis came from the job that ran, in the same event tha
 proves it ran — so the record stands on its own evidence, and the run finishes the
 product's name.
 
+## Declared activities, in the Art. 30 record
+
+```console
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --activities demo/activities.yaml
+```
+
+`activities.yaml` declares two uses that emit no lineage: a monthly payroll run in an
+HR vendor's SaaS, and support staff drafting replies in a vendor's assistant. Both
+appear beside the six evidenced activities as `declared, no lineage`, with `no lineage`
+wherever the events would have supplied a value. The scope statement adds a line —
+*2 activities declared with no lineage* — without changing the evidenced counts, and
+the record no longer claims to be a proof, because nothing in the events shows either
+use happened.
+
 ## The deployer view, on the same record
 
 ```console
@@ -110,11 +124,11 @@ $ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer \
     --activities demo/activities.yaml
 ```
 
-`activities.yaml` declares one use that emits no lineage: support staff drafting
-replies by pasting ticket text into a vendor's assistant. It appears as
-`support-reply-drafts — declared, no lineage`, every field is marked as declared, and
-the view no longer claims to be a proof, because nothing in the events shows that use
-happened, which model it used, or what it read.
+Of the two declared activities, only the support assistant names a `model`, so it is
+the only one this view lists. The payroll run belongs in the Art. 30 record and is not
+an AI use case. The assistant appears as `support-reply-drafts — declared, no lineage`,
+every field is marked as declared, and the view no longer claims to be a proof, because
+nothing in the events shows that use happened, which model it used, or what it read.
 
 ## The assertion history, on the same estate
 

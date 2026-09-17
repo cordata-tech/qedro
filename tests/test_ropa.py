@@ -271,3 +271,71 @@ class TestTheReasonsReadLikeSentences:
     def test_one_activity_carries_an_unknown_value(self):
         out = record([event(facet={"purpose": "p", "legal_basis": "vibes"})])
         assert "1 activity carries a value the vocabulary does not define" in self.reasons(out)
+
+
+class TestDeclaredActivities:
+    """cordata-tech/qedro#6: processing with no lineage, stated rather than invisible."""
+
+    def declared(self, **overrides):
+        from qedro import declared
+
+        spec = {"purpose": "payroll", "legal_basis": "legal-obligation", "domain": "hr"}
+        spec.update(overrides)
+        return declared.parse({"activities": {"payroll-saas": spec}}, origin="t", vocabulary=WORDS)
+
+    def test_they_sit_beside_the_activities_not_among_them(self):
+        out = record([event(facet=EVIDENCED)], declared=self.declared())
+        assert len(out.activities) == 1
+        assert [d.name for d in out.declared] == ["payroll-saas"]
+
+    def test_they_do_not_change_what_the_scope_says_was_looked_at(self):
+        with_declared = record([event(facet=EVIDENCED)], declared=self.declared())
+        without = record([event(facet=EVIDENCED)])
+        for attr in ("jobs", "datasets", "events", "evidenced", "from_mapping", "undeclared"):
+            assert getattr(with_declared.scope, attr) == getattr(without.scope, attr), attr
+        assert with_declared.scope.declared == 1
+
+    def test_the_scope_names_them_on_their_own_line(self):
+        out = record([event(facet=EVIDENCED)], declared=self.declared())
+        assert ("declared", "1 activity declared with no lineage") in out.scope.lines()
+
+    def test_a_record_with_none_has_no_declared_line(self):
+        out = record([event(facet=EVIDENCED)])
+        assert all(label != "declared" for label, _ in out.scope.lines())
+
+    def test_they_withhold_the_mark(self):
+        assert record([event(facet=EVIDENCED)]).complete
+        out = record([event(facet=EVIDENCED)], declared=self.declared())
+        assert not out.complete
+        assert any("declared with no lineage" in r for r in out.completeness.reasons)
+
+    def test_a_record_of_nothing_but_declared_activities_says_both_things(self):
+        out = record([], declared=self.declared())
+        reasons = " ".join(out.completeness.reasons)
+        assert "declared with no lineage" in reasons
+        assert "no processing activities were found" in reasons
+
+    def test_a_declared_activity_does_not_make_its_domain_stop_being_silent(self):
+        out = record(
+            [event(facet=EVIDENCED)],
+            cfg="domains: [fraud, hr]\n",
+            declared=self.declared(),
+        )
+        assert out.scope.domains_silent == ("hr",)
+
+    def test_the_out_of_view_sentence_is_true_with_and_without_them(self):
+        sentence = record([event(facet=EVIDENCED)]).scope.OUT_OF_VIEW
+        assert "unless they are declared" in sentence
+        assert "not represented here" in sentence
+
+    def test_the_plural_follows_the_count(self):
+        from qedro import declared
+
+        two = declared.parse(
+            {"activities": {"a": {"purpose": "p"}, "b": {"purpose": "q"}}},
+            origin="t",
+            vocabulary=WORDS,
+        )
+        out = record([event(facet=EVIDENCED)], declared=two)
+        assert any("2 activities are declared" in r for r in out.completeness.reasons)
+        assert ("declared", "2 activities declared with no lineage") in out.scope.lines()

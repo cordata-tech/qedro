@@ -191,12 +191,18 @@ def build(
     record: Record,
     events: Iterable[Event],
     *,
-    declared: Sequence[Declared] = (),
     report: ReadReport | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> DeployerRecord:
-    """The deployer view of an Art. 30 record, from the events it was built from."""
+    """The deployer view of an Art. 30 record, from the events it was built from.
+
+    Declared activities come from the record too, so both views work from one
+    set of inputs. Only those that name a `model` are AI use cases: a declared
+    payroll SaaS belongs in the Art. 30 record and not here, in the same way a
+    job whose runs reported no model version does.
+    """
+    declared = tuple(d for d in record.declared if d.model)
     by_job: dict[str, list[Event]] = {}
     for event in events:
         by_job.setdefault(event.job.key, []).append(event)
@@ -226,7 +232,7 @@ def build(
     return DeployerRecord(
         controller=record.controller,
         use_cases=use_cases,
-        declared=tuple(declared),
+        declared=declared,
         scope=scope,
         completeness=_completeness(
             use_cases, declared, controller=record.controller, report=report

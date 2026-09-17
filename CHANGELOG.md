@@ -44,6 +44,12 @@ adoption of anything required beyond lineage a platform already emits.
 - The Art. 30 processing facet is published as a spec in
   `schemas/openlineage-art30-processing-facet.json`, generated from
   `pipeline_runtime.descriptor.Processing` rather than written beside it.
+- `--activities` reads a separate document of **declared activities**, meaning
+  processing that emits no lineage. They appear beside the evidenced activities with
+  every field marked `declared` and `no lineage` where the events would have spoken,
+  are counted on their own line in the scope statement without changing the evidenced
+  counts, and withhold the mark. The out-of-view sentence is reworded so that it is
+  true whether or not anything is declared.
 
 ### `qedro ropa --view deployer` — the same record, per AI use case
 
@@ -60,9 +66,8 @@ adoption of anything required beyond lineage a platform already emits.
   2 December 2027. The view does not decide whether a use case is high-risk.
 - Retention is reported as the span of run records in view, never as a retention
   policy, and a short span does not withhold the mark.
-- `--activities` reads a separate document of declared use cases that emit no
-  lineage. Each is marked `declared, no lineage` and withholds the mark. It works with
-  `--view deployer` only for now.
+- Declared activities that name a `model` are listed as AI use cases, marked
+  `declared, no lineage`, and withhold the mark.
 
 ### `qedro quality` — the assertion history
 

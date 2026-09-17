@@ -381,3 +381,34 @@ class TestTheDeployerViewOnTheDemo:
         for directory in (DEMO / "lineage", DEMO / "lineage-declared"):
             body = (directory / "dbt.ndjson").read_text(encoding="utf-8")
             assert '"key": "model_version"' in body
+
+
+class TestDeclaredActivitiesOnTheDemo:
+    """cordata-tech/qedro#6: the demo declares two uses that emit no lineage —
+    one AI assistant and one payroll SaaS — and the two views treat them
+    differently for a reason."""
+
+    def test_the_art_30_record_carries_both(self, capsys):
+        payload = record(DECLARED, "--config", CONFIG, "--activities", ACTIVITIES, capsys=capsys)
+        assert sorted(d["name"] for d in payload["declared"]) == [
+            "payroll-run",
+            "support-reply-drafts",
+        ]
+        assert payload["scope"]["declared"] == 2
+
+    def test_without_changing_what_was_looked_at(self, capsys):
+        plain = record(DECLARED, "--config", CONFIG, capsys=capsys)
+        declared = record(DECLARED, "--config", CONFIG, "--activities", ACTIVITIES, capsys=capsys)
+        assert plain["scope"]["provenance"] == declared["scope"]["provenance"]
+        assert plain["scope"]["jobs"] == declared["scope"]["jobs"]
+
+    def test_and_the_record_no_longer_claims_to_be_a_proof(self, capsys):
+        payload = record(DECLARED, "--config", CONFIG, "--activities", ACTIVITIES, capsys=capsys)
+        assert payload["complete"] is False
+        assert any("2 activities are declared" in r for r in payload["reasons"])
+
+    def test_the_deployer_view_lists_only_the_ai_use(self, capsys):
+        args = ["ropa", DECLARED, "--config", CONFIG, "--view", "deployer"]
+        assert main([*args, "--activities", ACTIVITIES, "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert [d["name"] for d in payload["declared"]] == ["support-reply-drafts"]

@@ -130,9 +130,11 @@ def _activities(sheet: Any, record: Record) -> None:
 
     for offset, activity in enumerate(record.activities):
         _row(sheet, HEADER_ROW + 1 + offset, activity)
+    for offset, entry in enumerate(record.declared, start=len(record.activities)):
+        _declared_row(sheet, HEADER_ROW + 1 + offset, entry)
 
     last_column = get_column_letter(len(COLUMNS))
-    last_row = HEADER_ROW + len(record.activities)
+    last_row = HEADER_ROW + len(record.activities) + len(record.declared)
     sheet.auto_filter.ref = f"A{HEADER_ROW}:{last_column}{last_row}"
     sheet.freeze_panes = f"A{HEADER_ROW + 1}"
 
@@ -170,6 +172,34 @@ def _row(sheet: Any, row: int, activity: Activity) -> None:
             sheet.cell(row=row, column=source_column).fill = ASSERTED_FILL
         if sourced.unrecognised:
             sheet.cell(row=row, column=value_column).fill = ASSERTED_FILL
+
+
+def _declared_row(sheet: Any, row: int, entry: Any) -> None:
+    """A declared activity. Every cell the events would have filled says
+    `no lineage` — an empty Reads cell reads as *touches no data*, and a 0 in
+    Runs as *ran zero times*, and neither is known."""
+    reads = "no lineage"
+    if entry.inputs:
+        reads = "no lineage — declared:\n" + "\n".join(entry.inputs)
+    values = (
+        entry.name,
+        entry.domain,
+        entry.purpose.value or "—",
+        _source(entry.purpose),
+        entry.legal_basis.value or "—",
+        _source(entry.legal_basis),
+        reads,
+        "no lineage",
+        "no lineage",
+        "no lineage",
+        "no lineage",
+        "\n".join(x for x in ("declared, no lineage", entry.note) if x),
+    )
+    for index, value in enumerate(values, start=1):
+        cell = sheet.cell(row=row, column=index, value=value)
+        cell.alignment = WRAP if index in WRAPPED else TOP
+    for column in (AT["Purpose source"], AT["Legal basis source"]):
+        sheet.cell(row=row, column=column).fill = ASSERTED_FILL
 
 
 def _verdict(record: Record) -> str:
