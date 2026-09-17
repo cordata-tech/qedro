@@ -680,9 +680,16 @@ def _declared_label(entry) -> str:
     return "declared, no lineage"
 
 
-#: Label column for the deployer view. Wide enough for the longest label,
-#: `inputs read · Art. 26(4)`, so the values line up.
+#: Label column for the deployer view, so the values line up.
 _LABEL = 25
+
+#: What each Art. 26 reference is, printed under the value it sits beside. A
+#: list of inputs is context for the Art. 26(4) judgement — whether input data
+#: is relevant and sufficiently representative — and not evidence that anybody
+#: made it; a span of records is context for Art. 26(6) and not a retention
+#: policy. Putting the article in the label read as more than that.
+_INPUTS_CONTEXT = "context for Art. 26(4), not a check of relevance or representativeness"
+_RECORDS_CONTEXT = "context for Art. 26(6), not a retention policy or a compliance finding"
 
 
 def _hang(label: str, value: str, *, width: int) -> list[str]:
@@ -723,10 +730,10 @@ def _(record: deployer_module.DeployerRecord, *, symbol: bool = True, width: int
             f"model {latest.model_version or 'none reported'}"
         )
         out.append(f"{indent}run {latest.run_id}")
-        out += _hang(
-            "inputs read · Art. 26(4)", ", ".join(latest.inputs) or "none reported", width=width
-        )
-        out += _hang("run records · Art. 26(6)", _retention_text(use_case), width=width)
+        out += _hang("inputs read", ", ".join(latest.inputs) or "none reported", width=width)
+        out.extend(f"{indent}{line}" for line in _wrap(_INPUTS_CONTEXT, width - len(indent)))
+        out += _hang("run records", _retention_text(use_case), width=width)
+        out.extend(f"{indent}{line}" for line in _wrap(_RECORDS_CONTEXT, width - len(indent)))
         out.append("")
 
     for entry in record.declared:
@@ -736,10 +743,10 @@ def _(record: deployer_module.DeployerRecord, *, symbol: bool = True, width: int
         out += _hang("legal basis", _field(entry.legal_basis), width=width)
         out += _hang("model", f"{entry.model or 'not declared'} (declared)", width=width)
         inputs = ", ".join(entry.inputs) or "not declared"
-        out += _hang("inputs read · Art. 26(4)", f"{inputs} (declared)", width=width)
-        out += _hang(
-            "run records · Art. 26(6)", "none — nothing emits lineage for this use", width=width
-        )
+        out += _hang("inputs read", f"{inputs} (declared)", width=width)
+        out.extend(f"{indent}{line}" for line in _wrap(_INPUTS_CONTEXT, width - len(indent)))
+        out += _hang("run records", "none — nothing emits lineage for this use", width=width)
+        out.extend(f"{indent}{line}" for line in _wrap(_RECORDS_CONTEXT, width - len(indent)))
         if entry.note:
             out += _hang("note", entry.note, width=width)
         out.append("")
@@ -769,7 +776,8 @@ def _(record: deployer_module.DeployerRecord) -> str:
         "",
         (
             "| Use case | Domain | Purpose | Legal basis | Source | Model version "
-            "| Inputs read, latest run (Art. 26(4)) | Run records in view (Art. 26(6)) |"
+            "| Inputs read, latest run (context for Art. 26(4)) "
+            "| Run records in view (context for Art. 26(6)) |"
         ),
         "|---|---|---|---|---|---|---|---|",
     ]

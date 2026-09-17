@@ -592,16 +592,16 @@ DEPLOYER_COLUMNS: tuple[tuple[str, int], ...] = (
     ("Legal basis source", 20),
     ("Model version", 34),
     ("Latest run", 38),
-    ("Inputs read, latest run (Art. 26(4))", 40),
-    ("Run records in view (Art. 26(6))", 44),
+    ("Inputs read, latest run (context for Art. 26(4))", 40),
+    ("Run records in view (context for Art. 26(6))", 44),
     ("Notes", 46),
 )
 
 DEPLOYER_AT = {h: i for i, (h, _) in enumerate(DEPLOYER_COLUMNS, start=1)}
 DEPLOYER_WRAPPED = {
     DEPLOYER_AT["Model version"],
-    DEPLOYER_AT["Inputs read, latest run (Art. 26(4))"],
-    DEPLOYER_AT["Run records in view (Art. 26(6))"],
+    DEPLOYER_AT["Inputs read, latest run (context for Art. 26(4))"],
+    DEPLOYER_AT["Run records in view (context for Art. 26(6))"],
     DEPLOYER_AT["Notes"],
 }
 

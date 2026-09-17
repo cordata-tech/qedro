@@ -54,7 +54,13 @@ CONTROLLER = "ACME Finanz GmbH"
 #: fortnight gives `dunning-weekly` two runs, one of which fails, which leaves
 #: a single assertion in the quality history — enough to be correct and not
 #: enough to look like a schedule. Three weeks gives it three.
-START = datetime(2026, 6, 1, tzinfo=UTC)
+#:
+#: Starts on Monday 6 July 2026. It started on Monday 1 June until the deployer
+#: view was reviewed for platform#48: `pipeline-runtime` emits the model version
+#: `2026-07-fraud-v3`, and a June window could only have carried that name as a
+#: model from the future. Five weeks later is still a Monday, so every weekly run,
+#: every failure day and every count is unchanged — only the dates moved.
+START = datetime(2026, 7, 6, tzinfo=UTC)
 DAYS = 21
 
 #: Real OpenLineage producer strings. The integrations are named because the
@@ -250,7 +256,7 @@ PIPELINES = (
         outputs=("fraud_curated.transactions_scored",),
         purpose="fraud-detection",
         legal_basis="legitimate-interest",
-        models=((0, "2026-05-fraud-v2"), (14, "2026-06-fraud-v3")),
+        models=((0, "2026-06-fraud-v2"), (14, "2026-07-fraud-v3")),
         sql=(
             "select t.tx_id, t.account_id, score(t.*, d.*) as fraud_score "
             "from fraud_raw.transactions t "

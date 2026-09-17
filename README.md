@@ -164,8 +164,8 @@ $ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer
   acme.fraud/transactions-scored-daily  (fraud)
     purpose                  fraud-detection
     legal basis              legitimate-interest
-    model version            2026-06-fraud-v3    7 runs, 2026-06-15 to 2026-06-21
-                             2026-05-fraud-v2   14 runs, 2026-06-01 to 2026-06-14
+    model version            2026-07-fraud-v3    7 runs, 2026-07-20 to 2026-07-26
+                             2026-06-fraud-v2   14 runs, 2026-07-06 to 2026-07-19
                              reported in the tags run facet
     ...
 ```
@@ -179,6 +179,10 @@ recorded on [#7](https://github.com/cordata-tech/qedro/issues/7).
 
 Three limits are stated in every format rather than left to the reader:
 
+- **Art. 26 is context, not a finding.** The inputs a run read are printed as context
+  for Art. 26(4), not as a check that input data is relevant and sufficiently
+  representative, which the view cannot make. The span of run records is printed as
+  context for Art. 26(6), not as a retention policy.
 - **Art. 26 is cited with its condition.** The deployer duties apply to high-risk
   systems listed in Annex III from 2 December 2027, cited from the consolidated text
   (CELEX 02024R1689-20260727). Nothing in the events says whether a system is
@@ -209,10 +213,10 @@ it gives equal weight to what was not:
 $ qedro quality demo/lineage --config demo/qedro.yaml
   warehouse/fraud_curated.transactions_scored  (fraud)
     asserted by   acme.fraud/scores-validated
-    runs          20 in window, last 2026-06-21T02:51:00+00:00
+    runs          20 in window, last 2026-07-26T02:51:00+00:00
     expectations  5 — 4 held, 1 failed
       held    expect_column_values_to_be_unique on tx_id           20 runs
-      FAILED  expect_table_row_count_to_be_between                 20 runs, 2 failed, last 2026-06-10
+      FAILED  expect_table_row_count_to_be_between                 20 runs, 2 failed, last 2026-07-15
 
   Not checked — 10 datasets carry no assertions at all
     warehouse/billing_raw.orders

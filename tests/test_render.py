@@ -434,3 +434,22 @@ class TestDeclaredActivitiesInTheArt30View:
         out = render.text(declared_art30_record())
         assert TOMBSTONE not in out
         assert "declared with no lineage" in out
+
+
+class TestArt26ReferencesAreContextNotEvidence:
+    """From the platform-side review of #7: an article number beside a list of
+    inputs read as if the view had checked representativeness. It had not."""
+
+    @pytest.mark.parametrize("fmt", [f for f in FORMATS if f != "json"])
+    def test_the_inputs_are_context_for_art_26_4(self, fmt):
+        assert "context for Art. 26(4)" in readable(deployer_record(), fmt)
+
+    @pytest.mark.parametrize("fmt", [f for f in FORMATS if f != "json"])
+    def test_the_records_are_context_for_art_26_6(self, fmt):
+        assert "context for Art. 26(6)" in readable(deployer_record(), fmt)
+
+    def test_the_text_form_says_what_they_are_not(self):
+        # Whitespace-normalised: the sentence wraps under the value it explains.
+        out = " ".join(render.text(deployer_record()).split())
+        assert "not a check of relevance or representativeness" in out
+        assert "not a retention policy or a compliance finding" in out

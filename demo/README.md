@@ -109,8 +109,10 @@ $ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer
 
 One of the six activities reported a model version: the fraud scoring job, whose runs
 carry a `model_version` entry in the standard OpenLineage `tags` run facet. The model
-changed on 15 June, so the view lists `2026-05-fraud-v2` for 14 runs and
-`2026-06-fraud-v3` for the last 7, and names the inputs the latest run read. Purpose
+changed on 20 July, so the view lists `2026-06-fraud-v2` for 14 runs and
+`2026-07-fraud-v3` for the last 7, and names the inputs the latest run read. The later
+name is the one `pipeline-runtime` emits for the same scoring step, so the demo and the
+captured runtime event in `docs/evidence/` agree about which model it is. Purpose
 and legal basis are the Art. 30 record's own entries, so in `lineage-declared` they
 come from the emitted facet and the view earns the mark, while in `lineage` they come
 from the mapping file and it does not. The `tags` facet is identical in both
@@ -138,7 +140,7 @@ $ qedro quality demo/lineage --config demo/qedro.yaml
 
 Two datasets carry assertions and ten do not. `scores-validated` checks five
 expectations on `fraud_curated.transactions_scored` every night, and the row-count
-expectation failed twice — on the 6th and the 10th, when scoring volume dropped.
+expectation failed twice — on the 11th and the 15th, when scoring volume dropped.
 `dunning-weekly` checks three expectations on `billing_curated.invoices`, on its own
 weekly cadence, and asserted twice rather than three times because one Monday's run
 failed before it got there.

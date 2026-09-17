@@ -218,7 +218,7 @@ class TestTheAssertionHistory:
         [failing] = [e for e in scored["expectations"] if not e["holds"]]
         assert failing["assertion"] == "expect_table_row_count_to_be_between"
         assert failing["failures"] == 2
-        assert failing["last_failure"].startswith("2026-06-10")
+        assert failing["last_failure"].startswith("2026-07-15")
 
     def test_a_failing_expectation_does_not_withhold_the_mark(self, capsys):
         # It is withheld here, but for the unchecked datasets — not for the
@@ -330,8 +330,20 @@ class TestTheDeployerViewOnTheDemo:
     def test_it_names_both_model_versions_with_their_runs(self, capsys):
         [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]
         versions = {m["version"]: m["runs"] for m in use_case["model_versions"]}
-        assert versions == {"2026-06-fraud-v3": 7, "2026-05-fraud-v2": 14}
-        assert use_case["latest_run"]["model_version"] == "2026-06-fraud-v3"
+        assert versions == {"2026-07-fraud-v3": 7, "2026-06-fraud-v2": 14}
+        assert use_case["latest_run"]["model_version"] == "2026-07-fraud-v3"
+
+    def test_the_later_model_carries_the_name_pipeline_runtime_emits(self, capsys):
+        # platform#48 § 13 shows the captured runtime event beside this
+        # transcript. One model name across both, and a window it can exist in.
+        import json as json_lib
+
+        captured = (DEMO.parent / "docs/evidence/fraud-event.trimmed.json").read_text()
+        emitted = json_lib.loads(captured)["run"]["facets"]["cordata_provenance"]
+        runtime_version = emitted["step_params"]["score"]["model_version"]
+        [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]
+        assert use_case["latest_run"]["model_version"] == runtime_version
+        assert use_case["model_versions"][0]["first_seen"].startswith("2026-07")
 
     def test_it_names_the_inputs_the_latest_run_read(self, capsys):
         [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]
