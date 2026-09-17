@@ -313,3 +313,23 @@ class TestTheMark:
         )
         out = deployer.build(record, [event(model="v1", facet=EVIDENCED)])
         assert any("no controller" in r for r in out.completeness.reasons)
+
+
+class TestTheReasonsReadLikeSentences:
+    """Found in the first captured transcript: "1 of 1 use case takes purpose or
+    legal basis from the mapping file ... so those entries are asserted"."""
+
+    def test_one_mapped_use_case_is_that_entry(self):
+        cfg = 'jobs:\n  "*": {purpose: p, legal_basis: consent}\n'
+        _, out = view([event(model="v1")], cfg=cfg)
+        [reason] = [r for r in out.completeness.reasons if "mapping file" in r]
+        assert "1 of 1 use case takes" in reason
+        assert "that entry is asserted" in reason
+
+    def test_two_mapped_use_cases_are_those_entries(self):
+        cfg = 'jobs:\n  "*": {purpose: p, legal_basis: consent}\n'
+        events = [event(name="a", run="r1", model="v1"), event(name="b", run="r2", model="v1")]
+        _, out = view(events, cfg=cfg)
+        [reason] = [r for r in out.completeness.reasons if "mapping file" in r]
+        assert "2 of 2 use cases take" in reason
+        assert "those entries are asserted" in reason

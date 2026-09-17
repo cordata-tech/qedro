@@ -364,7 +364,8 @@ def _completeness(
             completeness = completeness.degraded(
                 f"{n} of {total} {words.plural(total, 'use case', 'use cases')} "
                 f"{words.plural(n, 'takes', 'take')} purpose or legal basis from the mapping "
-                "file rather than an emitted facet, so those entries are asserted"
+                f"file rather than an emitted facet, so {words.plural(n, 'that entry is', 'those entries are')} "
+                "asserted"
             )
 
         missing = [u for u in use_cases if not u.activity.purpose or not u.activity.legal_basis]
