@@ -283,6 +283,17 @@ The evidence is the standard OpenLineage `dataQualityAssertions` facet, which Gr
 Expectations already emits. Nothing Cordata-specific is involved.
 
 `--domain fraud` narrows it, repeatably, and `--days 90` is shorthand for the window.
+The scope statement names the filter and says how many datasets it left out and in
+which domains, because a dataset's domain is often guessed from the job namespace, and
+a dataset left out by a wrong guess would otherwise look like one that does not exist:
+
+```console
+    filter        --domain orders left out 4 datasets: 4 in dbt (guessed from the job
+                  namespace)
+```
+
+A filter that leaves some datasets out does not withhold the mark. One that leaves out
+every dataset says so, instead of reporting that nothing was found.
 
 ## The provenance chain
 

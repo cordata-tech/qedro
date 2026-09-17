@@ -306,6 +306,29 @@ class TestQualityRendering:
     """What only this projection can get wrong."""
 
     @pytest.mark.parametrize("fmt", FORMATS)
+    def test_the_domain_filter_and_what_it_left_out_are_rendered(self, fmt):
+        # A dataset left out by a wrong domain guess is otherwise
+        # indistinguishable from one that does not exist. See #11.
+        built = quality.build(
+            [
+                quality_event(assertions=[check()]),
+                quality_event(namespace="acme.crm", job="curate", reads="wh/leads"),
+            ],
+            config=config.parse("controller: ACME GmbH\n"),
+            domains=["fraud"],
+        )
+        if fmt == "json":
+            scope = json_lib.loads(render.FORMATS[fmt](built))["scope"]
+            assert scope["domains_filter"] == ["fraud"]
+            assert scope["left_out"] == [{"domain": "crm", "datasets": 1, "guessed": True}]
+        else:
+            out = readable(built, fmt)
+            assert (
+                "--domain fraud left out 1 dataset: 1 in crm (guessed from the job namespace)"
+                in out
+            )
+
+    @pytest.mark.parametrize("fmt", FORMATS)
     def test_unchecked_datasets_are_named_not_only_counted(self, fmt):
         # The names are what somebody acts on. A count alone is a fact nobody
         # can do anything with.

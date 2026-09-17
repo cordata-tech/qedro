@@ -515,6 +515,11 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
             "unchecked": record.scope.unchecked,
             "checks": record.scope.checks,
             "failures": record.scope.failures,
+            "domains_filter": list(record.scope.domains_filter),
+            "left_out": [
+                {"domain": domain, "datasets": n, "guessed": guessed}
+                for domain, n, guessed in record.scope.left_out
+            ],
             "domains_declared": list(record.scope.domains_declared),
             "domains_seen": list(record.scope.domains_seen),
             "domains_guessed": list(record.scope.domains_guessed),

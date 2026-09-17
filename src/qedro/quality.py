@@ -30,11 +30,13 @@ with the least room to mislead.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import scope as scope_module
+from . import words
 from .config import Config, Controller
 from .events import Dataset, Event
 from .mark import Completeness
@@ -122,6 +124,13 @@ class Scope(scope_module.Scope):
     unchecked: int = 0
     checks: int = 0
     failures: int = 0
+    #: The `--domain` values asked for, and the datasets they left out as
+    #: (domain, datasets, guessed). Stated because a filter decides what the
+    #: history covers, and a dataset left out by a wrong domain guess is
+    #: otherwise indistinguishable from one that does not exist. See
+    #: cordata-tech/qedro#11.
+    domains_filter: tuple[str, ...] = ()
+    left_out: tuple[tuple[str, int, bool], ...] = ()
 
     OUT_OF_VIEW = (
         "This history covers datasets for which a job emitted data-quality assertions "
@@ -138,7 +147,27 @@ class Scope(scope_module.Scope):
         if self.checks:
             held = self.checks - self.failures
             out.append(("assertions", f"{self.checks} run, {held} held, {self.failures} failed"))
+        if self.domains_filter:
+            asked = f"--domain {', '.join(self.domains_filter)}"
+            if self.left_out:
+                total = sum(n for _, n, _ in self.left_out)
+                value = f"{asked} left out {words.count(total, 'dataset')}: {self.left_out_text()}"
+            else:
+                value = f"{asked} left nothing out"
+            out.append(("filter", value))
         return tuple(out)
+
+    def left_out_text(self) -> str:
+        """Where the left-out datasets were, and which of those domains were guessed."""
+        return ", ".join(
+            f"{n} in {domain or 'no domain'}"
+            + (" (guessed from the job namespace)" if guessed else "")
+            for domain, n, guessed in self.left_out
+        )
+
+    @property
+    def guessed_left_out(self) -> bool:
+        return any(guessed for _, _, guessed in self.left_out)
 
 
 @dataclass
@@ -199,8 +228,10 @@ def build(
     assigned = {key: produced.get(key) or consumed.get(key) or ("", True) for key in seen}
     domain_of = {key: domain for key, (domain, _) in assigned.items()}
 
+    left_out: Counter[tuple[str, bool]] = Counter()
     if domains:
         wanted = set(domains)
+        left_out.update(assigned[k] for k in seen if domain_of.get(k, "") not in wanted)
         seen = {k for k in seen if domain_of.get(k, "") in wanted}
         checks = {k: v for k, v in checks.items() if domain_of.get(k, "") in wanted}
 
@@ -220,6 +251,8 @@ def build(
         report=report,
         since=since,
         until=until,
+        domains_filter=tuple(domains),
+        left_out=tuple((d, n, g) for (d, g), n in sorted(left_out.items())),
     )
 
     return Record(
@@ -314,6 +347,8 @@ def _scope(
     report: ReadReport | None,
     since: datetime | None,
     until: datetime | None,
+    domains_filter: tuple[str, ...] = (),
+    left_out: tuple[tuple[str, int, bool], ...] = (),
 ) -> Scope:
     times = [t for d in datasets for t in (d.first_seen, d.last_seen) if t is not None]
     return Scope(
@@ -330,6 +365,8 @@ def _scope(
         unchecked=len(unchecked),
         checks=sum(d.checks for d in datasets),
         failures=sum(d.failures for d in datasets),
+        domains_filter=domains_filter,
+        left_out=left_out,
     )
 
 
@@ -358,6 +395,22 @@ def _completeness(
     if report is not None:
         for reason in report.reasons():
             completeness = completeness.degraded(reason)
+
+    if not datasets and not unchecked and scope.left_out:
+        # Found and then filtered out is not the same as not found, and saying
+        # "no datasets were found" here would describe the arguments rather
+        # than what was looked at. See #11.
+        total = sum(n for _, n, _ in scope.left_out)
+        reason = (
+            f"--domain {', '.join(scope.domains_filter)} left out all "
+            f"{words.count(total, 'dataset')} in view: {scope.left_out_text()}"
+        )
+        if scope.guessed_left_out:
+            reason += (
+                " — a domain guessed from the job namespace may be wrong, and "
+                "`domain:` on a mapping rule overrides the guess"
+            )
+        return completeness.degraded(reason)
 
     if not datasets and not unchecked:
         return completeness.degraded(

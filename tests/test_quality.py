@@ -291,3 +291,67 @@ class TestTheDomainGuessIsStated:
         assert any(
             "the domain in view named dbt was guessed" in r for r in out.completeness.reasons
         )
+
+
+class TestTheDomainFilterIsStated:
+    """`--domain` decides what the history covers, so the scope says what it left out.
+
+    Before #11 a filter that left out every dataset reported *no datasets were
+    found*, and nothing named the filter at all.
+    """
+
+    EVENTS = staticmethod(
+        lambda: [
+            event(namespace="acme.fraud", job="score", reads="wh/raw", writes="wh/scores"),
+            event(namespace="acme.crm", job="curate", reads="wh/leads", writes="wh/customers"),
+        ]
+    )
+
+    def test_the_filter_and_what_it_left_out_are_in_the_scope(self):
+        out = record(self.EVENTS(), domains=["fraud"])
+        assert out.scope.domains_filter == ("fraud",)
+        assert out.scope.left_out == (("crm", 2, True),)
+        [line] = [v for k, v in out.scope.lines() if k == "filter"]
+        assert line == (
+            "--domain fraud left out 2 datasets: 2 in crm (guessed from the job namespace)"
+        )
+
+    def test_a_filter_that_left_nothing_out_says_so(self):
+        out = record(self.EVENTS(), domains=["fraud", "crm"])
+        assert [v for k, v in out.scope.lines() if k == "filter"] == [
+            "--domain fraud, crm left nothing out"
+        ]
+
+    def test_no_filter_no_line(self):
+        assert not [k for k, _ in record(self.EVENTS()).scope.lines() if k == "filter"]
+
+    def test_a_rule_s_domain_is_not_called_a_guess(self):
+        cfg = 'jobs:\n  "acme.crm/*": {domain: sales}\n'
+        out = record(self.EVENTS(), cfg=cfg, domains=["fraud"])
+        assert out.scope.left_out == (("sales", 2, False),)
+        assert "guessed" not in out.scope.left_out_text()
+
+    def test_leaving_some_out_is_not_a_reason_to_withhold(self):
+        # Narrowing to a domain is a legitimate request. Withholding for it
+        # would make every filtered run incomplete.
+        out = record(self.EVENTS(), domains=["fraud"])
+        assert not any("--domain" in r for r in out.completeness.reasons)
+
+    def test_leaving_everything_out_is_not_called_nothing_found(self):
+        out = record(self.EVENTS(), domains=["orders"])
+        [reason] = out.completeness.reasons
+        assert "no datasets were found" not in reason
+        assert reason.startswith("--domain orders left out all 4 datasets in view:")
+        assert "`domain:` on a mapping rule overrides the guess" in reason
+
+    def test_against_real_dbt_lineage(self):
+        from pathlib import Path
+
+        from qedro.sources import read_dir
+
+        events, report = read_dir(Path("tests/fixtures/dbt-1.53"))
+        out = build(events, config=config.parse(CONTROLLER), report=report, domains=["orders"])
+        assert out.scope.left_out == (("dbt", 4, True),)
+        assert any(
+            "4 in dbt (guessed from the job namespace)" in r for r in out.completeness.reasons
+        )

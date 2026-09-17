@@ -102,7 +102,10 @@ adoption of anything required beyond lineage a platform already emits.
   summary anybody writes, and they are opposites.
 - A *failing* expectation does not withhold the mark. The mark says this account
   of what was checked is complete, not that the data is good.
-- `--domain` narrows it, repeatably; `--days` is shorthand for the window.
+- `--domain` narrows it, repeatably; `--days` is shorthand for the window. The scope
+  statement names the filter and how many datasets it left out, in which domains, and
+  whether each domain was guessed from the job namespace. A filter that leaves out
+  every dataset says so, instead of reporting that no datasets were found.
 
 ### `qedro provenance` — the chain back to a commit
 
