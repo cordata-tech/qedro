@@ -47,11 +47,14 @@ class Provenance(StrEnum):
 
     ``FACET`` is the pipeline saying what it does, in the same event that proves
     it ran. ``MAPPING`` is a human saying what a pipeline does, in a file that
-    nothing verifies. ``ABSENT`` is nobody having said.
+    nothing verifies. ``DECLARED`` is a human saying what processing with no
+    lineage at all does — weaker than a mapping, because a mapped job at least
+    emitted events proving it ran. ``ABSENT`` is nobody having said.
     """
 
     FACET = "facet"
     MAPPING = "mapping"
+    DECLARED = "declared"
     ABSENT = "absent"
 
     @property

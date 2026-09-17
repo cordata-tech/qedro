@@ -32,6 +32,7 @@ from datetime import datetime
 from functools import singledispatch
 
 from . import TOMBSTONE, words
+from . import deployer as deployer_module
 from . import provenance as provenance_module
 from . import quality as quality_module
 from .ropa import Activity, Record
@@ -43,6 +44,7 @@ from .scope import Scope
 BADGE = {
     "facet": "",
     "mapping": " (mapping)",
+    "declared": " (declared)",
     "absent": "",
 }
 
@@ -154,8 +156,8 @@ def _(record: Record) -> str:
     return "\n".join(out)
 
 
-def _scope_markdown(scope: Scope) -> list[str]:
-    out = ["", "## Scope of this record", ""]
+def _scope_markdown(scope: Scope, *, title: str = "Scope of this record") -> list[str]:
+    out = ["", f"## {title}", ""]
     out += [
         f"- **Source** — {scope.source or 'unknown'}",
         f"- **Window** — {scope.window()}",
@@ -585,6 +587,258 @@ def _(record: provenance_module.Record) -> bytes:
     from .xlsx import provenance_workbook
 
     return provenance_workbook(record)
+
+
+# --- the deployer view -------------------------------------------------------
+
+
+def _models_text(use_case) -> list[str]:
+    """One line per version, then where the versions were read from.
+
+    The source is named once rather than on every line, because it is almost
+    always the same facet — and it is named at all because a version read from
+    a documented facet is evidence only as far as that facet is.
+    """
+    width = max((len(m.version) for m in use_case.models), default=len("none reported"))
+    width = max(width, len("none reported")) if use_case.runs_without_model else width
+    out = []
+    for m in use_case.models:
+        first = m.first_seen.date() if m.first_seen else "?"
+        last = m.last_seen.date() if m.last_seen else "?"
+        out.append(f"{m.version:<{width}}  {words.count(m.runs, 'run'):>8}, {first} to {last}")
+    if use_case.runs_without_model:
+        runs = words.count(use_case.runs_without_model, "run")
+        out.append(f"{'none reported':<{width}}  {runs:>8}")
+    sources = sorted({m.reported_by for m in use_case.models})
+    out.append(f"reported in the {', '.join(sources)} run facet")
+    return out
+
+
+def _retention_text(use_case) -> str:
+    days = use_case.span_days
+    first, last = use_case.activity.first_seen, use_case.activity.last_seen
+    if days is None or first is None or last is None:
+        return "no dated run records in view"
+    enough = "at least six months" if days >= deployer_module.SIX_MONTHS else "less than six months"
+    return (
+        f"{words.count(use_case.activity.runs, 'run')}, {first.date()} to {last.date()} "
+        f"({words.count(days, 'day')}) — {enough} in view"
+    )
+
+
+def _declared_label(entry) -> str:
+    return "declared, no lineage"
+
+
+#: Label column for the deployer view. Wide enough for the longest label,
+#: `inputs read · Art. 26(4)`, so the values line up.
+_LABEL = 25
+
+
+def _hang(label: str, value: str, *, width: int) -> list[str]:
+    """A labelled value, wrapped under itself rather than under the label."""
+    indent = " " * (4 + _LABEL)
+    lines = _wrap(value, width - len(indent)) or [""]
+    return [f"    {label:<{_LABEL}}{lines[0]}"] + [f"{indent}{line}" for line in lines[1:]]
+
+
+@text.register
+def _(record: deployer_module.DeployerRecord, *, symbol: bool = True, width: int = 88) -> str:
+    controller = record.controller.name or "no controller declared"
+    out = [f"AI use cases, deployer view of the Art. 30 record — {controller}", ""]
+    # One line per sentence rather than one wrapped paragraph, so the wrap
+    # cannot strand "Art." from "26" or "2" from "December 2027".
+    for paragraph in (
+        f"{record.regulation}.",
+        deployer_module.APPLIES_FROM,
+        deployer_module.NOT_DECIDED,
+        "Purpose and legal basis are the Art. 30 record's own entries, not restated.",
+    ):
+        out.extend(f"  {line}" for line in _wrap(paragraph, width - 2))
+    out.append("")
+
+    indent = " " * (4 + _LABEL)
+    for use_case in record.use_cases:
+        a = use_case.activity
+        domain = f"  ({a.domain})" if a.domain else ""
+        out.append(f"  {a.key}{domain}")
+        out += _hang("purpose", _field(a.purpose), width=width)
+        out += _hang("legal basis", _field(a.legal_basis), width=width)
+        models = _models_text(use_case)
+        out.append(f"    {'model version':<{_LABEL}}{models[0]}")
+        out.extend(f"{indent}{line}" for line in models[1:])
+        latest = use_case.latest
+        out.append(
+            f"    {'latest run':<{_LABEL}}{_when(latest.when)}, "
+            f"model {latest.model_version or 'none reported'}"
+        )
+        out.append(f"{indent}run {latest.run_id}")
+        out += _hang(
+            "inputs read · Art. 26(4)", ", ".join(latest.inputs) or "none reported", width=width
+        )
+        out += _hang("run records · Art. 26(6)", _retention_text(use_case), width=width)
+        out.append("")
+
+    for entry in record.declared:
+        domain = f"  ({entry.domain})" if entry.domain else ""
+        out.append(f"  {entry.name}{domain}  — {_declared_label(entry)}")
+        out += _hang("purpose", _field(entry.purpose), width=width)
+        out += _hang("legal basis", _field(entry.legal_basis), width=width)
+        out += _hang("model", f"{entry.model or 'not declared'} (declared)", width=width)
+        inputs = ", ".join(entry.inputs) or "not declared"
+        out += _hang("inputs read · Art. 26(4)", f"{inputs} (declared)", width=width)
+        out += _hang(
+            "run records · Art. 26(6)", "none — nothing emits lineage for this use", width=width
+        )
+        if entry.note:
+            out += _hang("note", entry.note, width=width)
+        out.append("")
+
+    out.extend(_scope_text(record.scope, width=width, title="Scope of this view"))
+    out.append("")
+    out.extend(
+        _verdict_text(
+            record,
+            "every AI use case in view stands on emitted evidence",
+            symbol=symbol,
+            withheld="view",
+        )
+    )
+    return "\n".join(out) + "\n"
+
+
+@markdown.register
+def _(record: deployer_module.DeployerRecord) -> str:
+    controller = record.controller.name or "_no controller declared_"
+    out = [
+        f"# AI use cases, deployer view of the Art. 30 record — {controller}",
+        "",
+        f"{record.regulation}. {record.application}",
+        "",
+        "Purpose and legal basis are the Art. 30 record's own entries, not restated.",
+        "",
+        (
+            "| Use case | Domain | Purpose | Legal basis | Source | Model version "
+            "| Inputs read, latest run (Art. 26(4)) | Run records in view (Art. 26(6)) |"
+        ),
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for u in record.use_cases:
+        a = u.activity
+        versions = "; ".join(f"{m.version} ({words.count(m.runs, 'run')})" for m in u.models)
+        out.append(
+            f"| `{a.key}` | {a.domain or '—'} | {a.purpose.value or '—'} "
+            f"| {a.legal_basis.value or '—'} | {_provenance_cell(a)} | {versions} "
+            f"| {', '.join(u.latest.inputs) or '—'} | {_retention_text(u)} |"
+        )
+    for d in record.declared:
+        out.append(
+            f"| `{d.name}` | {d.domain or '—'} | {d.purpose.value or '—'} "
+            f"| {d.legal_basis.value or '—'} | **{_declared_label(d)}** "
+            f"| {d.model or '—'} (declared) | {', '.join(d.inputs) or '—'} (declared) "
+            f"| none — no lineage |"
+        )
+
+    out += _scope_markdown(record.scope, title="Scope of this view")
+    out += _verdict_markdown(
+        record, "Every AI use case in this view stands on emitted evidence.", withheld="view"
+    )
+    return "\n".join(out)
+
+
+@json.register
+def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
+    def sourced(s) -> dict[str, object]:
+        return {
+            "value": s.value,
+            "provenance": str(s.provenance),
+            "unrecognised": s.unrecognised,
+        }
+
+    payload = {
+        "view": "deployer",
+        "controller": {
+            "name": record.controller.name,
+            "contact": record.controller.contact,
+        },
+        "references": {
+            "regulation": record.regulation,
+            "celex": "02024R1689-20260727",
+            "article_26_applies_from": "2027-12-02",
+            "article_26_applies_to": "deployers of high-risk AI systems listed in Annex III",
+            "high_risk_decided": False,
+        },
+        "use_cases": [
+            {
+                "job": u.key,
+                "domain": u.activity.domain,
+                "evidence": "lineage",
+                "purpose": sourced(u.activity.purpose),
+                "legal_basis": sourced(u.activity.legal_basis),
+                "model_versions": [
+                    {
+                        "version": m.version,
+                        "reported_by": m.reported_by,
+                        "runs": m.runs,
+                        "first_seen": _when(m.first_seen),
+                        "last_seen": _when(m.last_seen),
+                    }
+                    for m in u.models
+                ],
+                "runs_without_model_version": u.runs_without_model,
+                "latest_run": {
+                    "run_id": u.latest.run_id,
+                    "when": _when(u.latest.when),
+                    "model_version": u.latest.model_version,
+                    "inputs": list(u.latest.inputs),
+                },
+                "run_records": {
+                    "runs": u.activity.runs,
+                    "first_seen": _when(u.activity.first_seen),
+                    "last_seen": _when(u.activity.last_seen),
+                    "span_days": u.span_days,
+                    # A span, never a retention policy: the events carry none.
+                    "retention_policy": None,
+                },
+            }
+            for u in record.use_cases
+        ],
+        "declared": [
+            {
+                "name": d.name,
+                "domain": d.domain,
+                "evidence": "declared",
+                "purpose": sourced(d.purpose),
+                "legal_basis": sourced(d.legal_basis),
+                "model": d.model,
+                "inputs": list(d.inputs),
+                "note": d.note,
+                "run_records": None,
+            }
+            for d in record.declared
+        ],
+        "scope": {
+            "source": record.scope.source,
+            "window": {"since": _when(record.scope.since), "until": _when(record.scope.until)},
+            "windowed": record.scope.windowed,
+            "events": record.scope.events,
+            "activities": record.scope.activities,
+            "use_cases": record.scope.use_cases,
+            "declared": record.scope.declared,
+            "runs": record.scope.runs,
+            "out_of_view": record.scope.OUT_OF_VIEW,
+        },
+        "complete": record.complete,
+        "reasons": list(record.completeness.reasons),
+    }
+    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+
+
+@xlsx.register
+def _(record: deployer_module.DeployerRecord) -> bytes:
+    from .xlsx import deployer_workbook
+
+    return deployer_workbook(record)
 
 
 #: Public name to renderer. The CLI's `--format` choices come from this, so a

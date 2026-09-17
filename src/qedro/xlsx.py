@@ -27,6 +27,7 @@ from io import BytesIO
 from typing import Any
 
 from . import TOMBSTONE, words
+from .deployer import SIX_MONTHS, DeployerRecord
 from .errors import QedroError
 from .provenance import Record as ProvenanceRecord
 from .quality import Record as QualityRecord
@@ -68,6 +69,7 @@ WRAPPED = {AT["Reads"], AT["Writes"], AT["Notes"]}
 SOURCE = {
     "facet": "emitted facet",
     "mapping": "mapping file",
+    "declared": "declared, no lineage",
     "absent": "not declared",
 }
 
@@ -541,6 +543,195 @@ def _provenance_scope(sheet: Any, record: ProvenanceRecord) -> None:
         return
 
     sheet.cell(row=row, column=2, value="This chain does not claim to be a proof.").font = STRONG
+    for reason in record.completeness.reasons:
+        row += 1
+        sheet.cell(row=row, column=2, value=reason).alignment = WRAP
+
+
+# --- the deployer view ------------------------------------------------------
+
+#: One row per use case, lineage and declared alike, so a reader filtering on
+#: `Evidence` sees both kinds side by side instead of on separate sheets.
+DEPLOYER_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("Use case", 38),
+    ("Evidence", 22),
+    ("Domain", 12),
+    ("Purpose", 24),
+    ("Purpose source", 20),
+    ("Legal basis", 22),
+    ("Legal basis source", 20),
+    ("Model version", 34),
+    ("Latest run", 38),
+    ("Inputs read, latest run (Art. 26(4))", 40),
+    ("Run records in view (Art. 26(6))", 44),
+    ("Notes", 46),
+)
+
+DEPLOYER_AT = {h: i for i, (h, _) in enumerate(DEPLOYER_COLUMNS, start=1)}
+DEPLOYER_WRAPPED = {
+    DEPLOYER_AT["Model version"],
+    DEPLOYER_AT["Inputs read, latest run (Art. 26(4))"],
+    DEPLOYER_AT["Run records in view (Art. 26(6))"],
+    DEPLOYER_AT["Notes"],
+}
+
+
+def deployer_workbook(record: DeployerRecord) -> bytes:
+    """The deployer view as ``.xlsx`` bytes.
+
+    Row 3 carries the legal reference and its condition, above the table, for
+    the same reason the verdict does: a sheet read without it would imply that
+    Art. 26 applies today.
+    """
+    book = Workbook()
+    book.properties.creator = "qedro"
+    book.properties.title = "AI use cases, deployer view of the Art. 30 record"
+    book.properties.description = record.scope.OUT_OF_VIEW
+
+    _use_cases(book.active, record)
+    _deployer_scope(book.create_sheet("Scope"), record)
+
+    buffer = BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def _use_cases(sheet: Any, record: DeployerRecord) -> None:
+    sheet.title = "AI use cases"
+
+    sheet["A1"] = "AI use cases, deployer view of the Art. 30 record"
+    sheet["A1"].font = TITLE
+    sheet["A2"] = record.controller.name or "No controller is declared"
+    sheet["A2"].font = STRONG
+    sheet["A3"] = f"{record.regulation}. {record.application}"
+    sheet["A4"] = _deployer_verdict(record)
+    sheet["A4"].font = STRONG
+
+    for index, (heading, width) in enumerate(DEPLOYER_COLUMNS, start=1):
+        cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)
+        cell.font = HEADING
+        cell.fill = HEADING_FILL
+        cell.alignment = WRAP
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
+    row = HEADER_ROW
+    for use_case in record.use_cases:
+        row += 1
+        a = use_case.activity
+        first, last, days = a.first_seen, a.last_seen, use_case.span_days
+        if days is None or first is None or last is None:
+            records = "no dated run records in view"
+        else:
+            enough = "at least six months" if days >= SIX_MONTHS else "less than six months"
+            records = (
+                f"{words.count(a.runs, 'run')}, {first.date()} to {last.date()}, "
+                f"{words.count(days, 'day')} — {enough} of records in view"
+            )
+        versions = [
+            f"{m.version} ({words.count(m.runs, 'run')}, reported by {m.reported_by})"
+            for m in use_case.models
+        ]
+        if use_case.runs_without_model:
+            versions.append(f"none reported ({words.count(use_case.runs_without_model, 'run')})")
+        latest = use_case.latest
+        values = (
+            a.key,
+            "emitted lineage",
+            a.domain,
+            a.purpose.value or "—",
+            _source(a.purpose),
+            a.legal_basis.value or "—",
+            _source(a.legal_basis),
+            "\n".join(versions),
+            f"{latest.run_id}\n{_when(latest.when)}",
+            "\n".join(latest.inputs),
+            records,
+            "\n".join(a.gaps()),
+        )
+        _deployer_row(sheet, row, values)
+        for value_column, source_column, sourced in (
+            (DEPLOYER_AT["Purpose"], DEPLOYER_AT["Purpose source"], a.purpose),
+            (DEPLOYER_AT["Legal basis"], DEPLOYER_AT["Legal basis source"], a.legal_basis),
+        ):
+            if not sourced.evidenced:
+                sheet.cell(row=row, column=source_column).fill = ASSERTED_FILL
+            if sourced.unrecognised:
+                sheet.cell(row=row, column=value_column).fill = ASSERTED_FILL
+
+    for entry in record.declared:
+        row += 1
+        values = (
+            entry.name,
+            "declared, no lineage",
+            entry.domain,
+            entry.purpose.value or "—",
+            _source(entry.purpose),
+            entry.legal_basis.value or "—",
+            _source(entry.legal_basis),
+            f"{entry.model} (declared)" if entry.model else "not declared",
+            "none",
+            "\n".join(f"{i} (declared)" for i in entry.inputs) or "not declared",
+            "none — nothing emits lineage for this use",
+            entry.note,
+        )
+        _deployer_row(sheet, row, values)
+        # The whole row is an assertion, so the cell that says so is tinted —
+        # and says so in words, which is what carries it.
+        sheet.cell(row=row, column=DEPLOYER_AT["Evidence"]).fill = ASSERTED_FILL
+
+    last_column = get_column_letter(len(DEPLOYER_COLUMNS))
+    sheet.auto_filter.ref = f"A{HEADER_ROW}:{last_column}{max(row, HEADER_ROW)}"
+    sheet.freeze_panes = f"A{HEADER_ROW + 1}"
+
+
+def _deployer_row(sheet: Any, row: int, values: tuple) -> None:
+    for index, value in enumerate(values, start=1):
+        cell = sheet.cell(row=row, column=index, value=value)
+        cell.alignment = WRAP if index in DEPLOYER_WRAPPED else TOP
+
+
+def _deployer_verdict(record: DeployerRecord) -> str:
+    if record.complete:
+        return f"Every AI use case in this view stands on emitted evidence. {TOMBSTONE}"
+    n = len(record.completeness.reasons)
+    return (
+        f"This view does not claim to be a proof — {words.count(n, 'reason')} on the Scope sheet."
+    )
+
+
+def _deployer_scope(sheet: Any, record: DeployerRecord) -> None:
+    scope = record.scope
+    sheet.column_dimensions["A"].width = 26
+    sheet.column_dimensions["B"].width = 96
+
+    sheet["A1"] = "Scope of this view"
+    sheet["A1"].font = TITLE
+
+    rows = [
+        ("Law", f"{record.regulation}. {record.application}"),
+        ("Source", scope.source or "unknown"),
+        ("Window", scope.window()),
+    ]
+    rows += list(scope.lines())
+
+    row = 3
+    for label, value in rows:
+        sheet.cell(row=row, column=1, value=label[0].upper() + label[1:]).font = STRONG
+        sheet.cell(row=row, column=2, value=value).alignment = WRAP
+        row += 1
+
+    row += 1
+    sheet.cell(row=row, column=1, value="Not covered").font = STRONG
+    sheet.cell(row=row, column=2, value=scope.OUT_OF_VIEW).alignment = WRAP
+    sheet.row_dimensions[row].height = 96
+
+    row += 2
+    sheet.cell(row=row, column=1, value="Completeness").font = STRONG
+    if record.complete:
+        sheet.cell(row=row, column=2, value=_deployer_verdict(record))
+        return
+
+    sheet.cell(row=row, column=2, value="This view does not claim to be a proof.").font = STRONG
     for reason in record.completeness.reasons:
         row += 1
         sheet.cell(row=row, column=2, value=reason).alignment = WRAP

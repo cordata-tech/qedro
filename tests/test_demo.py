@@ -305,3 +305,79 @@ class TestTheProvenanceChain:
         payload = self.chain("billing_curated.dunning_cases", "--depth", "1", capsys=capsys)
         assert payload["scope"]["ends_at_depth"] >= 1
         assert any("depth limit of 1" in r for r in payload["reasons"])
+
+
+ACTIVITIES = str(DEMO / "activities.yaml")
+
+
+class TestTheDeployerViewOnTheDemo:
+    """The transcript docs/evidence/deployer-view.md quotes, asserted.
+
+    Same source, same config, one flag — and the view names the model version,
+    the inputs, purpose and lawful basis, with the declared use case marked.
+    """
+
+    def deployer(self, source, *argv, capsys) -> dict:
+        args = ["ropa", source, "--config", CONFIG, "--view", "deployer", *argv]
+        assert main([*args, "--format", "json"]) == 0
+        return json.loads(capsys.readouterr().out)
+
+    def test_the_scoring_job_is_the_one_use_case(self, capsys):
+        payload = self.deployer(DECLARED, capsys=capsys)
+        assert [u["job"] for u in payload["use_cases"]] == ["acme.fraud/transactions-scored-daily"]
+        assert payload["scope"]["activities"] == 6
+
+    def test_it_names_both_model_versions_with_their_runs(self, capsys):
+        [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]
+        versions = {m["version"]: m["runs"] for m in use_case["model_versions"]}
+        assert versions == {"2026-06-fraud-v3": 7, "2026-05-fraud-v2": 14}
+        assert use_case["latest_run"]["model_version"] == "2026-06-fraud-v3"
+
+    def test_it_names_the_inputs_the_latest_run_read(self, capsys):
+        [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]
+        assert use_case["latest_run"]["inputs"] == [
+            "warehouse/fraud_raw.device_events",
+            "warehouse/fraud_raw.transactions",
+        ]
+
+    def test_purpose_and_basis_are_evidenced_in_the_declared_lineage(self, capsys):
+        payload = self.deployer(DECLARED, capsys=capsys)
+        [use_case] = payload["use_cases"]
+        assert use_case["purpose"] == {
+            "value": "fraud-detection",
+            "provenance": "facet",
+            "unrecognised": False,
+        }
+        assert payload["complete"] is True
+
+    def test_and_asserted_in_the_plain_lineage(self, capsys):
+        payload = self.deployer(PLAIN, capsys=capsys)
+        [use_case] = payload["use_cases"]
+        assert use_case["purpose"]["provenance"] == "mapping"
+        assert payload["complete"] is False
+
+    def test_it_agrees_with_the_art_30_record_because_it_is_the_record(self, capsys):
+        art30 = record(DECLARED, "--config", CONFIG, capsys=capsys)
+        view = self.deployer(DECLARED, capsys=capsys)
+        [activity] = [a for a in art30["activities"] if a["job"] == view["use_cases"][0]["job"]]
+        assert activity["purpose"] == view["use_cases"][0]["purpose"]
+        assert activity["legal_basis"] == view["use_cases"][0]["legal_basis"]
+
+    def test_three_weeks_of_records_is_stated_as_a_span(self, capsys):
+        [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]
+        assert use_case["run_records"]["span_days"] == 20
+        assert use_case["run_records"]["retention_policy"] is None
+
+    def test_the_declared_use_case_is_marked_and_withholds_the_mark(self, capsys):
+        payload = self.deployer(DECLARED, "--activities", ACTIVITIES, capsys=capsys)
+        [entry] = payload["declared"]
+        assert entry["name"] == "support-reply-drafts"
+        assert entry["evidence"] == "declared"
+        assert entry["legal_basis"]["provenance"] == "declared"
+        assert payload["complete"] is False
+
+    def test_the_model_version_tag_is_in_both_directories(self):
+        # The two directories must still differ only in the processing facet.
+        for directory in (DEMO / "lineage", DEMO / "lineage-declared"):
+            body = (directory / "dbt.ndjson").read_text(encoding="utf-8")
+            assert '"key": "model_version"' in body

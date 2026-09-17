@@ -1,0 +1,24 @@
+# Declared activities for the demo company: processing that emits no lineage.
+#
+# Kept apart from qedro.yaml on purpose. It is maintained by whoever knows what
+# staff actually use, not by whoever maps pipelines, and passing it is a choice:
+#
+#   qedro ropa demo/lineage-declared --config demo/qedro.yaml \
+#     --view deployer --activities demo/activities.yaml
+#
+# Every value below is an assertion. Nothing in the events shows this use
+# happened, which model it used or what was read, so the view marks it as
+# declared and does not claim to be a proof while it is present.
+
+activities:
+  support-reply-drafts:
+    purpose: customer-support
+    legal_basis: contract
+    domain: crm
+    model: the support desk vendor's built-in assistant; version not visible to ACME
+    inputs:
+      - customer emails
+      - support ticket history
+    note: >-
+      Support staff draft replies by pasting ticket text into the vendor's UI.
+      Nothing in the data platform emits lineage for this.

@@ -550,3 +550,35 @@ def _chain_estate(tmp_path, *, signed=None, ambiguous=False, sources=True):
     config = tmp_path / "qedro.yaml"
     config.write_text("controller: ACME GmbH\n", encoding="utf-8")
     return events, config
+
+
+class TestTheDeployerView:
+    """`qedro ropa --view deployer`, through the CLI people actually type."""
+
+    def test_the_view_is_reachable_in_every_format(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        for fmt in sorted(render.names()):
+            argv = ["ropa", str(events), "--config", str(config), "--view", "deployer"]
+            argv += ["--format", fmt]
+            if render.is_binary(fmt):
+                out = tmp_path / f"deployer.{fmt}"
+                assert main([*argv, "--out", str(out)]) == 0
+                assert load_workbook(out).sheetnames == ["AI use cases", "Scope"]
+            else:
+                assert main(argv) == 0
+                assert capsys.readouterr().out.strip()
+
+    def test_activities_without_the_deployer_view_is_refused_before_reading(self, tmp_path, capsys):
+        # A flag that silently did nothing in the Art. 30 view would be worse
+        # than one that refuses. The source does not even exist.
+        argv = ["ropa", str(tmp_path / "nowhere"), "--activities", "x.yaml"]
+        assert main(argv) == 2
+        assert "--view deployer only" in capsys.readouterr().err
+
+    def test_a_bad_activities_document_is_a_sentence(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        bad = tmp_path / "activities.yaml"
+        bad.write_text("activities:\n  x: {purpose: p, legalbasis: contract}\n", encoding="utf-8")
+        argv = ["ropa", str(events), "--config", str(config), "--view", "deployer"]
+        assert main([*argv, "--activities", str(bad)]) == 2
+        assert "unknown keys legalbasis" in capsys.readouterr().err

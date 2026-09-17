@@ -45,6 +45,25 @@ adoption of anything required beyond lineage a platform already emits.
   `schemas/openlineage-art30-processing-facet.json`, generated from
   `pipeline_runtime.descriptor.Processing` rather than written beside it.
 
+### `qedro ropa --view deployer` — the same record, per AI use case
+
+- For each activity whose runs reported a model version: purpose and legal basis,
+  the model versions with their run counts and dates, the inputs the latest run read,
+  and the span of run records in view.
+- Built from the Art. 30 record object, so purpose and legal basis are the record's
+  own entries with their provenance, not a second reading of the events.
+- The model version is read from the standard OpenLineage `tags` run facet (key
+  `model_version`) or from `cordata_provenance.step_params`, where `pipeline-runtime`
+  puts it.
+- Art. 26 of the AI Act is cited from the consolidated text (CELEX
+  02024R1689-20260727) with its condition: Annex III high-risk systems, from
+  2 December 2027. The view does not decide whether a use case is high-risk.
+- Retention is reported as the span of run records in view, never as a retention
+  policy, and a short span does not withhold the mark.
+- `--activities` reads a separate document of declared use cases that emit no
+  lineage. Each is marked `declared, no lineage` and withholds the mark. It works with
+  `--view deployer` only for now.
+
 ### `qedro quality` — the assertion history
 
 - What was checked about each dataset and when, from the standard OpenLineage

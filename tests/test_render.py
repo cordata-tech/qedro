@@ -22,9 +22,11 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from qedro import TOMBSTONE, config, provenance, quality, render, vocabulary
+from qedro import TOMBSTONE, config, deployer, provenance, quality, render, vocabulary
 from qedro.ropa import build
 
+from .test_deployer import a_declared
+from .test_deployer import event as deployer_event
 from .test_provenance import event as provenance_event
 from .test_quality import check
 from .test_quality import event as quality_event
@@ -57,19 +59,29 @@ def provenance_record(cfg="controller: ACME GmbH\n"):
     )
 
 
+def deployer_record(cfg="controller: ACME GmbH\n"):
+    # No processing facet, so the view always withholds the mark and the
+    # reasons property has something to check in every format.
+    events = [deployer_event(model="2026-06-fraud-v3")]
+    record = build(events, config=config.parse(cfg), vocabulary=WORDS)
+    return deployer.build(record, events, declared=a_declared())
+
+
 #: Every artefact a renderer can be handed. The properties below hold for all
 #: of them or they are not properties.
 PROJECTIONS = {
     "ropa": ropa_record,
     "quality": quality_record,
     "provenance": provenance_record,
+    "deployer": deployer_record,
 }
 CASES = [(p, f) for p in sorted(PROJECTIONS) for f in FORMATS]
 
 #: Projections that make a claim about domain coverage. `provenance` does not
 #: — a chain is about one dataset — so it carries no declared domains and can
-#: have no silent ones. Excluded from that property rather than exempted from
-#: it quietly.
+#: have no silent ones. Neither does the deployer view, which leaves domain
+#: coverage to the Art. 30 view it is built from. Excluded from that property
+#: rather than exempted from it quietly.
 DOMAIN_AWARE = ["ropa", "quality"]
 DOMAIN_CASES = [(p, f) for p in DOMAIN_AWARE for f in FORMATS]
 
@@ -335,3 +347,45 @@ class TestProvenanceRendering:
         out = render.text(provenance_record())
         assert "\n  wh/scores" in out
         assert "\n    wh/raw" in out
+
+
+class TestDeployerRendering:
+    """What only the deployer view can get wrong, asserted in every format."""
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_the_consolidated_text_is_cited(self, fmt):
+        assert "02024R1689-20260727" in readable(deployer_record(), fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_art_26_is_never_shown_without_its_date(self, fmt):
+        # The deployer duties apply to Annex III high-risk systems from
+        # 2 December 2027. A format that cited Art. 26 without that would
+        # imply they apply today.
+        out = readable(deployer_record(), fmt)
+        assert "Art. 26" in out or "article_26" in out
+        assert "2 December 2027" in out or "2027-12-02" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_declared_use_case_is_marked_as_declared(self, fmt):
+        out = readable(deployer_record(), fmt)
+        assert "support-reply-drafts" in out
+        assert "declared" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_the_model_version_is_named(self, fmt):
+        assert "2026-06-fraud-v3" in readable(deployer_record(), fmt)
+
+    def test_json_says_what_is_evidence_and_what_is_declared(self):
+        payload = json_lib.loads(render.json(deployer_record()))
+        assert payload["use_cases"][0]["evidence"] == "lineage"
+        assert payload["declared"][0]["evidence"] == "declared"
+        assert payload["declared"][0]["purpose"]["provenance"] == "declared"
+        assert payload["declared"][0]["run_records"] is None
+
+    def test_json_never_carries_a_retention_policy(self):
+        payload = json_lib.loads(render.json(deployer_record()))
+        assert payload["use_cases"][0]["run_records"]["retention_policy"] is None
+
+    def test_json_does_not_decide_the_risk_tier(self):
+        payload = json_lib.loads(render.json(deployer_record()))
+        assert payload["references"]["high_risk_decided"] is False

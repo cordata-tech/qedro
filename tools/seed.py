@@ -212,6 +212,12 @@ class Pipeline:
     #: use of the dataset, not about the dataset.
     asserts_on: str = ""
     asserts: tuple[Expectation, ...] = ()
+    #: The model a job runs, as `(first day, version)` pairs. Emitted as a
+    #: `model_version` entry in the standard OpenLineage `tags` run facet, which
+    #: any client can add — nothing here is specific to Cordata. The version
+    #: changes part-way through the window because the deployer view exists to
+    #: say which model ran on which run, and a single version never tests that.
+    models: tuple[tuple[int, str], ...] = ()
 
     @property
     def namespace(self) -> str:
@@ -220,6 +226,13 @@ class Pipeline:
     @property
     def key(self) -> str:
         return f"{self.namespace}/{self.name}"
+
+    def model_version(self, day: int) -> str:
+        current = ""
+        for first_day, version in self.models:
+            if day >= first_day:
+                current = version
+        return current
 
     def runs_on(self, day: int) -> bool:
         return (START + timedelta(days=day)).weekday() == 0 if self.weekly else True
@@ -237,6 +250,7 @@ PIPELINES = (
         outputs=("fraud_curated.transactions_scored",),
         purpose="fraud-detection",
         legal_basis="legitimate-interest",
+        models=((0, "2026-05-fraud-v2"), (14, "2026-06-fraud-v3")),
         sql=(
             "select t.tx_id, t.account_id, score(t.*, d.*) as fraud_score "
             "from fraud_raw.transactions t "
@@ -455,19 +469,27 @@ def _job(pipeline: Pipeline, producer: str, day: int, *, declared: bool) -> dict
 def _run(pipeline: Pipeline, day: int, started: datetime, producer: str) -> dict:
     run_id = str(uuid.uuid5(RUN_NAMESPACE, f"{pipeline.key}/{day}"))
     nominal = started.replace(hour=0, minute=0)
-    return {
-        "runId": run_id,
-        "facets": {
-            "nominalTime": _facet(
-                {
-                    "nominalStartTime": nominal.isoformat(),
-                    "nominalEndTime": (nominal + timedelta(days=1)).isoformat(),
-                },
-                producer,
-                f"{FACET_SPEC}/NominalTimeRunFacet.json#/$defs/NominalTimeRunFacet",
-            )
-        },
+    facets = {
+        "nominalTime": _facet(
+            {
+                "nominalStartTime": nominal.isoformat(),
+                "nominalEndTime": (nominal + timedelta(days=1)).isoformat(),
+            },
+            producer,
+            f"{FACET_SPEC}/NominalTimeRunFacet.json#/$defs/NominalTimeRunFacet",
+        )
     }
+    version = pipeline.model_version(day)
+    if version:
+        # The standard TagsRunFacet, spec 1-0-0: `key` and `value` required,
+        # `source` optional. Emitted on every event of the run, as the
+        # OpenLineage client does with its own tags.
+        facets["tags"] = _facet(
+            {"tags": [{"key": "model_version", "value": version, "source": "USER"}]},
+            producer,
+            "https://openlineage.io/spec/facets/1-0-0/TagsRunFacet.json#/$defs/TagsRunFacet",
+        )
+    return {"runId": run_id, "facets": facets}
 
 
 def _events(pipeline: Pipeline, day: int, *, declared: bool) -> list[dict]:

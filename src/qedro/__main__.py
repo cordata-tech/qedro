@@ -19,7 +19,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, provenance, quality, render, ropa, vocabulary, words
+from . import __version__, declared, deployer, provenance, quality, render, ropa, vocabulary, words
 from . import config as config_module
 from .errors import ConfigError, QedroError, UsageError
 from .mark import Completeness
@@ -121,12 +121,27 @@ def _ropa(
     vocabulary_path: str | None,
     fmt: str | None,
     out: str | None,
+    view: str = "art30",
+    activities_path: str | None = None,
 ) -> int:
     fmt = _format(fmt, out)
+    # Declared activities enter the Art. 30 view only once cordata-tech/qedro#6
+    # settles what they do to its scope counts and its out-of-view sentence.
+    # Until then a flag that silently did nothing there would be worse than one
+    # that refuses, so this is checked before anything is read.
+    if activities_path and view != "deployer":
+        raise UsageError(
+            "--activities is read by --view deployer only for now; declared activities "
+            "in the Art. 30 view are cordata-tech/qedro#6"
+        )
+
     settings = config_module.load(config_module.find(config_path))
     # `--vocabulary` beats `vocabulary:` in the config, which beats the shipped
     # default. The flag is what someone reaches for while trying one out.
     words = vocabulary.load(vocabulary_path or settings.vocabulary or None)
+    # Read before the events too: a typo in a document that asserts a lawful
+    # basis should fail in the first millisecond, not after a long read.
+    declared_uses = declared.load(activities_path, vocabulary=words) if activities_path else ()
 
     events, report = read(source, since=since, until=until)
     record = ropa.build(
@@ -144,6 +159,19 @@ def _ropa(
         for reason in report.reasons():
             print(f"  {reason}", file=sys.stderr)
         return 1
+
+    if view == "deployer":
+        # Built from the Art. 30 record rather than from the events alone, so
+        # the two views share purpose and legal basis instead of restating them.
+        view_record = deployer.build(
+            record,
+            events,
+            declared=declared_uses,
+            report=report,
+            since=since,
+            until=until,
+        )
+        return _emit(view_record, fmt=fmt, out=out, symbol=symbol)
 
     return _emit(record, fmt=fmt, out=out, symbol=symbol)
 
@@ -332,6 +360,20 @@ def main(argv: list[str] | None = None) -> int:
         help="output format. Defaults to the one implied by --out, else text",
     )
     ropa_cmd.add_argument("--out", help="write to this file instead of standard output")
+    ropa_cmd.add_argument(
+        "--view",
+        choices=("art30", "deployer"),
+        default="art30",
+        help="art30: the DSGVO Art. 30 record (default). deployer: the same record, "
+        "per AI use case, with the model version, inputs and run records a deployer "
+        "under the AI Act is asked about",
+    )
+    ropa_cmd.add_argument(
+        "--activities",
+        metavar="PATH",
+        help="a document of declared activities — processing that emits no lineage. "
+        "Marked as declared in the output. With --view deployer only, for now",
+    )
 
     quality_cmd = sub.add_parser(
         "quality",
@@ -456,6 +498,8 @@ def main(argv: list[str] | None = None) -> int:
                 vocabulary_path=args.vocabulary,
                 fmt=args.fmt,
                 out=args.out,
+                view=args.view,
+                activities_path=args.activities,
             )
     except QedroError as exc:
         # What the user wrote, handed back as a sentence rather than a

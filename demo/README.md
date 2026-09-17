@@ -13,6 +13,7 @@ stack would prove the opposite.
 ```
 demo/
   qedro.yaml           the controller, the domains, and a mapping fallback
+  activities.yaml      one declared use of an AI assistant that emits no lineage
   lineage/             the estate as it is today — no Art. 30 facet anywhere
   lineage-declared/    the same three weeks once the pipelines declare
 ```
@@ -85,6 +86,35 @@ The mapping file is still there and is now unused: a facet always beats it. Ever
 purpose and every lawful basis came from the job that ran, in the same event that
 proves it ran — so the record stands on its own evidence, and the run finishes the
 product's name.
+
+## The deployer view, on the same record
+
+```console
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer
+```
+
+One of the six activities reported a model version: the fraud scoring job, whose runs
+carry a `model_version` entry in the standard OpenLineage `tags` run facet. The model
+changed on 15 June, so the view lists `2026-05-fraud-v2` for 14 runs and
+`2026-06-fraud-v3` for the last 7, and names the inputs the latest run read. Purpose
+and legal basis are the Art. 30 record's own entries, so in `lineage-declared` they
+come from the emitted facet and the view earns the mark, while in `lineage` they come
+from the mapping file and it does not. The `tags` facet is identical in both
+directories, which still differ only in the `processing` facet.
+
+The span of run records is 20 days, and the view says so without calling it a
+retention period, since nothing in the events states one.
+
+```console
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer \
+    --activities demo/activities.yaml
+```
+
+`activities.yaml` declares one use that emits no lineage: support staff drafting
+replies by pasting ticket text into a vendor's assistant. It appears as
+`support-reply-drafts — declared, no lineage`, every field is marked as declared, and
+the view no longer claims to be a proof, because nothing in the events shows that use
+happened, which model it used, or what it read.
 
 ## The assertion history, on the same estate
 

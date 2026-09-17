@@ -123,6 +123,55 @@ what makes an organisation's own ontology possible later without a rewrite. A va
 outside a closed term is flagged and still reported; refusing to read what an emitter
 actually sent would hide the finding that matters.
 
+### The deployer view
+
+`--view deployer` shows the same record per AI use case, answering the questions the
+EU AI Act puts to a deployer — an organisation using a model somebody else built. For
+each activity whose runs reported a model version, it lists the purpose and legal
+basis, the model versions with their run counts, the inputs the latest run read, and
+the span of run records in view:
+
+```console
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer
+  acme.fraud/transactions-scored-daily  (fraud)
+    purpose                  fraud-detection
+    legal basis              legitimate-interest
+    model version            2026-06-fraud-v3    7 runs, 2026-06-15 to 2026-06-21
+                             2026-05-fraud-v2   14 runs, 2026-06-01 to 2026-06-14
+                             reported in the tags run facet
+    ...
+```
+
+The view is built from the Art. 30 record object rather than from the events a second
+time, so each use case holds the record's own purpose and legal basis, with the same
+provenance, and the two views cannot disagree about them. The events supply only what
+the Art. 30 record does not carry: the model version per run, and what each run read.
+The reasoning behind making this a view of `ropa` rather than a separate command is
+recorded on [#7](https://github.com/cordata-tech/qedro/issues/7).
+
+Three limits are stated in every format rather than left to the reader:
+
+- **Art. 26 is cited with its condition.** The deployer duties apply to high-risk
+  systems listed in Annex III from 2 December 2027, cited from the consolidated text
+  (CELEX 02024R1689-20260727). Nothing in the events says whether a system is
+  high-risk, so the view does not decide it.
+- **Retention is the span of run records in view**, not a retention policy, which the
+  events do not carry. Art. 26(6) sets a minimum period for logs, and DSGVO storage
+  limitation pulls the other way for personal data, so the view reports the span and
+  resolves neither. A short span does not withhold the mark, because withholding it
+  would imply Art. 26(6) applies today.
+- **Declared use cases are marked as declared.** Most AI use outside engineering teams
+  emits no lineage, for example staff pasting text into a vendor's assistant.
+  `--activities` reads a separate document of such uses; every entry is shown as
+  `declared, no lineage` and withholds the mark. For now the flag works with
+  `--view deployer` only, and bringing declared activities into the Art. 30 view is
+  [#6](https://github.com/cordata-tech/qedro/issues/6).
+
+The model version is read from two documented places: the standard OpenLineage `tags`
+run facet with key `model_version`, and `step_params.<step>.model_version` in the
+`cordata_provenance` facet that `pipeline-runtime` emits. An activity whose runs report
+neither is counted in the scope statement and not listed.
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and
@@ -329,6 +378,7 @@ is compiled against a fixed set of sensitivity levels.
 | [`demo/README.md`](demo/README.md) | the three tiers, walked through against a real estate |
 | [`docs/art30-facet.md`](docs/art30-facet.md) | the Art. 30 facet, for anyone who wants to emit it |
 | [`docs/compatibility.md`](docs/compatibility.md) | what this runs against, and what it does not |
+| [`docs/evidence/`](docs/evidence/) | captured runs that published writing quotes, and how each was produced |
 | [`CHANGELOG.md`](CHANGELOG.md) | what changed, in the words of somebody deciding whether to upgrade |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | scope, and the four commitments that must not erode |
 | [`SECURITY.md`](SECURITY.md) | what the tool can reach, by construction |
