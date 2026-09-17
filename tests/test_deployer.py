@@ -353,3 +353,16 @@ class TestOnlyDeclaredAIUsesAreUseCases:
         record, out = view([event(model="v1", facet=EVIDENCED)], declared_uses=a_declared(model=""))
         assert out.complete
         assert not record.complete
+
+
+def test_the_deployer_view_does_not_repeat_the_art30_line():
+    # It answers AI Act deployer questions and does not present itself as an
+    # Art. 30 record, so an Art. 30(1) coverage line would mix two regulations.
+    # The record it is built from still carries the line. See #12.
+    from qedro import render
+
+    events = [event(model="2026-06-fraud-v3")]
+    record = ropa.build(events, config=config.parse(CONTROLLER), vocabulary=WORDS)
+    view = deployer.build(record, events)
+    assert "Art. 30(1)" in render.text(record)
+    assert "Art. 30(1)" not in render.text(view)

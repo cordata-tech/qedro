@@ -129,6 +129,20 @@ class TestEveryFormatStatesItsScope:
         assert "2026-03-01" in rendered([event(facet=EVIDENCED)], fmt)
 
     @pytest.mark.parametrize("fmt", FORMATS)
+    def test_the_art30_items_not_covered_are_named_on_a_run_that_earns_the_mark(self, fmt):
+        # The case a later simplification would drop first: a complete record
+        # still has no field for (c)-(g), and must still say so. See #12.
+        built = record([event(facet=EVIDENCED)])
+        assert built.complete
+        if fmt == "json":
+            art30 = json_lib.loads(render.FORMATS[fmt](built))["scope"]["art30"]
+            assert art30 == {"covered": ["a", "b"], "not_covered": ["c", "d", "e", "f", "g"]}
+        else:
+            out = rendered([event(facet=EVIDENCED)], fmt)
+            assert "none for (c) categories of data subjects and of personal data" in out
+            assert "(g) security measures" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
     def test_a_silent_domain_is_named(self, fmt):
         out = rendered(
             [event(facet=EVIDENCED)], fmt, "controller: ACME GmbH\ndomains: [fraud, marketing]\n"

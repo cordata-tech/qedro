@@ -66,6 +66,10 @@ ran, and the tombstone is withheld for the whole record when any entry relies on
     window        2026-01-01T00:00:00+00:00 to 2026-03-01T02:15:00+00:00
     in view       47 jobs, 112 datasets, 1,284 events
     provenance    41 evidenced, 6 from the mapping file, 0 undeclared
+    Art. 30(1)    this record has fields for (a) the controller and (b) the purposes,
+                  and none for (c) categories of data subjects and of personal data, (d)
+                  categories of recipients, (e) transfers to third countries, (f) time
+                  limits for erasure and (g) security measures
     domains       fraud, billing guessed from the job namespace
     silent        marketing (in scope, no lineage)
     This record covers processing performed by pipelines that emit lineage, and any
@@ -82,6 +86,15 @@ the **pipeline-borne subset** plus whatever has been declared, never the whole t
 Printing it only when something went wrong would teach a reader that its absence means
 full coverage.
 
+The `Art. 30(1)` line is the same kind of statement about fields rather than systems.
+Art. 30(1) GDPR lists seven items a controller's record contains, and this record has
+fields for two of them. A record whose every activity is evidenced still earns `∎`,
+because the mark says the record stands on its own evidence, not that it holds every
+item, so the line is printed on every run instead. It states what the record contains
+and does not judge whether that is sufficient. The legal basis the record also prints is
+not one of the seven items. Deriving (c) to (f) from classification is planned for
+v0.3 ([#13](https://github.com/cordata-tech/qedro/issues/13)).
+
 ### Orchestration parents are not activities
 
 dbt emits a job for each invocation as well as one per model, and Airflow and Spark
@@ -92,8 +105,8 @@ it is left out of the activity list and named in the scope statement instead:
 
 ```console
     in view       5 jobs, 4 datasets, 10 events
-    parents       1 job not listed as an activity — a parent run with no datasets and
-                  no processing facet: dbt/dbt-run-dbtprobe
+    parents       1 job not listed as an activity — a parent run with no datasets and no
+                  processing facet: dbt/dbt-run-dbtprobe
 ```
 
 A parent that has datasets of its own, or declares purpose and legal basis, stays

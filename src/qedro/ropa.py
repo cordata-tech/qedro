@@ -45,6 +45,22 @@ if TYPE_CHECKING:  # declared.py builds on Provenance and Sourced from here
 #: `schemas/openlineage-art30-processing-facet.json`.
 FACET = "processing"
 
+#: The items Art. 30(1) GDPR lists for a controller's record, in its order, and
+#: the ones this record has a field for. Data rather than a sentence, so v0.3
+#: changes which letters are covered instead of rewriting the scope line. The
+#: legal basis the record also prints is not one of the seven. See
+#: cordata-tech/qedro#12.
+ART30_ITEMS: tuple[tuple[str, str], ...] = (
+    ("a", "the controller"),
+    ("b", "the purposes"),
+    ("c", "categories of data subjects and of personal data"),
+    ("d", "categories of recipients"),
+    ("e", "transfers to third countries"),
+    ("f", "time limits for erasure"),
+    ("g", "security measures"),
+)
+ART30_COVERED = frozenset({"a", "b"})
+
 
 class Provenance(StrEnum):
     """Where a field's value came from. Ordered worst-last on purpose.
@@ -198,7 +214,32 @@ class Scope(scope.Scope):
                     ),
                 )
             )
+        # On every run, including one that earns the mark: the mark says the
+        # record stands on evidence, and this says what the record has room for.
+        # A reason to withhold would fire on every run until v0.3. See #12.
+        out.append(("Art. 30(1)", art30_coverage()))
         return tuple(out)
+
+
+def art30_coverage() -> str:
+    """Which Art. 30(1) items the record has fields for, as a fact about the record.
+
+    Deliberately not a judgement of whether the record is sufficient, and not
+    advice on what a controller should add: that would be a legal
+    interpretation, which a lawyer signs off and a CLI does not.
+    """
+    covered = [f"({k}) {what}" for k, what in ART30_ITEMS if k in ART30_COVERED]
+    missing = [f"({k}) {what}" for k, what in ART30_ITEMS if k not in ART30_COVERED]
+    text = f"this record has fields for {_join(covered)}"
+    if missing:
+        text += f", and none for {_join(missing)}"
+    return text
+
+
+def _join(items: list[str]) -> str:
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
 
 
 @dataclass

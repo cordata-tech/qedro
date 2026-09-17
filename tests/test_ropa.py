@@ -496,3 +496,37 @@ class TestTheDomainGuessIsStated:
         assert out.scope.domains_silent == ("orders",)
         assert out.scope.domains_source() == "dbt guessed from the job namespace"
         assert any("guessed from the job namespace" in r for r in out.completeness.reasons)
+
+
+class TestTheArt30ItemsAreStated:
+    """Which Art. 30(1) items the record has fields for. See cordata-tech/qedro#12."""
+
+    def test_the_scope_names_covered_and_missing_items(self):
+        [line] = [v for k, v in record([event(facet=EVIDENCED)]).scope.lines() if k == "Art. 30(1)"]
+        assert line.startswith("this record has fields for (a) the controller and (b) the purposes")
+        assert "none for (c) categories of data subjects" in line
+        assert line.endswith("(f) time limits for erasure and (g) security measures")
+
+    def test_it_is_not_a_reason_to_withhold_the_mark(self):
+        # It would fire on every run until v0.3, and a condition that always
+        # fires makes the mark say nothing.
+        out = record([event(facet=EVIDENCED)])
+        assert out.complete
+        assert not any("30(1)(c)" in r or "(g)" in r for r in out.completeness.reasons)
+
+    def test_the_sentence_follows_the_data_when_an_item_is_added(self, monkeypatch):
+        from qedro import ropa
+
+        monkeypatch.setattr(ropa, "ART30_COVERED", frozenset({"a", "b", "c"}))
+        line = ropa.art30_coverage()
+        assert "(a) the controller, (b) the purposes and (c) categories" in line
+        assert line.endswith(
+            "none for (d) categories of recipients, (e) transfers to third "
+            "countries, (f) time limits for erasure and (g) security measures"
+        )
+
+    def test_with_every_item_covered_there_is_no_none_for(self, monkeypatch):
+        from qedro import ropa
+
+        monkeypatch.setattr(ropa, "ART30_COVERED", frozenset("abcdefg"))
+        assert "none for" not in ropa.art30_coverage()

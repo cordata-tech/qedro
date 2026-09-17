@@ -25,6 +25,16 @@ that ran.
 A **job** facet rather than a run facet, because purpose and legal basis are
 properties of the pipeline, not of one execution of it.
 
+**What the facet does not cover.** Art. 30(1) lists seven items for a controller's
+record: (a) the controller and its contacts, (b) the purposes, (c) the categories of
+data subjects and of personal data, (d) the categories of recipients, (e) transfers to
+third countries, (f) time limits for erasure where possible, and (g) a description of
+security measures where possible. This facet carries (b). `qedro ropa` takes (a) from
+`qedro.yaml`, and has no field for (c) to (g), which every record it produces says in
+its scope statement. The legal basis is not one of the seven items; the facet carries it
+because a purpose without the basis it relies on is of little use to the person reading
+the record.
+
 ## The fields
 
 | Field | Type | Art. |

@@ -35,7 +35,7 @@ from . import TOMBSTONE, words
 from . import deployer as deployer_module
 from . import provenance as provenance_module
 from . import quality as quality_module
-from .ropa import Activity, Record
+from .ropa import ART30_COVERED, ART30_ITEMS, Activity, Record
 from .scope import Scope
 
 #: What each provenance looks like in a rendered table. The evidenced case gets
@@ -114,11 +114,18 @@ def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record"
     """Shared by every projection. The labels come from the scope itself."""
     out = [f"  {title}", f"    source        {scope.source or 'unknown'}"]
     out.append(f"    window        {scope.window()}")
-    out.extend(f"    {label:<13} {value}" for label, value in scope.lines())
+    rows = list(scope.lines())
     if scope.domains_source():
-        out.append(f"    domains       {scope.domains_source()}")
+        rows.append(("domains", scope.domains_source()))
     if scope.domains_silent:
-        out.append(f"    silent        {', '.join(scope.domains_silent)} (in scope, no lineage)")
+        rows.append(("silent", f"{', '.join(scope.domains_silent)} (in scope, no lineage)"))
+    # Wrapped under the value, not the label: the parents and Art. 30(1) lines
+    # run far past a terminal's width otherwise.
+    indent = " " * 18
+    for label, value in rows:
+        wrapped = _wrap(value, width - len(indent)) or [""]
+        out.append(f"    {label:<13} {wrapped[0]}")
+        out.extend(f"{indent}{line}" for line in wrapped[1:])
     for line in _wrap(scope.OUT_OF_VIEW, width - 4):
         out.append(f"    {line}")
     return out
@@ -256,6 +263,11 @@ def _(record: Record, *, indent: int = 2) -> str:
             "domains_guessed": list(record.scope.domains_guessed),
             "domains_mapped": list(record.scope.domains_mapped),
             "domains_silent": list(record.scope.domains_silent),
+            # Letters rather than the sentence, so a consumer does not parse prose.
+            "art30": {
+                "covered": [k for k, _ in ART30_ITEMS if k in ART30_COVERED],
+                "not_covered": [k for k, _ in ART30_ITEMS if k not in ART30_COVERED],
+            },
             "provenance": {
                 "evidenced": record.scope.evidenced,
                 "from_mapping": record.scope.from_mapping,
