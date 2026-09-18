@@ -6,11 +6,9 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-09-18
 
-> Prepared as the first public release, and not published. Whether to publish is
-> decided at the checkpoint in the v0.2 milestone, and the date goes in when the tag
-> is pushed.
+> **First public release**, and the first version on PyPI.
 >
 > **0.1.0 was never released.** It was tagged locally on 2026-08-22 and deliberately
 > not published, so that Qedro could first be run against real work. That run found

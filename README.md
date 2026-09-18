@@ -1,5 +1,10 @@
 <img src="docs/wordmark.svg" alt="Qedro" width="220">
 
+[![CI status on main](https://github.com/cordata-tech/qedro/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cordata-tech/qedro/actions/workflows/ci.yml)
+[![qedro on PyPI](https://img.shields.io/pypi/v/qedro)](https://pypi.org/project/qedro/)
+[![Python versions qedro runs on](https://img.shields.io/pypi/pyversions/qedro)](https://pypi.org/project/qedro/)
+[![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
+
 **Turns emitted evidence into the artefacts an auditor asks for.**
 
 Point it at OpenLineage events you already emit. Get back a GDPR Art. 30 record of
@@ -19,8 +24,10 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. All three projections work, in four output formats. Interfaces
-> may still move. Watch the repository rather than depending on it.
+> Early development. All three projections work, in four output formats, and the test
+> suite runs against real lineage captured from dbt, Airflow and Spark. `0.x`
+> interfaces may still move between releases, and [`CHANGELOG.md`](CHANGELOG.md) says
+> which.
 
 ## Try it
 
