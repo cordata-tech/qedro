@@ -97,15 +97,14 @@ the pin, which is the one thing the test exists to catch.
 - **Apache-2.0.** Everything open, including the parts that would be a commercial tier
   elsewhere. `pipeline-runtime` is MIT and that inconsistency is deliberate — the
   patent grant is what DACH enterprise legal review looks for.
-- **Private until the v0.2 checkpoint.** On 2026-08-22 Laszlo decided not to publish
-  v0.1.0 and to run Qedro against real work first. On 2026-09-17 the decision point
-  became a checkpoint at the end of v0.2, with four conditions in that milestone's
-  description, and **the first public release would be 0.2.0**: `qedro.__version__` is
-  0.2.0, `CHANGELOG.md` marks it unreleased and says 0.1.0 never was, and the release
-  workflow refuses to ship an entry still marked that way. `v0.1.0` stays a local,
-  unpushed tag. **Publishing to PyPI is opening**, whatever GitHub says — the sdist
-  carries the full source and test suite — so there is no half step available here.
-  Pushing `main` to the private origin is routine; pushing a `v*` tag is publishing.
+- **Public since 2026-09-18, and on PyPI as `qedro` 0.2.0.** It was private until the
+  checkpoint at the end of v0.2: run against real work first, then open. 0.1.0 was
+  tagged on 2026-08-22 and never published, and that wait paid — the real dbt, Airflow
+  and Spark captures produced #8, #9, #12, #22 and #23 before anything shipped. The
+  commercial analysis moved to a private issue in `platform` before the repository
+  opened; what is here is engineering. **Anything committed now is public immediately**,
+  and **pushing a `v*` tag publishes to PyPI** through trusted publishing, so a tag is
+  a release decision rather than a bookkeeping step.
 - **The version has one source**, `qedro.__version__`; `pyproject.toml` reads it with
   `dynamic = ["version"]`. The release workflow fails if the tag disagrees with it, or
   if `CHANGELOG.md` has no entry for it.
