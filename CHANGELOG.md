@@ -18,8 +18,9 @@ output changes yet.
   `residency` and `retention` from the reference ontology. Every value says what it
   means, because a list of values without that is a dropdown rather than an ontology.
 - **The reader reads the standard `tags` dataset facet**, including `field`-level tags
-  that classify one column. No OpenLineage integration emits this facet as of 1.53.0,
-  so absent means nothing reported it, never that nothing applies.
+  that classify one column. The spec has carried it since `1-0-0` and the clients
+  generate it, but no OpenLineage integration emits it as of 1.53.0, so absent means
+  nothing reported it, never that nothing applies.
 
 ## 0.2.0 — 2026-09-18
 
