@@ -1,8 +1,15 @@
 # Transcript: `qedro ropa --view deployer`
 
-Captured by script from qedro 0.1.0, at commit `0fc4e54` with a clean working tree, on Python 3.12.13. The output below is what the command printed, unedited. Run the same commands from the repository root to reproduce it.
+Captured by script from qedro 0.2.0, at commit `645bd4f` with a clean working tree,
+on Python 3.12.13. The output below is what the command printed, unedited. Run the same
+commands from the repository root to reproduce it.
 
-The three runs use the same config and differ in one thing each. The first reads `demo/lineage`, where purpose and legal basis come from the mapping file. The second reads `demo/lineage-declared`, where the pipelines emit them. The third adds `demo/activities.yaml`, which declares two uses that emit no lineage: a support assistant, which names a model and is listed, and a payroll SaaS, which names none and belongs only in the Art. 30 record.
+The three runs use the same config and differ in one thing each. The first reads
+`demo/lineage`, where purpose and legal basis come from the mapping file. The second
+reads `demo/lineage-declared`, where the pipelines emit them. The third adds
+`demo/activities.yaml`, which declares two uses that emit no lineage: a support
+assistant, which names a model and is listed, and a payroll SaaS, which names none and
+belongs only in the Art. 30 record.
 
 ## 1. Lineage whose pipelines do not declare, with purpose and basis from the mapping file
 
@@ -41,7 +48,7 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
     version, and use cases declared with no lineage. An AI use that emits no lineage and
     is not declared is not represented here. The retention shown is the span of run
     records in view, not the source's retention policy, which the events do not carry.
-    Art. 26(6) sets a minimum period for logs under a deployer's control while DSGVO
+    Art. 26(6) sets a minimum period for logs under a deployer's control while GDPR
     Art. 5(1)(e) storage limitation pulls the other way for personal data, and this view
     resolves neither.
 
@@ -88,7 +95,7 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
     version, and use cases declared with no lineage. An AI use that emits no lineage and
     is not declared is not represented here. The retention shown is the span of run
     records in view, not the source's retention policy, which the events do not carry.
-    Art. 26(6) sets a minimum period for logs under a deployer's control while DSGVO
+    Art. 26(6) sets a minimum period for logs under a deployer's control while GDPR
     Art. 5(1)(e) storage limitation pulls the other way for personal data, and this view
     resolves neither.
 
@@ -149,7 +156,7 @@ AI use cases, deployer view of the Art. 30 record — ACME Finanz GmbH
     version, and use cases declared with no lineage. An AI use that emits no lineage and
     is not declared is not represented here. The retention shown is the span of run
     records in view, not the source's retention policy, which the events do not carry.
-    Art. 26(6) sets a minimum period for logs under a deployer's control while DSGVO
+    Art. 26(6) sets a minimum period for logs under a deployer's control while GDPR
     Art. 5(1)(e) storage limitation pulls the other way for personal data, and this view
     resolves neither.
 
