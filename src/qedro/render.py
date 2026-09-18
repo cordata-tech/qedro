@@ -141,7 +141,7 @@ def _verdict_text(record, earned: str, *, symbol: bool, withheld: str = "record"
 
 
 def _wrap(paragraph: str, width: int) -> list[str]:
-    words, lines, current = paragraph.split(), [], ""
+    words, lines, current = _citations(paragraph.split()), [], ""
     for word in words:
         if current and len(current) + 1 + len(word) > width:
             lines.append(current)
@@ -151,6 +151,22 @@ def _wrap(paragraph: str, width: int) -> list[str]:
     if current:
         lines.append(current)
     return lines
+
+
+def _citations(words: list[str]) -> list[str]:
+    """Keep `Art.` with the article it cites, so a wrap cannot separate them.
+
+    A line ending in `Art.` with `30(1)(a)` beginning the next reads as two
+    different things, and a reader checking a legal reference is exactly the
+    reader who cannot afford that.
+    """
+    out: list[str] = []
+    for word in words:
+        if out and out[-1].endswith("Art."):
+            out[-1] = f"{out[-1]} {word}"
+        else:
+            out.append(word)
+    return out
 
 
 @singledispatch

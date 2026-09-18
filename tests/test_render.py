@@ -304,6 +304,14 @@ class TestEveryProjectionKeepsTheProperties:
         else:
             assert "fraud guessed from the job namespace" in readable(built, fmt)
 
+    @pytest.mark.parametrize("projection", sorted(PROJECTIONS))
+    def test_a_wrapped_line_never_ends_with_art(self, projection):
+        # `Art.` at the end of one line and `5(1)(e)` at the start of the next
+        # reads as two different things, and a reader checking a legal
+        # reference is the one who cannot afford that.
+        out = render.text(PROJECTIONS[projection]("controller: ACME GmbH\ndomains: [fraud]\n"))
+        assert not [line for line in out.splitlines() if line.rstrip().endswith("Art.")]
+
     @pytest.mark.parametrize(("projection", "fmt"), CASES)
     def test_a_withheld_mark_carries_its_reasons(self, projection, fmt):
         # Every projection withholds here, for its own reasons: ropa and

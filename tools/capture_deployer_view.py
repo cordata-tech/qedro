@@ -105,6 +105,7 @@ def main() -> int:
             return 1
         parts.append(
             f"## {number}. {title}\n\n```console\n$ qedro {' '.join(argv)}\n{result.stdout}```\n"
+            f"\nExit status {result.returncode}.\n"
         )
 
     captured = "\n".join(parts)
