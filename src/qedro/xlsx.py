@@ -59,6 +59,8 @@ COLUMNS: tuple[tuple[str, int], ...] = (
     ("Subjects", 18),
     ("Residency", 14),
     ("Retention", 14),
+    ("Recipients", 30),
+    ("Security measures", 30),
     ("Unclassified", 30),
     ("Reads", 34),
     ("Writes", 34),
@@ -69,7 +71,15 @@ COLUMNS: tuple[tuple[str, int], ...] = (
 )
 
 AT = {heading: index for index, (heading, _) in enumerate(COLUMNS, start=1)}
-WRAPPED = {AT["Reads"], AT["Writes"], AT["Notes"], AT["Categories"], AT["Unclassified"]}
+WRAPPED = {
+    AT["Reads"],
+    AT["Writes"],
+    AT["Notes"],
+    AT["Categories"],
+    AT["Unclassified"],
+    AT["Recipients"],
+    AT["Security measures"],
+}
 
 #: How a provenance reads to somebody who did not write this tool.
 SOURCE = {
@@ -208,6 +218,10 @@ def _classification(activity: Activity) -> tuple[Any, ...]:
     for _, key in CLASSIFICATION_COLUMNS:
         values = [c for c in activity.classification if c.key == key]
         cells.append("\n".join(c.value for c in values) if values else "—")
+    # Art. 30(1)(d) and (g), always marked: nothing emits either, so an
+    # unmarked value here would read like the evidenced columns beside it.
+    for asserted in (activity.recipients, activity.security_measures):
+        cells.append("\n".join(asserted) + "\n(declared)" if asserted else "—")
     if activity.unclassified:
         total = len(set(activity.inputs) | set(activity.outputs))
         cells.append(
@@ -236,6 +250,10 @@ def _declared_row(sheet: Any, row: int, entry: Any) -> None:
         # either. `no lineage` rather than `—`, which would read as *nothing
         # applies* instead of *nothing could have said*.
         *("no lineage",) * len(CLASSIFICATION_COLUMNS),
+        "\n".join(entry.recipients) + "\n(declared)" if entry.recipients else "no lineage",
+        "\n".join(entry.security_measures) + "\n(declared)"
+        if entry.security_measures
+        else "no lineage",
         "no lineage",
         reads,
         "no lineage",

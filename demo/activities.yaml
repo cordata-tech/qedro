@@ -34,6 +34,12 @@ activities:
     inputs:
       - employee master data
       - working time records
+    recipients:
+      - the payroll provider
+      - the pension scheme
+      - the tax office, as the law requires
+    security_measures:
+      - the vendor's SaaS, access limited to the HR team
     note: >-
       Monthly payroll in the HR vendor's SaaS. It processes personal data and
       belongs in the Art. 30 record, and it uses no AI model.

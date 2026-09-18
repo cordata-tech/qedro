@@ -59,7 +59,12 @@ ART30_ITEMS: tuple[tuple[str, str], ...] = (
     ("f", "time limits for erasure"),
     ("g", "security measures"),
 )
-ART30_COVERED = frozenset({"a", "b", "c", "e", "f"})
+ART30_COVERED = frozenset({"a", "b", "c", "d", "e", "f", "g"})
+
+#: Items no lineage carries, so the record can only ever hold what somebody
+#: asserted about them. Named in the coverage line, because a field that can
+#: never be evidenced is a different offer from one that can.
+ART30_ASSERTED_ONLY = frozenset({"d", "g"})
 
 #: Tag keys the record reads from the standard `tags` dataset facet, and which
 #: Art. 30(1) item each answers. Keys a vocabulary may define that Art. 30 does
@@ -157,6 +162,10 @@ class Activity:
     #: different answers, and only the first is what an absent facet means.
     classification: tuple[Classification, ...] = ()
     unclassified: tuple[str, ...] = ()
+    #: Art. 30(1)(d) and (g), from a mapping rule. Never evidenced, because
+    #: nothing emits either.
+    recipients: tuple[str, ...] = ()
+    security_measures: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -324,12 +333,23 @@ def art30_coverage() -> str:
     Deliberately not a judgement of whether the record is sufficient, and not
     advice on what a controller should add: that would be a legal
     interpretation, which a lawyer signs off and a CLI does not.
+
+    *Has a field* is not *has an answer*, and for two items it is not even *can
+    be evidenced*: nothing emits recipients or security measures, so those can
+    only carry what somebody asserted. The line says so rather than letting a
+    reader assume the whole record stands on the same footing.
     """
     covered = [f"({k}) {what}" for k, what in ART30_ITEMS if k in ART30_COVERED]
     missing = [f"({k}) {what}" for k, what in ART30_ITEMS if k not in ART30_COVERED]
+    asserted = [f"({k})" for k, _ in ART30_ITEMS if k in ART30_ASSERTED_ONLY]
     text = f"this record has fields for {_join(covered)}"
     if missing:
         text += f", and none for {_join(missing)}"
+    if asserted:
+        text += (
+            f" — {_join(asserted)} can only be declared, because no lineage carries "
+            "either and nothing here evidences them"
+        )
     return text
 
 
@@ -445,6 +465,8 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
         name=first.job.name,
         classification=classification,
         unclassified=unclassified,
+        recipients=rule.recipients if rule else (),
+        security_measures=rule.security_measures if rule else (),
         domain=config.domain_for(first.job.namespace, rule),
         domain_guessed=config.domain_guessed(rule),
         purpose=purpose,

@@ -31,6 +31,16 @@ jobs:
   "acme.fraud/transactions-*":
     purpose: fraud-detection
     legal_basis: legitimate-interest
+    # Art. 30(1)(d) and (g). No lineage carries either — a recipient is who
+    # receives the data outside the platform, and a security measure is an
+    # arrangement rather than an event — so the record marks both as declared
+    # wherever it prints them, and neither can ever be evidenced.
+    recipients:
+      - the group's fraud bureau
+      - the card scheme, for disputed transactions
+    security_measures:
+      - pseudonymised card numbers at rest
+      - access limited to the fraud domain's engineers
 
   "acme.fraud/*-validated":
     purpose: data-quality-validation

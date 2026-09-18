@@ -17,6 +17,11 @@ output changes yet.
   Art. 9(1) list, for the same reason `legal_basis` is closed on Art. 6(1);
   `residency` and `retention` from the reference ontology. Every value says what it
   means, because a list of values without that is a dropdown rather than an ontology.
+- **The two items nothing emits can be asserted**: Art. 30(1)(d) categories of
+  recipients and (g) security measures, in a `jobs:` rule or in the declared-activities
+  document. Every format marks them as declared, and asserting them does not withhold
+  the mark — there is no evidenced case to fall short of. The Art. 30(1) line now says
+  the record has a field for all seven items, and which two can only ever be declared.
 - **The Art. 30 record reports what the data is**, from the standard `tags` dataset
   facet: categories of personal data and of data subjects, residency and retention,
   each with the datasets that carried it and which side they were on. Nothing is

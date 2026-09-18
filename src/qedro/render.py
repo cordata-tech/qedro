@@ -35,7 +35,7 @@ from . import TOMBSTONE, words
 from . import deployer as deployer_module
 from . import provenance as provenance_module
 from . import quality as quality_module
-from .ropa import ART30_COVERED, ART30_ITEMS, Activity, Record
+from .ropa import ART30_ASSERTED_ONLY, ART30_COVERED, ART30_ITEMS, Activity, Record
 from .scope import Scope
 
 #: What each provenance looks like in a rendered table. The evidenced case gets
@@ -77,14 +77,16 @@ def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
 
     for activity in record.activities:
         out.append(f"  {activity.key}")
-        out.append(f"    purpose       {_field(activity.purpose)}")
-        out.append(f"    legal basis   {_field(activity.legal_basis)}")
-        out.extend(_classification_text(activity))
+        out += _detail("purpose", _field(activity.purpose), width=width)
+        out += _detail("legal basis", _field(activity.legal_basis), width=width)
+        out.extend(_classification_text(activity, width=width))
         if activity.inputs:
-            out.append(f"    reads         {', '.join(activity.inputs)}")
+            out += _detail("reads", ", ".join(activity.inputs), width=width)
         if activity.outputs:
-            out.append(f"    writes        {', '.join(activity.outputs)}")
-        out.append(f"    runs          {activity.runs} in window, last {_when(activity.last_seen)}")
+            out += _detail("writes", ", ".join(activity.outputs), width=width)
+        out += _detail(
+            "runs", f"{activity.runs} in window, last {_when(activity.last_seen)}", width=width
+        )
         out.append("")
 
     for entry in record.declared:
@@ -100,6 +102,12 @@ def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
         out.append(f"    reads         {reads}")
         out.append("    writes        no lineage")
         out.append("    runs          no lineage")
+        if entry.recipients:
+            out += _detail("recipients", f"{'; '.join(entry.recipients)} (declared)", width=width)
+        if entry.security_measures:
+            out += _detail(
+                "security", f"{'; '.join(entry.security_measures)} (declared)", width=width
+            )
         if entry.note:
             out.append(f"    note          {entry.note}")
         out.append("")
@@ -123,9 +131,9 @@ CLASSIFICATION_LABELS = (
 )
 
 
-def _classification_text(activity: Activity) -> list[str]:
+def _classification_text(activity: Activity, *, width: int) -> list[str]:
     """The classification lines for one activity, and what was not classified."""
-    out = []
+    out: list[str] = []
     for key, label in CLASSIFICATION_LABELS:
         found = [c for c in activity.classification if c.key == key]
         if not found:
@@ -133,16 +141,45 @@ def _classification_text(activity: Activity) -> list[str]:
         values = ", ".join(
             f"{c.value}{' ⚠ not in vocabulary' if c.unrecognised else ''}" for c in found
         )
-        out.append(f"    {label:<13} {values}")
+        out += _detail(label, values, width=width)
+    for values, label in (
+        (activity.recipients, "recipients"),
+        (activity.security_measures, "security"),
+    ):
+        if values:
+            # Semicolons, because a recipient is a phrase and phrases contain
+            # commas: *the card scheme, for disputed transactions* is one
+            # recipient, and a comma-joined list would read as two.
+            #
+            # `(declared)` on every one: nothing emits these, so an unmarked
+            # value would read as evidence the record does not have.
+            out += _detail(label, f"{'; '.join(values)} (declared)", width=width)
     if activity.unclassified:
         total = len(set(activity.inputs) | set(activity.outputs))
         n = len(activity.unclassified)
-        out.append(
-            f"    {'unclassified':<13} {n} of {total} "
-            f"{words.plural(total, 'dataset carries', 'datasets carry')} no classification: "
-            f"{', '.join(activity.unclassified)}"
+        out += _detail(
+            "unclassified",
+            f"{n} of {total} {words.plural(total, 'dataset carries', 'datasets carry')} "
+            f"no classification: {', '.join(activity.unclassified)}",
+            width=width,
         )
     return out
+
+
+#: Where a label ends and its value begins, in the activity block and the scope
+#: statement alike.
+LABEL = 13
+INDENT = " " * (4 + LABEL + 1)
+
+
+def _detail(label: str, value: str, *, width: int) -> list[str]:
+    """One labelled line of an activity, wrapped under the value.
+
+    A dataset list or a set of recipients runs past a terminal otherwise, and
+    the reader who most needs these lines is reading them in a terminal.
+    """
+    wrapped = _wrap(value, width - len(INDENT)) or [""]
+    return [f"    {label:<{LABEL}} {wrapped[0]}"] + [f"{INDENT}{line}" for line in wrapped[1:]]
 
 
 def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record") -> list[str]:
@@ -156,11 +193,8 @@ def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record"
         rows.append(("silent", f"{', '.join(scope.domains_silent)} (in scope, no lineage)"))
     # Wrapped under the value, not the label: the parents and Art. 30(1) lines
     # run far past a terminal's width otherwise.
-    indent = " " * 18
     for label, value in rows:
-        wrapped = _wrap(value, width - len(indent)) or [""]
-        out.append(f"    {label:<13} {wrapped[0]}")
-        out.extend(f"{indent}{line}" for line in wrapped[1:])
+        out += _detail(label, value, width=width)
     for line in _wrap(scope.OUT_OF_VIEW, width - 4):
         out.append(f"    {line}")
     return out
@@ -218,18 +252,25 @@ def _(record: Record) -> str:
         out += [f"**Contact:** {record.controller.contact}", ""]
 
     out += [
-        "| Activity | Purpose | Legal basis | Source | Reads | Writes | Runs |",
-        "|---|---|---|---|---|---|---|",
+        (
+            "| Activity | Purpose | Legal basis | Source | Recipients | Security measures "
+            "| Reads | Writes | Runs |"
+        ),
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for a in record.activities:
         out.append(
             f"| `{a.key}` | {a.purpose.value or '—'} | {a.legal_basis.value or '—'} "
-            f"| {_provenance_cell(a)} | {len(a.inputs)} | {len(a.outputs)} | {a.runs} |"
+            f"| {_provenance_cell(a)} | {_asserted(a.recipients)} "
+            f"| {_asserted(a.security_measures)} "
+            f"| {len(a.inputs)} | {len(a.outputs)} | {a.runs} |"
         )
     for d in record.declared:
         out.append(
             f"| `{d.name}` | {d.purpose.value or '—'} | {d.legal_basis.value or '—'} "
-            "| **declared, no lineage** | no lineage | no lineage | no lineage |"
+            f"| **declared, no lineage** | {_asserted(d.recipients)} "
+            f"| {_asserted(d.security_measures)} "
+            "| no lineage | no lineage | no lineage |"
         )
 
     out += _classification_markdown(record)
@@ -295,6 +336,16 @@ def _verdict_markdown(record, earned: str, *, withheld: str = "record") -> list[
     )
 
 
+def _asserted(values: tuple[str, ...]) -> str:
+    """Art. 30(1)(d) or (g) in a table cell, always marked as an assertion.
+
+    Nothing emits either, so there is no evidenced case to distinguish this
+    from — which is exactly why it has to say so rather than look like the
+    columns beside it.
+    """
+    return f"{', '.join(values)} _(declared)_" if values else "—"
+
+
 def _provenance_cell(activity: Activity) -> str:
     sources = {str(activity.purpose.provenance), str(activity.legal_basis.provenance)}
     if sources == {"facet"}:
@@ -356,6 +407,9 @@ def _(record: Record, *, indent: int = 2) -> str:
                 # many there are. A field with no values is still a field.
                 "reported": dict(sorted(record.scope.reported.items())),
                 "activities": record.scope.activities,
+                # Items nothing emits, so a value for one of these is always an
+                # assertion. A consumer weighing the record should know which.
+                "asserted_only": sorted(ART30_ASSERTED_ONLY),
             },
             "unclassified_datasets": list(record.scope.unclassified),
             "provenance": {
@@ -390,6 +444,11 @@ def _declared_json(entry) -> dict[str, object]:
         },
         "model": entry.model,
         "inputs_declared": list(entry.inputs),
+        "recipients": {"values": list(entry.recipients), "provenance": "declared"},
+        "security_measures": {
+            "values": list(entry.security_measures),
+            "provenance": "declared",
+        },
         "note": entry.note,
         "reads": None,
         "writes": None,
@@ -420,6 +479,13 @@ def _activity_json(activity: Activity) -> dict[str, object]:
         # can use. Not the same as *no personal data*, and a consumer that read
         # an empty list as that would be inventing an answer.
         "unclassified": list(activity.unclassified),
+        # Art. 30(1)(d) and (g). `provenance` is stated rather than implied,
+        # because these can only ever be asserted.
+        "recipients": {"values": list(activity.recipients), "provenance": "mapping"},
+        "security_measures": {
+            "values": list(activity.security_measures),
+            "provenance": "mapping",
+        },
         "purpose": {
             "value": activity.purpose.value,
             "provenance": str(activity.purpose.provenance),

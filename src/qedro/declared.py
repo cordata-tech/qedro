@@ -33,7 +33,18 @@ from .vocabulary import Vocabulary
 
 #: What an entry may say. An unknown key is a typo until proven otherwise, and a
 #: typo in a document that asserts a lawful basis is the kind that matters.
-KEYS = frozenset({"purpose", "legal_basis", "domain", "model", "inputs", "note"})
+KEYS = frozenset(
+    {
+        "purpose",
+        "legal_basis",
+        "domain",
+        "model",
+        "inputs",
+        "note",
+        "recipients",
+        "security_measures",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -47,6 +58,10 @@ class Declared:
     model: str = ""
     inputs: tuple[str, ...] = ()
     note: str = ""
+    #: Art. 30(1)(d) and (g), which no lineage carries. Asserted here as
+    #: everything about a declared activity is.
+    recipients: tuple[str, ...] = ()
+    security_measures: tuple[str, ...] = ()
 
 
 def load(path: str | Path, *, vocabulary: Vocabulary) -> tuple[Declared, ...]:
@@ -84,6 +99,15 @@ def parse(
                 model=_text(spec.get("model")),
                 inputs=_inputs(spec.get("inputs"), name=str(name), origin=origin),
                 note=_text(spec.get("note")),
+                recipients=_inputs(
+                    spec.get("recipients"), name=str(name), origin=origin, key="recipients"
+                ),
+                security_measures=_inputs(
+                    spec.get("security_measures"),
+                    name=str(name),
+                    origin=origin,
+                    key="security_measures",
+                ),
             )
         )
     return tuple(sorted(out, key=lambda d: d.name))
@@ -96,14 +120,14 @@ def _sourced(key: str, spec: Mapping[str, Any], vocabulary: Vocabulary) -> Sourc
     return Sourced(value, Provenance.DECLARED, vocabulary.unrecognised(key, value))
 
 
-def _inputs(raw: Any, *, name: str, origin: str) -> tuple[str, ...]:
+def _inputs(raw: Any, *, name: str, origin: str, key: str = "inputs") -> tuple[str, ...]:
     if raw is None:
         return ()
     if isinstance(raw, str):
         return (raw.strip(),) if raw.strip() else ()
     if isinstance(raw, list) and all(isinstance(item, str) for item in raw):
         return tuple(item.strip() for item in raw if item.strip())
-    raise ConfigError(f"`inputs` for activity {name!r} in {origin} should be a list of strings")
+    raise ConfigError(f"`{key}` for activity {name!r} in {origin} should be a list of strings")
 
 
 def _text(value: Any) -> str:

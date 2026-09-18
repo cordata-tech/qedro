@@ -366,3 +366,38 @@ def test_the_deployer_view_does_not_repeat_the_art30_line():
     view = deployer.build(record, events)
     assert "Art. 30(1)" in render.text(record)
     assert "Art. 30(1)" not in render.text(view)
+
+
+class TestDeclaredRecipientsAndSecurityMeasures:
+    """A declared activity can assert Art. 30(1)(d) and (g) too. See #13."""
+
+    def test_both_are_read_from_the_document(self):
+        [entry] = declared.parse(
+            {
+                "activities": {
+                    "payroll": {
+                        "purpose": "payroll",
+                        "recipients": ["the payroll provider", "the pension scheme"],
+                        "security_measures": "access limited to the HR team",
+                    }
+                }
+            },
+            origin="t",
+            vocabulary=WORDS,
+        )
+        assert entry.recipients == ("the payroll provider", "the pension scheme")
+        assert entry.security_measures == ("access limited to the HR team",)
+
+    def test_an_activity_that_declares_neither_has_neither(self):
+        [entry] = declared.parse(
+            {"activities": {"payroll": {"purpose": "payroll"}}}, origin="t", vocabulary=WORDS
+        )
+        assert (entry.recipients, entry.security_measures) == ((), ())
+
+    def test_a_mapping_is_a_sentence_naming_the_key(self):
+        with pytest.raises(ConfigError, match="security_measures"):
+            declared.parse(
+                {"activities": {"payroll": {"security_measures": {"a": "b"}}}},
+                origin="t",
+                vocabulary=WORDS,
+            )

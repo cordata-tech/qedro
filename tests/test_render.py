@@ -136,11 +136,34 @@ class TestEveryFormatStatesItsScope:
         assert built.complete
         if fmt == "json":
             art30 = json_lib.loads(render.FORMATS[fmt](built))["scope"]["art30"]
-            assert art30["covered"] == ["a", "b", "c", "e", "f"]
-            assert art30["not_covered"] == ["d", "g"]
+            assert art30["covered"] == ["a", "b", "c", "d", "e", "f", "g"]
+            assert art30["not_covered"] == []
         else:
             out = rendered([event(facet=EVIDENCED)], fmt)
-            assert "none for (d) categories of recipients and (g) security measures" in out
+            assert "(d) categories of recipients" in out
+            assert "(d) and (g) can only be declared" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_recipients_and_security_measures_are_marked_as_asserted(self, fmt):
+        # Nothing emits either, so an unmarked value would read as evidence the
+        # record does not have. See #13, slice 4.
+        cfg = (
+            "controller: ACME GmbH\n"
+            'jobs:\n  "*":\n'
+            "    recipients: the group's fraud bureau\n"
+            "    security_measures: pseudonymisation at rest\n"
+        )
+        built = record([event(facet=EVIDENCED)], cfg)
+        if fmt == "json":
+            [activity] = json_lib.loads(render.FORMATS[fmt](built))["activities"]
+            assert activity["recipients"] == {
+                "values": ["the group's fraud bureau"],
+                "provenance": "mapping",
+            }
+        else:
+            out = readable(built, fmt)
+            assert "the group's fraud bureau" in out
+            assert "declared" in out
 
     @pytest.mark.parametrize("fmt", FORMATS)
     def test_classification_and_what_was_not_classified_survive(self, fmt):

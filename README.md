@@ -180,6 +180,32 @@ that is always withheld says nothing.
 since `1-0-0` and both clients generate it. `pipeline-runtime` emits it from the LF-tags
 it resolves, and anything else that can attach a dataset facet can too.
 
+### What only a person can say
+
+Two of the seven Art. 30(1) items are not in any event and never will be: (d) the
+categories of recipients, and (g) the security measures. A recipient is who receives
+data outside the platform, and a security measure is an arrangement rather than
+something that runs. Both can be asserted, in the mapping file for a job that emits
+lineage or in the declared-activities document for one that does not:
+
+```yaml
+jobs:
+  "acme.fraud/transactions-*":
+    recipients:
+      - the group's fraud bureau
+      - the card scheme, for disputed transactions
+    security_measures:
+      - pseudonymised card numbers at rest
+```
+
+Every format marks them `declared`, because there is no evidenced case to tell them
+apart from and an unmarked value would read like the columns beside it. **Asserting
+them does not withhold the mark**: there is no evidence to fall short of, and
+withholding would punish a controller for filling the field in.
+
+The scope statement says the same thing once, for the record as a whole: it has a field
+for all seven items, and *(d) and (g) can only be declared*.
+
 ### Declared activities
 
 Processing that emits no lineage — a payroll SaaS, staff using a vendor's assistant,

@@ -538,12 +538,16 @@ class TestTheArt30ItemsAreStated:
     """Which Art. 30(1) items the record has fields for. See cordata-tech/qedro#12."""
 
     def test_the_scope_names_covered_and_missing_items(self):
-        # Since #13 the record has fields for five of the seven items; (d)
-        # recipients and (g) security measures are not in any event.
+        # Since #13 the record has a field for all seven, and says which two can
+        # only ever be asserted: nothing emits recipients or security measures.
         [line] = [v for k, v in record([event(facet=EVIDENCED)]).scope.lines() if k == "Art. 30(1)"]
         assert line.startswith("this record has fields for (a) the controller, (b) the purposes")
         assert "(c) categories of data subjects and of personal data" in line
-        assert line.endswith("none for (d) categories of recipients and (g) security measures")
+        assert "none for" not in line
+        assert line.endswith(
+            "(d) and (g) can only be declared, because no lineage carries either "
+            "and nothing here evidences them"
+        )
 
     def test_it_is_not_a_reason_to_withhold_the_mark(self):
         # It would fire on every run until v0.3, and a condition that always
@@ -556,6 +560,7 @@ class TestTheArt30ItemsAreStated:
         from qedro import ropa
 
         monkeypatch.setattr(ropa, "ART30_COVERED", frozenset({"a", "b", "c"}))
+        monkeypatch.setattr(ropa, "ART30_ASSERTED_ONLY", frozenset())
         line = ropa.art30_coverage()
         assert "(a) the controller, (b) the purposes and (c) categories" in line
         assert line.endswith(
@@ -568,6 +573,14 @@ class TestTheArt30ItemsAreStated:
 
         monkeypatch.setattr(ropa, "ART30_COVERED", frozenset("abcdefg"))
         assert "none for" not in ropa.art30_coverage()
+
+    def test_the_items_nothing_can_evidence_are_named_as_such(self):
+        # A field that can only ever hold an assertion is a different offer from
+        # one that can hold evidence, and the line says which two those are.
+        from qedro import ropa
+
+        assert ropa.ART30_ASSERTED_ONLY == frozenset({"d", "g"})
+        assert "(d) and (g) can only be declared" in ropa.art30_coverage()
 
 
 def reading(name, reads=("wh/raw.customers",), writes=(), run="r1"):
@@ -779,3 +792,49 @@ class TestClassificationFromTheTagsFacet:
         lines = dict(out.scope.lines())
         assert "1 of 2 activities" in lines["classification"]
         assert lines["unclassified"].startswith("1 of 2 datasets carry no classification")
+
+
+class TestTheItemsNothingCanEvidence:
+    """Art. 30(1)(d) recipients and (g) security measures. See #13, slice 4.
+
+    A recipient is who receives data outside the platform and a security
+    measure is an arrangement rather than an event, so no lineage carries
+    either and the record can only hold what somebody asserted.
+    """
+
+    CFG = (
+        'jobs:\n  "acme.fraud/*":\n'
+        "    recipients: [the group's fraud bureau, a card scheme]\n"
+        "    security_measures: pseudonymisation at rest\n"
+    )
+
+    def test_a_mapping_rule_supplies_both(self):
+        [activity] = record([event(facet=EVIDENCED)], cfg=self.CFG).activities
+        assert activity.recipients == ("the group's fraud bureau", "a card scheme")
+        assert activity.security_measures == ("pseudonymisation at rest",)
+
+    def test_one_string_is_a_list_of_one(self):
+        [activity] = record([event(facet=EVIDENCED)], cfg=self.CFG).activities
+        assert activity.security_measures == ("pseudonymisation at rest",)
+
+    def test_asserting_them_does_not_withhold_the_mark(self):
+        # There is no evidenced alternative to fall short of. Withholding here
+        # would punish a controller for filling the field in.
+        out = record([event(facet=EVIDENCED)], cfg=self.CFG)
+        assert out.complete
+
+    def test_an_activity_no_rule_matches_has_neither(self):
+        [activity] = record([event(facet=EVIDENCED)]).activities
+        assert (activity.recipients, activity.security_measures) == ((), ())
+
+    def test_the_coverage_line_says_they_can_only_be_declared(self):
+        [line] = [v for k, v in record([event(facet=EVIDENCED)]).scope.lines() if k == "Art. 30(1)"]
+        assert "(d) and (g) can only be declared" in line
+
+    def test_a_mapping_of_recipients_is_a_sentence_not_a_silent_drop(self):
+        import pytest
+
+        from qedro.errors import ConfigError
+
+        with pytest.raises(ConfigError, match="recipients"):
+            record([event()], cfg='jobs:\n  "*":\n    recipients: {a: b}\n')

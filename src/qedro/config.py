@@ -53,7 +53,7 @@ STEM = "qedro"
 
 #: What a `jobs:` entry may declare. Anything else is a typo the user wants to
 #: hear about rather than a silently ignored key.
-RULE_KEYS = frozenset({"purpose", "legal_basis", "domain"})
+RULE_KEYS = frozenset({"purpose", "legal_basis", "domain", "recipients", "security_measures"})
 
 
 @dataclass(frozen=True)
@@ -81,6 +81,12 @@ class Rule:
     purpose: str = ""
     legal_basis: str = ""
     domain: str = ""
+    #: Art. 30(1)(d) and (g). Lineage carries neither — a recipient is who
+    #: receives data outside the platform, and a security measure is an
+    #: arrangement rather than an event — so these can only ever be asserted,
+    #: and the record says so wherever it prints them. See cordata-tech/qedro#13.
+    recipients: tuple[str, ...] = ()
+    security_measures: tuple[str, ...] = ()
 
     def matches(self, namespace: str, name: str) -> bool:
         return fnmatchcase(f"{namespace}/{name}", self.pattern) or fnmatchcase(name, self.pattern)
@@ -239,6 +245,10 @@ def _rules(raw: Any, origin: str) -> tuple[Rule, ...]:
                 purpose=_str(spec.get("purpose")),
                 legal_basis=_str(spec.get("legal_basis")),
                 domain=_str(spec.get("domain")),
+                recipients=_list(spec.get("recipients"), f"`recipients` in {origin}"),
+                security_measures=_list(
+                    spec.get("security_measures"), f"`security_measures` in {origin}"
+                ),
             )
         )
     return tuple(rules)
@@ -246,3 +256,14 @@ def _rules(raw: Any, origin: str) -> tuple[Rule, ...]:
 
 def _str(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _list(value: Any, what: str) -> tuple[str, ...]:
+    """One string or a list of them. A mapping is a mistake worth saying aloud."""
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return tuple(item.strip() for item in value if item.strip())
+    raise ConfigError(f"{what} should be a string or a list of strings")
