@@ -17,6 +17,14 @@ output changes yet.
   Art. 9(1) list, for the same reason `legal_basis` is closed on Art. 6(1);
   `residency` and `retention` from the reference ontology. Every value says what it
   means, because a list of values without that is a dropdown rather than an ontology.
+- **The Art. 30 record reports what the data is**, from the standard `tags` dataset
+  facet: categories of personal data and of data subjects, residency and retention,
+  each with the datasets that carried it and which side they were on. Nothing is
+  inferred from a column name, a classification is never carried from one dataset to
+  another, and the datasets that carry none are counted and named — *nobody said* is
+  not *no personal data*. A value outside a closed term withholds the mark; a missing
+  classification does not. The scope statement counts activities per item, and the
+  Art. 30(1) line now says the record has fields for five of the seven items.
 - **The reader reads the standard `tags` dataset facet**, including `field`-level tags
   that classify one column. The spec has carried it since `1-0-0` and the clients
   generate it, but no OpenLineage integration emits it as of 1.53.0, so absent means

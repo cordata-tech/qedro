@@ -538,10 +538,12 @@ class TestTheArt30ItemsAreStated:
     """Which Art. 30(1) items the record has fields for. See cordata-tech/qedro#12."""
 
     def test_the_scope_names_covered_and_missing_items(self):
+        # Since #13 the record has fields for five of the seven items; (d)
+        # recipients and (g) security measures are not in any event.
         [line] = [v for k, v in record([event(facet=EVIDENCED)]).scope.lines() if k == "Art. 30(1)"]
-        assert line.startswith("this record has fields for (a) the controller and (b) the purposes")
-        assert "none for (c) categories of data subjects" in line
-        assert line.endswith("(f) time limits for erasure and (g) security measures")
+        assert line.startswith("this record has fields for (a) the controller, (b) the purposes")
+        assert "(c) categories of data subjects and of personal data" in line
+        assert line.endswith("none for (d) categories of recipients and (g) security measures")
 
     def test_it_is_not_a_reason_to_withhold_the_mark(self):
         # It would fire on every run until v0.3, and a condition that always
@@ -630,3 +632,150 @@ def test_the_processing_facet_is_read_from_the_pipeline_runtime_capture():
     # every activity is evidenced, and this asserts only that some are.
     out = real("events")
     assert any(a.evidenced for a in out.activities)
+
+
+def tagged(name="scored", reads=(), writes=(), run="r1", facet=EVIDENCED):
+    """An event whose datasets carry the standard `tags` dataset facet.
+
+    Each of *reads* and *writes* is `(dataset, {key: value})`; a dataset with an
+    empty mapping carries no facet at all, which is what a table nobody
+    classified looks like on the wire.
+    """
+
+    def side(entries):
+        out = []
+        for key, tags in entries:
+            namespace, _, table = key.partition("/")
+            dataset = {"namespace": namespace, "name": table}
+            if tags:
+                dataset["facets"] = {
+                    "tags": {
+                        "_producer": "https://example.test",
+                        "tags": [{"key": k, "value": v, "source": "TEST"} for k, v in tags.items()],
+                    }
+                }
+            out.append(dataset)
+        return out
+
+    parsed = parse_event(
+        {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-03-01T10:00:00Z",
+            "run": {"runId": run},
+            "job": {
+                "namespace": "acme.fraud",
+                "name": name,
+                "facets": {"processing": dict(facet)} if facet else {},
+            },
+            "inputs": side(reads),
+            "outputs": side(writes),
+        }
+    )
+    assert parsed is not None
+    return parsed
+
+
+class TestClassificationFromTheTagsFacet:
+    """Art. 30(1)(c), (e) and (f) from the standard `tags` dataset facet. See #13."""
+
+    def a_record(self):
+        return record(
+            [
+                tagged(
+                    reads=[("wh/raw.transactions", {"data_category": "financial"})],
+                    writes=[
+                        (
+                            "wh/curated.scores",
+                            {
+                                "data_category": "financial",
+                                "subject_type": "customer",
+                                "residency": "eu",
+                                "retention": "7y",
+                            },
+                        )
+                    ],
+                )
+            ]
+        )
+
+    def test_values_are_read_with_the_side_that_carried_them(self):
+        # `reads health data` and `writes health data` are different claims.
+        [activity] = self.a_record().activities
+        [financial] = [c for c in activity.classification if c.key == "data_category"]
+        assert financial.reads == ("wh/raw.transactions",)
+        assert financial.writes == ("wh/curated.scores",)
+        assert financial.provenance is Provenance.FACET
+
+    def test_each_value_knows_which_art30_item_it_answers(self):
+        [activity] = self.a_record().activities
+        assert {c.value: c.item for c in activity.classification} == {
+            "financial": "c",
+            "customer": "c",
+            "eu": "e",
+            "7y": "f",
+        }
+
+    def test_a_dataset_with_no_tags_is_unclassified_not_uncategorised(self):
+        # An input carrying no tags means the catalog holds none — nobody said —
+        # and never that the table holds no personal data. See
+        # cordata-tech/pipeline-runtime#3.
+        out = record(
+            [
+                tagged(
+                    reads=[("wh/vendor_feed", {})],
+                    writes=[("wh/curated.scores", {"data_category": "financial"})],
+                )
+            ]
+        )
+        [activity] = out.activities
+        assert activity.unclassified == ("wh/vendor_feed",)
+        assert out.scope.unclassified == ("wh/vendor_feed",)
+
+    def test_a_classification_is_never_carried_from_one_dataset_to_another(self):
+        # What an activity wrote is the controller's declaration about its own
+        # output; asserting it for the source invents evidence for somebody
+        # else's table.
+        out = record(
+            [tagged(reads=[("wh/vendor_feed", {})], writes=[("wh/scores", {"residency": "eu"})])]
+        )
+        [residency] = [c for c in out.activities[0].classification if c.key == "residency"]
+        assert residency.reads == ()
+        assert residency.writes == ("wh/scores",)
+
+    def test_a_tag_the_record_cannot_use_leaves_the_dataset_unclassified(self):
+        # `sensitivity` is a level, not a category, and `domain` is a scoping
+        # key. Counting either as an answer would turn them into one.
+        out = record([tagged(writes=[("wh/scores", {"sensitivity": "high", "domain": "fraud"})])])
+        assert out.activities[0].classification == ()
+        assert out.activities[0].unclassified == ("wh/scores",)
+
+    def test_a_value_outside_a_closed_term_is_reported_and_withholds_the_mark(self):
+        out = record([tagged(writes=[("wh/scores", {"special_category": "shoe-size"})])])
+        [value] = [c for c in out.activities[0].classification if c.key == "special_category"]
+        assert value.unrecognised
+        assert not out.complete
+        assert any("shoe-size" in r for r in out.completeness.reasons)
+
+    def test_an_open_term_takes_an_organisation_s_own_value(self):
+        out = record([tagged(writes=[("wh/scores", {"data_category": "policyholder-claims"})])])
+        assert not out.activities[0].classification[0].unrecognised
+        assert out.complete
+
+    def test_a_missing_classification_does_not_withhold_the_mark(self):
+        # It would fire on nearly every run, and a mark that is always withheld
+        # says nothing — the argument `quality` makes about an uneven history.
+        out = record([tagged(writes=[("wh/scores", {})])])
+        assert out.complete
+
+    def test_the_scope_counts_activities_per_item_and_names_what_is_unclassified(self):
+        out = record(
+            [
+                tagged(name="a", writes=[("wh/a", {"data_category": "financial"})]),
+                tagged(name="b", writes=[("wh/b", {})]),
+            ]
+        )
+        assert out.scope.activities == 2
+        assert out.scope.reported == {"c": 1}
+        lines = dict(out.scope.lines())
+        assert "1 of 2 activities" in lines["classification"]
+        assert lines["unclassified"].startswith("1 of 2 datasets carry no classification")

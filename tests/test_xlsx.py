@@ -13,11 +13,12 @@ from io import BytesIO
 
 import pytest
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 from qedro import TOMBSTONE, config, vocabulary
 from qedro.events import parse_event
 from qedro.ropa import build
-from qedro.xlsx import AT, DATASETS_PER_CELL, HEADER_ROW, workbook
+from qedro.xlsx import AT, COLUMNS, DATASETS_PER_CELL, HEADER_ROW, workbook
 
 from .test_ropa import CONTROLLER, EVIDENCED, event
 
@@ -102,7 +103,10 @@ class TestTheTable:
     def test_the_header_is_frozen_and_filterable(self, evidenced):
         sheet = evidenced.worksheets[0]
         assert sheet.freeze_panes == f"A{HEADER_ROW + 1}"
-        assert sheet.auto_filter.ref == f"A{HEADER_ROW}:L{HEADER_ROW + 1}"
+        # Computed from the columns rather than spelled out, so adding one is a
+        # column change and not also a test change.
+        last = get_column_letter(len(COLUMNS))
+        assert sheet.auto_filter.ref == f"A{HEADER_ROW}:{last}{HEADER_ROW + 1}"
 
     def test_an_evidenced_row_names_its_source(self, evidenced):
         sheet = evidenced.worksheets[0]
@@ -205,3 +209,42 @@ class TestTheScopeSheetCarriesEveryScopeLine:
         sheet = load_workbook(BytesIO(workbook(record)))["Scope"]
         text = "\n".join(str(c.value) for row in sheet.iter_rows() for c in row if c.value)
         assert "1 activity declared with no lineage" in text
+
+
+class TestTheClassificationColumns:
+    """Art. 30(1)(c), (e) and (f) in the workbook an auditor receives. See #13."""
+
+    def a_sheet(self, tags, reads=()):
+        from .test_ropa import tagged
+
+        return book([tagged(reads=reads, writes=[("wh/scores", tags)])]).worksheets[0]
+
+    def test_each_item_has_its_own_column(self):
+        sheet = self.a_sheet(
+            {
+                "data_category": "financial",
+                "special_category": "health",
+                "subject_type": "customer",
+                "residency": "eu",
+                "retention": "7y",
+            }
+        )
+        row = HEADER_ROW + 1
+        assert cell(sheet, row, "Categories") == "financial"
+        assert cell(sheet, row, "Special category") == "health"
+        assert cell(sheet, row, "Subjects") == "customer"
+        assert cell(sheet, row, "Residency") == "eu"
+        assert cell(sheet, row, "Retention") == "7y"
+
+    def test_nothing_said_is_a_dash_and_unclassified_is_counted_beside_it(self):
+        # A row of dashes must not read as *no personal data here*, so the
+        # Unclassified column carries the count and the names.
+        sheet = self.a_sheet({}, reads=[("wh/vendor_feed", {})])
+        row = HEADER_ROW + 1
+        assert cell(sheet, row, "Categories") == "—"
+        assert cell(sheet, row, "Unclassified").startswith("2 of 2:")
+        assert "wh/vendor_feed" in cell(sheet, row, "Unclassified")
+
+    def test_a_value_outside_a_closed_term_is_tinted_where_the_value_is(self):
+        sheet = self.a_sheet({"special_category": "shoe-size"})
+        assert _tinted(sheet, HEADER_ROW + 1, "Special category")

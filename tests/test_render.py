@@ -136,11 +136,35 @@ class TestEveryFormatStatesItsScope:
         assert built.complete
         if fmt == "json":
             art30 = json_lib.loads(render.FORMATS[fmt](built))["scope"]["art30"]
-            assert art30 == {"covered": ["a", "b"], "not_covered": ["c", "d", "e", "f", "g"]}
+            assert art30["covered"] == ["a", "b", "c", "e", "f"]
+            assert art30["not_covered"] == ["d", "g"]
         else:
             out = rendered([event(facet=EVIDENCED)], fmt)
-            assert "none for (c) categories of data subjects and of personal data" in out
-            assert "(g) security measures" in out
+            assert "none for (d) categories of recipients and (g) security measures" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_classification_and_what_was_not_classified_survive(self, fmt):
+        # Both halves: the category an activity reports, and the datasets that
+        # carried none, which must never read as *no personal data*. See #13.
+        from .test_ropa import tagged
+
+        built = record(
+            [
+                tagged(
+                    reads=[("wh/vendor_feed", {})],
+                    writes=[("wh/scores", {"special_category": "health"})],
+                )
+            ]
+        )
+        if fmt == "json":
+            [activity] = json_lib.loads(render.FORMATS[fmt](built))["activities"]
+            assert activity["classification"][0]["value"] == "health"
+            assert activity["classification"][0]["art30_item"] == "c"
+            assert activity["unclassified"] == ["wh/vendor_feed"]
+        else:
+            out = readable(built, fmt)
+            assert "health" in out
+            assert "wh/vendor_feed" in out
 
     @pytest.mark.parametrize("fmt", FORMATS)
     def test_a_read_only_activity_is_named(self, fmt):
@@ -232,7 +256,10 @@ class TestTheRecordIsReadable:
 
     def test_markdown_table_has_a_row_per_activity(self):
         out = render.markdown(record([event(name="a"), event(name="b")]))
-        assert out.count("| `acme.fraud/") == 2
+        # The record table only. Since #13 a second table follows it, saying
+        # what the data each activity touched is.
+        record_table = out.split("## What the data is")[0]
+        assert record_table.count("| `acme.fraud/") == 2
 
     def test_an_unrecognised_value_is_flagged_in_text(self):
         out = render.text(record([event(facet={"purpose": "p", "legal_basis": "vibes"})]))

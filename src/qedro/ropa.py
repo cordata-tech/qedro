@@ -59,7 +59,20 @@ ART30_ITEMS: tuple[tuple[str, str], ...] = (
     ("f", "time limits for erasure"),
     ("g", "security measures"),
 )
-ART30_COVERED = frozenset({"a", "b"})
+ART30_COVERED = frozenset({"a", "b", "c", "e", "f"})
+
+#: Tag keys the record reads from the standard `tags` dataset facet, and which
+#: Art. 30(1) item each answers. Keys a vocabulary may define that Art. 30 does
+#: not ask for — `sensitivity`, `domain` — are deliberately absent: a level is
+#: not a category, and a domain is a scoping key rather than a record field.
+#: See cordata-tech/qedro#13.
+ART30_TAG_KEYS: Mapping[str, str] = {
+    "data_category": "c",
+    "special_category": "c",
+    "subject_type": "c",
+    "residency": "e",
+    "retention": "f",
+}
 
 
 class Provenance(StrEnum):
@@ -100,6 +113,28 @@ class Sourced:
 
 
 @dataclass(frozen=True)
+class Classification:
+    """One classification value, and the datasets that carried it.
+
+    Which side carried it is kept, because *reads health data* and *writes
+    health data* are different claims about the same activity. See
+    cordata-tech/qedro#13.
+    """
+
+    key: str
+    value: str
+    provenance: Provenance = Provenance.FACET
+    unrecognised: bool = False
+    reads: tuple[str, ...] = ()
+    writes: tuple[str, ...] = ()
+
+    @property
+    def item(self) -> str:
+        """The Art. 30(1) item this answers."""
+        return ART30_TAG_KEYS.get(self.key, "")
+
+
+@dataclass(frozen=True)
 class Activity:
     """One processing activity — one job, across every event that named it."""
 
@@ -116,6 +151,12 @@ class Activity:
     last_seen: datetime | None = None
     #: False when a mapping rule's `domain:` named the domain. See #9.
     domain_guessed: bool = True
+    #: Classification the datasets this activity touched carried, and the
+    #: datasets that carried none. Unclassified is kept because *nobody
+    #: classified this table* and *this table holds no personal data* are
+    #: different answers, and only the first is what an absent facet means.
+    classification: tuple[Classification, ...] = ()
+    unclassified: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -125,6 +166,13 @@ class Activity:
     def evidenced(self) -> bool:
         """Both Art. 30 fields came from an emitted facet."""
         return self.purpose.evidenced and self.legal_basis.evidenced
+
+    def classified(self, item: str) -> tuple[Classification, ...]:
+        """Everything this activity reports for one Art. 30(1) item."""
+        return tuple(c for c in self.classification if c.item == item)
+
+    def values_for(self, key: str) -> tuple[str, ...]:
+        return tuple(c.value for c in self.classification if c.key == key)
 
     def gaps(self) -> list[str]:
         """Why this activity is not fully evidenced, in a reviewer's words."""
@@ -158,6 +206,15 @@ class Scope(scope.Scope):
     #: which describes what was looked at — a declared activity was written
     #: down, not looked at. See cordata-tech/qedro#6.
     declared: int = 0
+    #: How many activities report a value for each Art. 30(1) item the record
+    #: has a field for, out of `activities`. *Has a field* and *has an answer*
+    #: are different, and a scope statement that showed only the first would
+    #: invite the second to be assumed. See cordata-tech/qedro#13.
+    activities: int = 0
+    reported: Mapping[str, int] = field(default_factory=dict)
+    #: Datasets in view carrying no classification the record can use. Named,
+    #: because *nobody classified it* is not *it holds no personal data*.
+    unclassified: tuple[str, ...] = ()
     #: Jobs that were looked at and not listed as activities, because they are
     #: orchestration parents — see `_parents`. Named rather than counted, so the
     #: omission is itself visible. See cordata-tech/qedro#8.
@@ -206,6 +263,30 @@ class Scope(scope.Scope):
                         f"{words.plural(n, 'an activity', 'activities')} — "
                         f"{words.plural(n, 'a parent run', 'parent runs')} with no datasets "
                         f"and no processing facet: {', '.join(self.parents)}"
+                    ),
+                )
+            )
+        if self.reported:
+            named = {letter: what for letter, what in ART30_ITEMS}
+            out.append(
+                (
+                    "classification",
+                    ", ".join(
+                        f"({letter}) {named[letter]}: {count} of {self.activities} "
+                        f"{words.plural(self.activities, 'activity', 'activities')}"
+                        for letter, count in sorted(self.reported.items())
+                    ),
+                )
+            )
+        if self.unclassified:
+            n = len(self.unclassified)
+            out.append(
+                (
+                    "unclassified",
+                    (
+                        f"{n} of {self.datasets} {words.plural(self.datasets, 'dataset', 'datasets')} "
+                        f"carry no classification the record can use: "
+                        f"{', '.join(self.unclassified)}"
                     ),
                 )
             )
@@ -357,9 +438,13 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
     inputs = {d.key for e in events for d in e.inputs}
     outputs = {d.key for e in events for d in e.outputs}
 
+    classification, unclassified = _classification(events, vocabulary)
+
     return Activity(
         namespace=first.job.namespace,
         name=first.job.name,
+        classification=classification,
+        unclassified=unclassified,
         domain=config.domain_for(first.job.namespace, rule),
         domain_guessed=config.domain_guessed(rule),
         purpose=purpose,
@@ -371,6 +456,55 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
         first_seen=min(times) if times else None,
         last_seen=max(times) if times else None,
     )
+
+
+def _classification(
+    events: Sequence[Event], vocabulary: Vocabulary
+) -> tuple[tuple[Classification, ...], tuple[str, ...]]:
+    """What the datasets an activity touched say about the data, from the facet.
+
+    Only the standard `tags` dataset facet is read, and only the keys Art. 30
+    asks for. A dataset carrying tags the record cannot use counts as
+    unclassified for this purpose, because *classified as something else* still
+    leaves the record without an answer — and saying otherwise would turn a
+    `sensitivity` tag into a claim about categories of personal data.
+
+    A classification is never carried from one dataset to another. What an
+    activity wrote is the controller's declaration about its own output; the
+    source it read belongs to somebody else, and asserting a category for it
+    would invent evidence nobody produced. See cordata-tech/pipeline-runtime#3.
+    """
+    found: dict[tuple[str, str], dict[str, set[str]]] = {}
+    touched: dict[str, bool] = {}
+
+    for event in events:
+        for dataset, side in [(d, "reads") for d in event.inputs] + [
+            (d, "writes") for d in event.outputs
+        ]:
+            touched.setdefault(dataset.key, False)
+            for tag in dataset.tags():
+                if tag.key not in ART30_TAG_KEYS:
+                    continue
+                touched[dataset.key] = True
+                # The column a `field`-level tag names stays out of the record:
+                # column names are disclosive on their own, which is why
+                # SECURITY.md says the input is more sensitive than the output.
+                sides = found.setdefault((tag.key, tag.value), {"reads": set(), "writes": set()})
+                sides[side].add(dataset.key)
+
+    classification = tuple(
+        Classification(
+            key=key,
+            value=value,
+            provenance=Provenance.FACET,
+            unrecognised=vocabulary.unrecognised(key, value),
+            reads=tuple(sorted(sides["reads"])),
+            writes=tuple(sorted(sides["writes"])),
+        )
+        for (key, value), sides in sorted(found.items())
+    )
+    unclassified = tuple(sorted(key for key, classified in touched.items() if not classified))
+    return classification, unclassified
 
 
 def _sourced(
@@ -476,6 +610,13 @@ def _scope(
             if Provenance.MAPPING in (a.purpose.provenance, a.legal_basis.provenance)
         ),
         undeclared=sum(1 for a in activities if not a.purpose or not a.legal_basis),
+        activities=len(activities),
+        reported={
+            letter: sum(1 for a in activities if a.classified(letter))
+            for letter in sorted({item for item in ART30_TAG_KEYS.values()})
+            if any(a.classified(letter) for a in activities)
+        },
+        unclassified=tuple(sorted({d for a in activities for d in a.unclassified})),
         declared=declared,
         parents=tuple(sorted(parents)),
         read_only=tuple(a.key for a in activities if a.inputs and not a.outputs),
@@ -545,6 +686,17 @@ def _completeness(
         completeness = completeness.degraded(
             f"{n} of {total} {words.plural(total, 'activity', 'activities')} "
             f"{words.plural(n, 'has', 'have')} no purpose or no legal basis from any source"
+        )
+
+    misclassified = [a for a in activities if any(c.unrecognised for c in a.classification)]
+    if misclassified:
+        n = len(misclassified)
+        values = sorted(
+            {c.value for a in misclassified for c in a.classification if c.unrecognised}
+        )
+        completeness = completeness.degraded(
+            f"{n} {words.plural(n, 'activity carries', 'activities carry')} a classification "
+            f"the vocabulary does not define: {', '.join(values)}"
         )
 
     unrecognised = [a for a in activities if a.purpose.unrecognised or a.legal_basis.unrecognised]

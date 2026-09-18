@@ -79,6 +79,7 @@ def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
         out.append(f"  {activity.key}")
         out.append(f"    purpose       {_field(activity.purpose)}")
         out.append(f"    legal basis   {_field(activity.legal_basis)}")
+        out.extend(_classification_text(activity))
         if activity.inputs:
             out.append(f"    reads         {', '.join(activity.inputs)}")
         if activity.outputs:
@@ -108,6 +109,40 @@ def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
     out.extend(_verdict_text(record, "every activity stands on emitted evidence", symbol=symbol))
 
     return "\n".join(out) + "\n"
+
+
+#: What each classification key is called in the output, in Art. 30(1) order.
+#: The label says what the value answers rather than repeating the tag key: a
+#: reader of the record has not read the vocabulary.
+CLASSIFICATION_LABELS = (
+    ("data_category", "categories"),
+    ("special_category", "special"),
+    ("subject_type", "subjects"),
+    ("residency", "residency"),
+    ("retention", "retention"),
+)
+
+
+def _classification_text(activity: Activity) -> list[str]:
+    """The classification lines for one activity, and what was not classified."""
+    out = []
+    for key, label in CLASSIFICATION_LABELS:
+        found = [c for c in activity.classification if c.key == key]
+        if not found:
+            continue
+        values = ", ".join(
+            f"{c.value}{' ⚠ not in vocabulary' if c.unrecognised else ''}" for c in found
+        )
+        out.append(f"    {label:<13} {values}")
+    if activity.unclassified:
+        total = len(set(activity.inputs) | set(activity.outputs))
+        n = len(activity.unclassified)
+        out.append(
+            f"    {'unclassified':<13} {n} of {total} "
+            f"{words.plural(total, 'dataset carries', 'datasets carry')} no classification: "
+            f"{', '.join(activity.unclassified)}"
+        )
+    return out
 
 
 def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record") -> list[str]:
@@ -197,10 +232,43 @@ def _(record: Record) -> str:
             "| **declared, no lineage** | no lineage | no lineage | no lineage |"
         )
 
+    out += _classification_markdown(record)
     out += _scope_markdown(record.scope)
     out += _verdict_markdown(record, "Every activity in this record stands on emitted evidence.")
 
     return "\n".join(out)
+
+
+def _classification_markdown(record: Record) -> list[str]:
+    """Classification in a table of its own.
+
+    Six more columns on the record table would make it unreadable, and this
+    answers a different question: the record table says what an activity does,
+    this says what the data it touched is.
+    """
+    if not any(a.classification or a.unclassified for a in record.activities):
+        return []
+
+    out = [
+        "",
+        "## What the data is",
+        "",
+        "| Activity | Categories | Special category | Subjects | Residency | Retention | Unclassified |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for a in record.activities:
+        cells = [
+            ", ".join(
+                f"{c.value}{' ⚠' if c.unrecognised else ''}"
+                for c in a.classification
+                if c.key == key
+            )
+            or "—"
+            for key, _ in CLASSIFICATION_LABELS
+        ]
+        unclassified = f"{len(a.unclassified)} datasets" if a.unclassified else "—"
+        out.append(f"| `{a.key}` | {' | '.join(cells)} | {unclassified} |")
+    return out
 
 
 def _scope_markdown(scope: Scope, *, title: str = "Scope of this record") -> list[str]:
@@ -284,7 +352,12 @@ def _(record: Record, *, indent: int = 2) -> str:
             "art30": {
                 "covered": [k for k, _ in ART30_ITEMS if k in ART30_COVERED],
                 "not_covered": [k for k, _ in ART30_ITEMS if k not in ART30_COVERED],
+                # How many activities report a value for each item, out of how
+                # many there are. A field with no values is still a field.
+                "reported": dict(sorted(record.scope.reported.items())),
+                "activities": record.scope.activities,
             },
+            "unclassified_datasets": list(record.scope.unclassified),
             "provenance": {
                 "evidenced": record.scope.evidenced,
                 "from_mapping": record.scope.from_mapping,
@@ -331,6 +404,22 @@ def _activity_json(activity: Activity) -> dict[str, object]:
         "name": activity.name,
         "domain": activity.domain,
         "domain_source": "namespace" if activity.domain_guessed else "mapping",
+        "classification": [
+            {
+                "key": c.key,
+                "value": c.value,
+                "art30_item": c.item,
+                "provenance": str(c.provenance),
+                "unrecognised": c.unrecognised,
+                "reads": list(c.reads),
+                "writes": list(c.writes),
+            }
+            for c in activity.classification
+        ],
+        # Datasets this activity touched that carry no classification the record
+        # can use. Not the same as *no personal data*, and a consumer that read
+        # an empty list as that would be inventing an answer.
+        "unclassified": list(activity.unclassified),
         "purpose": {
             "value": activity.purpose.value,
             "provenance": str(activity.purpose.provenance),

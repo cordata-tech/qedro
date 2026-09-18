@@ -77,8 +77,11 @@ another source adapter.
 
 ## Classification vocabularies
 
-Relevant once a projection reports classification; none does yet. These are
-adapters onto one vocabulary, never the shape of the model.
+`ropa` reports classification as of #13: categories of personal data and of data
+subjects, residency and retention, read from the standard `tags` dataset facet and
+resolved against the loaded vocabulary. The adapters below are ways a classification
+could arrive from a catalog instead; they are adapters onto one vocabulary, never the
+shape of the model.
 
 | | State |
 |---|---|

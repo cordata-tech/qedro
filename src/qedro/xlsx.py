@@ -54,6 +54,12 @@ COLUMNS: tuple[tuple[str, int], ...] = (
     ("Purpose source", 20),
     ("Legal basis", 22),
     ("Legal basis source", 20),
+    ("Categories", 26),
+    ("Special category", 22),
+    ("Subjects", 18),
+    ("Residency", 14),
+    ("Retention", 14),
+    ("Unclassified", 30),
     ("Reads", 34),
     ("Writes", 34),
     ("Runs", 7),
@@ -63,7 +69,7 @@ COLUMNS: tuple[tuple[str, int], ...] = (
 )
 
 AT = {heading: index for index, (heading, _) in enumerate(COLUMNS, start=1)}
-WRAPPED = {AT["Reads"], AT["Writes"], AT["Notes"]}
+WRAPPED = {AT["Reads"], AT["Writes"], AT["Notes"], AT["Categories"], AT["Unclassified"]}
 
 #: How a provenance reads to somebody who did not write this tool.
 SOURCE = {
@@ -147,6 +153,7 @@ def _row(sheet: Any, row: int, activity: Activity) -> None:
         _source(activity.purpose),
         activity.legal_basis.value or "—",
         _source(activity.legal_basis),
+        *_classification(activity),
         _datasets(activity.inputs),
         _datasets(activity.outputs),
         activity.runs,
@@ -173,6 +180,43 @@ def _row(sheet: Any, row: int, activity: Activity) -> None:
         if sourced.unrecognised:
             sheet.cell(row=row, column=value_column).fill = ASSERTED_FILL
 
+    # A classification outside a closed term is tinted where the value is, for
+    # the same reason: the value is what nobody agreed on.
+    for heading, key in CLASSIFICATION_COLUMNS:
+        if any(c.unrecognised for c in activity.classification if c.key == key):
+            sheet.cell(row=row, column=AT[heading]).fill = ASSERTED_FILL
+
+
+#: The classification columns, in Art. 30(1) order, and the tag key each reads.
+CLASSIFICATION_COLUMNS = (
+    ("Categories", "data_category"),
+    ("Special category", "special_category"),
+    ("Subjects", "subject_type"),
+    ("Residency", "residency"),
+    ("Retention", "retention"),
+)
+
+
+def _classification(activity: Activity) -> tuple[Any, ...]:
+    """The five classification cells, and what the activity did not classify.
+
+    An empty cell is `—`, meaning nothing said, and the Unclassified column
+    counts the datasets that carried no classification the record can use —
+    because a row of dashes must not read as *no personal data here*.
+    """
+    cells: list[Any] = []
+    for _, key in CLASSIFICATION_COLUMNS:
+        values = [c for c in activity.classification if c.key == key]
+        cells.append("\n".join(c.value for c in values) if values else "—")
+    if activity.unclassified:
+        total = len(set(activity.inputs) | set(activity.outputs))
+        cells.append(
+            f"{len(activity.unclassified)} of {total}:\n" + _datasets(activity.unclassified)
+        )
+    else:
+        cells.append("—")
+    return tuple(cells)
+
 
 def _declared_row(sheet: Any, row: int, entry: Any) -> None:
     """A declared activity. Every cell the events would have filled says
@@ -188,6 +232,11 @@ def _declared_row(sheet: Any, row: int, entry: Any) -> None:
         _source(entry.purpose),
         entry.legal_basis.value or "—",
         _source(entry.legal_basis),
+        # A declared activity emits no lineage, so nothing classified its data
+        # either. `no lineage` rather than `—`, which would read as *nothing
+        # applies* instead of *nothing could have said*.
+        *("no lineage",) * len(CLASSIFICATION_COLUMNS),
+        "no lineage",
         reads,
         "no lineage",
         "no lineage",

@@ -141,6 +141,45 @@ or a monitoring count. Which of them is a processing activity is left to the rea
                   default/orders_enrichment.map_partitions_parallel_collection
 ```
 
+### What the data is
+
+Art. 30(1) asks for more than the purpose. Where the datasets an activity touched carry
+the standard OpenLineage `tags` facet, the record reports what that says: categories of
+personal data, categories of data subjects, where the data sits, and the erasure period
+declared for it.
+
+```console
+  acme.fraud/transactions-scored-daily
+    purpose       fraud-detection
+    legal basis   legitimate-interest
+    categories    financial, behavioural
+    subjects      customer
+    residency     eu
+    retention     7y
+    unclassified  1 of 3 datasets carry no classification: wh/vendor_feed
+```
+
+Three rules make that reportable rather than guessed:
+
+- **Nothing is inferred from a column name.** A column called `email` is not evidence
+  of anything; a category is reported only where something declared it.
+- **A classification is never carried from one dataset to another.** What an activity
+  wrote is the controller's declaration about its own output. The table it read belongs
+  to somebody else, and asserting a category for it would invent evidence.
+- **Unclassified is counted and named.** A dataset nobody classified is *nobody said*,
+  never *no personal data* — the same distinction `quality` keeps between *not checked*
+  and *passed*.
+
+A value outside a closed term is reported and withholds the mark, which is how
+`special_category` works: Art. 9(1) lists exactly eight kinds of data, and an invented
+ninth reaching a record is a defect that looks like data. A *missing* classification
+does not withhold the mark, because that would fire on nearly every run and a mark
+that is always withheld says nothing.
+
+**No OpenLineage integration emits that facet yet**, although the spec has carried it
+since `1-0-0` and both clients generate it. `pipeline-runtime` emits it from the LF-tags
+it resolves, and anything else that can attach a dataset facet can too.
+
 ### Declared activities
 
 Processing that emits no lineage — a payroll SaaS, staff using a vendor's assistant,
