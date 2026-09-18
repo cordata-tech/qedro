@@ -164,3 +164,51 @@ class TestTheDatasetKey:
     def test_only_the_legacy_key_keeps_the_old_spelling(self):
         dataset = Dataset(namespace="file", name="/data/x")
         assert dataset.legacy_key == "file//data/x"
+
+
+class TestTheTagsDatasetFacet:
+    """Classification from the standard `tags` dataset facet. See #13.
+
+    No integration emitted this facet as of openlineage 1.53.0, so the absent
+    case is the common one and has to mean *nothing reported it*.
+    """
+
+    def dataset(self, tags):
+        return Dataset(namespace="wh", name="customers", facets={"tags": {"tags": tags}})
+
+    def test_key_value_source_and_field_are_read(self):
+        [tag] = self.dataset(
+            [{"key": "data_category", "value": "health", "source": "CATALOG", "field": "diagnosis"}]
+        ).tags()
+        assert (tag.key, tag.value, tag.source, tag.field) == (
+            "data_category",
+            "health",
+            "CATALOG",
+            "diagnosis",
+        )
+        assert tag.column
+
+    def test_a_tag_about_the_whole_dataset_names_no_column(self):
+        [tag] = self.dataset([{"key": "residency", "value": "eu"}]).tags()
+        assert tag.field == ""
+        assert not tag.column
+
+    def test_an_entry_missing_key_or_value_is_dropped_not_fatal(self):
+        # The spec requires both, and a tag missing either cannot be resolved
+        # against a vocabulary. Dropped, like every other malformed input here.
+        tags = self.dataset(
+            [
+                {"key": "data_category"},
+                {"value": "health"},
+                {"key": "", "value": "health"},
+                {"key": "residency", "value": "eu"},
+                "not a mapping",
+            ]
+        ).tags()
+        assert [t.key for t in tags] == ["residency"]
+
+    def test_no_facet_reports_nothing_rather_than_no_classification(self):
+        assert Dataset(namespace="wh", name="customers").tags() == ()
+
+    def test_a_facet_that_is_not_a_list_is_not_fatal(self):
+        assert self.dataset("everything").tags() == ()

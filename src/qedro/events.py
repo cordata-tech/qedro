@@ -31,6 +31,25 @@ KNOWN_EVENT_TYPES = frozenset({"START", "RUNNING", "COMPLETE", "ABORT", "FAIL", 
 
 
 @dataclass(frozen=True)
+class Tag:
+    """One entry of the standard `tags` dataset facet (spec 1-0-0).
+
+    `key` and `value` are required by the spec; `source` says what put it there
+    and `field` names a column when the tag is about one rather than about the
+    whole dataset. See cordata-tech/qedro#13.
+    """
+
+    key: str
+    value: str
+    source: str = ""
+    field: str = ""
+
+    @property
+    def column(self) -> bool:
+        return bool(self.field)
+
+
+@dataclass(frozen=True)
 class Dataset:
     """One side of a job's edge — an input or an output.
 
@@ -90,6 +109,38 @@ class Dataset:
         """
         found = _facet(self.input_facets, name)
         return found if found is not None else _facet(self.output_facets, name)
+
+    def tags(self) -> tuple[Tag, ...]:
+        """Classification from the standard `tags` dataset facet, or empty.
+
+        Empty means *nothing reported it*, never *nothing applies*: no
+        integration emitted this facet as of openlineage 1.53.0, so most real
+        lineage carries none and a projection has to say so rather than read
+        silence as an answer.
+
+        Entries without both `key` and `value` are dropped: the spec requires
+        both, and a tag missing either cannot be resolved against a vocabulary.
+        Dropped rather than raised on, like everything else in this module.
+        """
+        raw = (self.facet("tags") or {}).get("tags")
+        if not isinstance(raw, list):
+            return ()
+        out = []
+        for entry in raw:
+            if not isinstance(entry, Mapping):
+                continue
+            key, value = entry.get("key"), entry.get("value")
+            if not isinstance(key, str) or not key or not isinstance(value, str) or not value:
+                continue
+            out.append(
+                Tag(
+                    key=key,
+                    value=value,
+                    source=entry["source"] if isinstance(entry.get("source"), str) else "",
+                    field=entry["field"] if isinstance(entry.get("field"), str) else "",
+                )
+            )
+        return tuple(out)
 
     def field_names(self) -> list[str]:
         """Column names from the standard schema facet, or empty.

@@ -128,3 +128,54 @@ class TestWhatTheUserWroteRaises:
     def test_empty(self):
         with pytest.raises(ConfigError, match="empty"):
             vocabulary.parse("")
+
+
+class TestTheArt30ClassificationTerms:
+    """The terms v0.3 reports Art. 30(1)(c), (e) and (f) from. See #13."""
+
+    def test_special_category_is_closed_on_the_art_9_list(self):
+        # Art. 9(1) enumerates exactly these. A tenth value reaching a record is
+        # the same defect as a seventh legal basis, so the term is closed.
+        term = vocabulary.load().term("special_category")
+        assert term is not None and term.closed
+        assert set(term.values) == {
+            "racial-or-ethnic-origin",
+            "political-opinions",
+            "religious-or-philosophical-beliefs",
+            "trade-union-membership",
+            "genetic",
+            "biometric",
+            "health",
+            "sex-life-or-orientation",
+        }
+        assert term.unrecognised("shoe-size")
+
+    def test_data_category_is_open_because_the_categories_are_the_organisation_s(self):
+        words = vocabulary.load()
+        term = words.term("data_category")
+        assert term is not None and not term.closed
+        # An insurer's own category is not a finding, the way an unlisted
+        # purpose is not.
+        assert not term.unrecognised("policyholder-claims")
+        # Health is Art. 9 data and belongs to the closed term, so that a record
+        # cannot claim special-category processing from an open list.
+        assert "health" not in term.values
+        assert "health" in (words.term("special_category") or term).values
+
+    def test_the_reference_ontology_keys_are_all_present(self):
+        # platform#29 settled these. `domain` is deliberately absent: it is a
+        # grant and scoping key, not an Art. 30 field.
+        words = vocabulary.load()
+        for key in ("data_category", "special_category", "subject_type", "residency", "retention"):
+            assert words.term(key) is not None, key
+        assert words.term("domain") is None
+
+    def test_every_value_says_what_it_means(self):
+        # A vocabulary that lists values without saying what they imply is a
+        # dropdown, not an ontology.
+        words = vocabulary.load()
+        for key in ("data_category", "special_category", "subject_type", "residency", "retention"):
+            term = words.term(key)
+            assert term is not None
+            for value in term.values:
+                assert (term.means(value) or "").strip(), f"{key}/{value} says nothing"

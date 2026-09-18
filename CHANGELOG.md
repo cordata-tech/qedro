@@ -6,6 +6,21 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+Towards v0.3, the rest of Art. 30(1) that evidence can supply (#13). Nothing in the
+output changes yet.
+
+- **The vocabulary carries the classification terms** an Art. 30 record needs:
+  `data_category` and `subject_type` open, because the categories an organisation
+  processes and whose data it holds are its own; `special_category` closed on the
+  Art. 9(1) list, for the same reason `legal_basis` is closed on Art. 6(1);
+  `residency` and `retention` from the reference ontology. Every value says what it
+  means, because a list of values without that is a dropdown rather than an ontology.
+- **The reader reads the standard `tags` dataset facet**, including `field`-level tags
+  that classify one column. No OpenLineage integration emits this facet as of 1.53.0,
+  so absent means nothing reported it, never that nothing applies.
+
 ## 0.2.0 — 2026-09-18
 
 > **First public release**, and the first version on PyPI.

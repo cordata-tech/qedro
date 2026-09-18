@@ -69,6 +69,7 @@ another source adapter.
 | `dataQualityAssertions` (standard, input facet) | **works** | `quality` — `tests/test_quality.py::TestReadingTheFacet`, and against the real `pipeline-runtime` capture |
 | `sourceCodeLocation` (standard, job facet) | **works** | `provenance` — `tests/test_provenance.py::TestWalkingBackwards::test_the_code_and_commit_come_from_the_standard_facet`. None of the three real captures carries it |
 | `schema` (standard, dataset facet) | **works** | dataset columns — `tests/test_events.py::TestDatasets::test_field_names_come_from_the_schema_facet` |
+| `tags` (standard, dataset facet) | **works** — read, including `field`-level tags — `tests/test_events.py::TestTheTagsDatasetFacet` | classification, for the Art. 30(1)(c)–(f) fields in v0.3 (#13). **No integration emits it** as of openlineage 1.53.0: the repository builds job and run tag facets only, and none of the three real captures carries one. `pipeline-runtime` is asked to be the first (`cordata-tech/pipeline-runtime#3`) |
 | `parent` (standard, run facet) | **works** | `ropa`, to leave orchestration parents out of the activities — `tests/test_ropa.py::TestOrchestrationParents`, against real dbt, Airflow and Spark lineage: the dbt invocation, the Airflow DAG run, and the Spark application run |
 | A model version per run | **works** for the standard `tags` run facet (key `model_version`) and `cordata_provenance.step_params.*.model_version` | `ropa --view deployer` — `tests/test_deployer.py`, including against the captured `pipeline-runtime` event in `docs/evidence/`. There is **no standard facet** for this, which is why the list is short and documented |
 | A signed-commit report | **works** for `cordata_provenance`, `gitProvenance`, `provenance` | `provenance` — `tests/test_provenance.py::TestEverySignatureSpellingIsRead`. There is **no standard spelling** for this, which is why the common answer is *unknown* |
@@ -81,7 +82,7 @@ adapters onto one vocabulary, never the shape of the model.
 
 | | State |
 |---|---|
-| A loaded vocabulary document (YAML / JSON / TOML) | **works** — `src/qedro/vocabularies/dsgvo.yaml`, `tests/test_vocabulary.py` |
+| A loaded vocabulary document (YAML / JSON / TOML) | **works** — `src/qedro/vocabularies/dsgvo.yaml`, `tests/test_vocabulary.py`. The shipped document carries `purpose`, `legal_basis`, and, for v0.3, `data_category`, `special_category` (closed on the Art. 9(1) list), `subject_type`, `residency` and `retention` |
 | LakeFormation LF-tags | **candidate** |
 | GCP Data Catalog policy tags | **candidate** |
 | Purview classifications | **candidate** |

@@ -60,3 +60,127 @@ terms:
     # and a shipped list of them would be wrong for everybody.
     closed: false
     values: {}
+
+  data_category:
+    description: >-
+      What kind of personal data an activity processes. Art. 30(1)(c), the
+      categories of personal data half.
+    # Open, for the same reason as `purpose`: the categories an organisation
+    # holds are its own, and a bank's are not a hospital's. The values below are
+    # a starting point to delete from, not a set to fit into.
+    closed: false
+    values:
+      identification:
+        means: >-
+          Data identifying a person: name, customer number, national identifier,
+          document numbers.
+      contact:
+        means: >-
+          How a person is reached: address, email address, telephone number.
+      financial:
+        means: >-
+          Accounts, transactions, balances, payment instruments, credit
+          assessments.
+      location:
+        means: >-
+          Where a person was or is: addresses tied to movement, device location,
+          branch or terminal.
+      behavioural:
+        means: >-
+          What a person did: usage, clicks, purchase history, support contacts,
+          scores derived from any of these.
+      employment:
+        means: >-
+          The employment relationship: role, working time, payroll, absence.
+
+  special_category:
+    description: >-
+      Data Art. 9(1) singles out, processing of which is prohibited unless an
+      Art. 9(2) condition applies. Recorded only where something declared it.
+    # Closed because Art. 9(1) enumerates exactly these, for a reason external to
+    # us — the same argument that closes `legal_basis`. A tenth value reaching a
+    # record is a defect that looks like data.
+    closed: true
+    values:
+      racial-or-ethnic-origin:
+        means: Art. 9(1) — data revealing racial or ethnic origin.
+      political-opinions:
+        means: Art. 9(1) — data revealing political opinions.
+      religious-or-philosophical-beliefs:
+        means: Art. 9(1) — data revealing religious or philosophical beliefs.
+      trade-union-membership:
+        means: Art. 9(1) — data revealing trade union membership.
+      genetic:
+        means: Art. 9(1) — genetic data.
+      biometric:
+        means: >-
+          Art. 9(1) — biometric data processed for the purpose of uniquely
+          identifying a natural person.
+      health:
+        means: Art. 9(1) — data concerning health.
+      sex-life-or-orientation:
+        means: Art. 9(1) — data concerning a person's sex life or sexual orientation.
+
+  subject_type:
+    description: >-
+      Whose data it is. Art. 30(1)(c), the categories of data subjects half.
+    # Open: an insurer has claimants and an employer has applicants, and neither
+    # list is the other's. The values mirror the reference ontology.
+    closed: false
+    values:
+      employee:
+        means: People employed by the controller, including former employees.
+      customer:
+        means: People in a contractual relationship with the controller.
+      prospect:
+        means: >-
+          People who are not customers and whose data is processed with a view to
+          becoming one.
+      none:
+        means: >-
+          No personal data at all. Recorded rather than left blank, because
+          *nobody said* and *no personal data* are different answers.
+
+  residency:
+    description: >-
+      Where the data sits. Read against Art. 30(1)(e) — transfers to third
+      countries — without deciding whether a transfer happened or was lawful.
+    # Open: a jurisdiction list is an organisation's own, and the values here are
+    # the reference ontology's.
+    closed: false
+    values:
+      eu:
+        means: Stored in the European Union.
+      eea:
+        means: Stored in the European Economic Area.
+      ch:
+        means: >-
+          Stored in Switzerland, which has an adequacy decision. The record says
+          where the data is; whether a transfer occurred and under which
+          safeguard is not something lineage carries.
+      us:
+        means: >-
+          Stored in the United States. A third country for Art. 44 purposes, and
+          the record says only that the data is tagged as being there.
+      global:
+        means: No single jurisdiction declared.
+
+  retention:
+    description: >-
+      The erasure period the controller declared for this data. Art. 30(1)(f),
+      *where possible*.
+    # Open, and a declaration rather than a measurement: this is the period
+    # somebody wrote down, never how long records were in fact kept. The
+    # provenance chain is what shows the second.
+    closed: false
+    values:
+      30d:
+        means: Erased after thirty days.
+      1y:
+        means: Erased after one year.
+      7y:
+        means: >-
+          Erased after seven years, the period commercial and tax retention
+          duties commonly require in DACH jurisdictions.
+      10y:
+        means: Erased after ten years.
