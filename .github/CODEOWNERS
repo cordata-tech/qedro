@@ -1,0 +1,37 @@
+# Who gets asked to review what.
+#
+# One maintainer today, so most of this is routing rather than gatekeeping:
+# GitHub requests a review from the owner of every path a pull request touches.
+# The paths listed separately are the ones where a change is easy to make and
+# expensive to get wrong, and they are the commitments CONTRIBUTING.md says must
+# not erode. Listing them is also a note to a future second maintainer about
+# which files deserve a slower read.
+
+*                               @lhadhazy
+
+# The tombstone rule. `∎` means the artefact stands on its own evidence, and it
+# is withheld whenever that is not true. Withholding is the signal; a mark
+# printed on every success says nothing.
+/src/qedro/mark.py              @lhadhazy
+
+# What a run looked at, printed unconditionally in every format. A scope
+# statement that appeared only when coverage was poor would teach a reader that
+# its absence means full coverage.
+/src/qedro/scope.py             @lhadhazy
+
+# Vocabularies are data the tool loads, never types it is compiled against, and
+# `legal_basis` and `special_category` are closed because the law enumerates
+# them. A value added here changes what a generated record may claim.
+/src/qedro/vocabularies/        @lhadhazy
+
+# The published Art. 30 facet. Other people's emitters implement it, so a change
+# here is a change to somebody else's pipeline. Generated from
+# `pipeline_runtime.descriptor.Processing` rather than written by hand.
+/schemas/                       @lhadhazy
+/tools/facet_schema.py          @lhadhazy
+
+# Releases. Pushing a `v*` tag publishes to PyPI, where a version number can
+# never be reused.
+/.github/workflows/             @lhadhazy
+/pyproject.toml                 @lhadhazy
+/CHANGELOG.md                   @lhadhazy

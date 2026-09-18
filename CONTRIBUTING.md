@@ -130,6 +130,15 @@ would rather not.
 behaviour being protected, not the function being called, and the ones guarding a
 commitment say which commitment. Follow that; it is why the suite is readable.
 
+**How a change gets in.** Fork, branch, open a pull request against `main`. CI
+runs the suite on Python 3.12, 3.13 and 3.14 and has to pass before a merge, and
+`main` takes no force pushes and cannot be deleted. `.github/CODEOWNERS` requests
+a review automatically, and lists separately the paths where a change is easy to
+make and expensive to get wrong — the tombstone rule, the scope statement, the
+vocabularies, the published facet schema and the release workflow. A pull request
+touching one of those is worth a sentence in its description about which
+commitment it keeps.
+
 ## Releases
 
 `0.x` versions may change interfaces between releases, and the changelog says
