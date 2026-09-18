@@ -458,6 +458,28 @@ The argument is set out across four posts on [cordata.tech](https://cordata.tech
 This is the part those posts stop short of: the code that reads the evidence and produces
 the artefact.
 
+## What this is not
+
+**It is not legal advice, and it does not decide compliance.** It reports what the
+events say and where each value came from. Whether the resulting record satisfies an
+obligation is a judgement for whoever is accountable for it — a data protection officer,
+legal counsel, a supervisory authority — and the artefact is written to support that
+judgement rather than to stand in for it. Where an article is named in the output, it
+says which field the record holds, never that the article is satisfied.
+
+**The record is the controller's, not the tool's.** Art. 30 puts the duty on the
+controller, and a generated record is a draft until somebody with that responsibility
+reviews and signs it. The tombstone means *this artefact stands on its own evidence*,
+which is a statement about provenance, not an approval.
+
+**It covers the processing that emits lineage.** Every record says so, and says which
+Art. 30(1) items it has fields for — today (a) the controller and (b) the purposes.
+Anything that emits no lineage appears only if it is declared, and a declared activity
+is an assertion rather than evidence.
+
+**It is early software.** `0.x` interfaces move between releases, the changelog says
+which, and [Apache-2.0](LICENSE) carries no warranty.
+
 ## Design commitments
 
 **No adoption required.** It reads OpenLineage from a directory of JSON or a

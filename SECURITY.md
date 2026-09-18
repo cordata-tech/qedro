@@ -55,6 +55,14 @@ Two at runtime — `pyyaml` and `openpyxl` — chosen partly for how little each
 brings with it. Both are widely used and neither executes anything from a
 document it parses.
 
+## Not a compliance verdict
+
+An artefact this produces is evidence about processing, not a statement that an
+obligation is met. Reading it as a verdict is a misuse the wording works to prevent:
+the scope statement says what was looked at, the mark says only that what was found
+stands on emitted evidence, and both are printed on every run. A defect that makes an
+artefact claim more than that is a security issue here, and is listed as one above.
+
 ## Scope
 
 In scope: anything that lets a crafted lineage event, config file or vocabulary
