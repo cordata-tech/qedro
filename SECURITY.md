@@ -2,7 +2,7 @@
 
 ## Reporting
 
-Email **security@cordata.tech**, or open a private advisory through GitHub's
+Email **privacy@cordata.tech**, or open a private advisory through GitHub's
 *Report a vulnerability* on this repository. Please do not open a public issue
 for anything exploitable.
 
