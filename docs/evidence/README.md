@@ -4,7 +4,9 @@ Artefacts that published writing quotes. Each one was captured from a real run, 
 
 ## `deployer-view.md`
 
-The transcript of `qedro ropa --view deployer` that `cordata-tech/platform#48` § 13 quotes, captured on 2026-09-17 at commit `0fc4e54`. A script runs the installed CLI from the repository root and writes what each command printed, unedited, together with its exit status. The script refuses to run on a dirty working tree, so the commit named in the file is the code that produced the output.
+The transcript of `qedro ropa --view deployer` that `cordata-tech/platform#48` § 13 quotes, recaptured on 2026-09-18 from qedro 0.2.0, the version on PyPI, at commit `645bd4f`. `tools/capture_deployer_view.py` runs the installed CLI from the repository root and writes what each command printed, unedited, together with its exit status. It refuses to run on a dirty working tree, so the commit named in the file is the code that produced the output, and `--check` fails when the command prints something else.
+
+The first capture was on 2026-09-17 at `0fc4e54`, from 0.1.0, which was never released. It went out of date when English output moved from DSGVO to GDPR and long scope values began wrapping, which is what `--check` is for.
 
 The three runs share one config and change one input each: `demo/lineage`, where purpose and legal basis come from the mapping file; `demo/lineage-declared`, where the pipelines emit them and the view earns the mark; and the same with `demo/activities.yaml`, where the declared support assistant is marked `declared, no lineage` and the mark is withheld. The document also declares a payroll SaaS, which names no model and so appears only in the Art. 30 record. `tests/test_demo.py::TestTheDeployerViewOnTheDemo` asserts the same facts — the use case, both model versions and their run counts, the inputs, the provenance of purpose and legal basis, and whether the mark is earned — but not the wording. A later change to how the output reads leaves this file describing the commit it names, which is why it names one.
 
