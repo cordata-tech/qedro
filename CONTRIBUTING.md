@@ -175,3 +175,26 @@ before it is anything else.
 Pushing a `v*` tag is what publishes. The workflow refuses to ship if the tag
 disagrees with `qedro.__version__`, or if the changelog entry for that version
 is missing or still marked unreleased.
+
+**Which number moves.** In `0.x` the minor carries anything a reader would want
+to know about before upgrading: a change to what any format prints, to the JSON
+shape, to the CLI, or to what a configuration document accepts. The patch is for
+a defect fixed without changing any of those — a wrong count, a crash on
+malformed input, a misleading sentence, documentation. Most work here is a minor,
+and that is the honest answer rather than a cautious one: calling a new column in
+the workbook a patch tells somebody deciding whether to upgrade the opposite of
+the truth.
+
+Patches are expected between minors, particularly after an emitter capture. A
+counting bug found by a Flink capture is a patch that week, not something held
+for the next feature release.
+
+**Milestones are plan buckets, not version numbers.** The ladder on
+[#1](https://github.com/cordata-tech/qedro/issues/1) runs from v0.1 to v1.0 as a
+shape for the roadmap; a release carrying the work of the milestone labelled
+`v0.6` may be numbered something else entirely, and `0.x` minors do not run out —
+0.9 is followed by 0.10. **1.0 is a decision, not an arrival**: it is the
+stability promise in [#21](https://github.com/cordata-tech/qedro/issues/21), made
+when the JSON schema, the CLI and the documents have held still long enough to
+promise, and it would be a poor promise while the Art. 30 record is still gaining
+fields.

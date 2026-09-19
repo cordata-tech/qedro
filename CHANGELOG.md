@@ -6,10 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.3.0 — 2026-09-19
 
-Towards v0.3, the rest of Art. 30(1) that evidence can supply (#13). Nothing in the
-output changes yet.
+The rest of Art. 30(1) that evidence can supply (#13). The record stops covering two
+of the seven items the regulation lists and starts covering all seven, with the two
+nothing emits marked as assertions wherever they appear.
 
 - **The vocabulary carries the classification terms** an Art. 30 record needs:
   `data_category` and `subject_type` open, because the categories an organisation
@@ -33,8 +34,8 @@ output changes yet.
   inferred from a column name, a classification is never carried from one dataset to
   another, and the datasets that carry none are counted and named — *nobody said* is
   not *no personal data*. A value outside a closed term withholds the mark; a missing
-  classification does not. The scope statement counts activities per item, and the
-  Art. 30(1) line now says the record has fields for five of the seven items.
+  classification does not. The scope statement counts how many activities report a
+  value for each item, because a field is not an answer.
 - **The reader reads the standard `tags` dataset facet**, including `field`-level tags
   that classify one column. The spec has carried it since `1-0-0` and the clients
   generate it, but no OpenLineage integration emits it as of 1.53.0, so absent means
