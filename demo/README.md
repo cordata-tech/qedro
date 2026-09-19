@@ -87,6 +87,37 @@ purpose and every lawful basis came from the job that ran, in the same event tha
 proves it ran — so the record stands on its own evidence, and the run finishes the
 product's name.
 
+## What the data is, in both estates
+
+The datasets carry the standard `tags` dataset facet, so the record reports what Art.
+30(1) asks beyond the purpose: categories of personal data and of data subjects, where
+the data sits, and the declared erasure period.
+
+```console
+  acme.fraud/transactions-scored-daily
+    categories    behavioural, financial, identification
+    subjects      customer
+    residency     eu
+    retention     7y
+    unclassified  1 of 3 datasets carry no classification:
+                  warehouse/fraud_raw.device_events
+```
+
+**Both estates carry it**, and that is deliberate. Classification is declared by
+whoever owns the dataset and travels with the data; whether the pipeline declares its
+own purpose is a separate decision, and that is the difference the two estates exist to
+show. Tagging a table does not make a record stand on evidence, and the tiers below are
+unchanged by it.
+
+Two datasets carry no classification: `fraud_raw.device_events`, a vendor feed nobody
+classified, and `crm_raw.accounts`, which nobody got round to. They are counted and
+named on every run rather than passed over, because *nobody said* is not *no personal
+data* — and an estate where every table is classified is not an estate anybody has.
+
+One tag is about a column rather than a table: `iban` on `fraud_raw.transactions` is
+tagged `identification`. The category reaches the record; the column name does not,
+because column names are disclosive on their own.
+
 ## Declared activities, in the Art. 30 record
 
 ```console

@@ -17,6 +17,11 @@ output changes yet.
   Art. 9(1) list, for the same reason `legal_basis` is closed on Art. 6(1);
   `residency` and `retention` from the reference ontology. Every value says what it
   means, because a list of values without that is a dropdown rather than an ontology.
+- **The demo estate carries classification**, in both tiers: the datasets emit the
+  standard `tags` facet, so the record reports categories, data subjects, residency and
+  retention. Two datasets carry none on purpose — a vendor feed and a table nobody got
+  round to — because an estate where everything is classified is not an estate anybody
+  has, and the record has to say which is which.
 - **The two items nothing emits can be asserted**: Art. 30(1)(d) categories of
   recipients and (g) security measures, in a `jobs:` rule or in the declared-activities
   document. Every format marks them as declared, and asserting them does not withhold

@@ -279,7 +279,10 @@ class Scope(scope.Scope):
             named = {letter: what for letter, what in ART30_ITEMS}
             out.append(
                 (
-                    "classification",
+                    # Thirteen characters is what the label column holds, and
+                    # `reported` says what the counts are: how many activities
+                    # have a value, not how many could have one.
+                    "reported",
                     ", ".join(
                         f"({letter}) {named[letter]}: {count} of {self.activities} "
                         f"{words.plural(self.activities, 'activity', 'activities')}"

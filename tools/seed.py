@@ -90,6 +90,91 @@ PROCESSING_SCHEMA = (
 #: Columns, so the datasets in the record look like tables somebody would have
 #: to answer for. The personal data is the point: an Art. 30 record about
 #: `table_a` and `table_b` demonstrates nothing.
+#: What each dataset holds, as the standard `tags` dataset facet carries it:
+#: `(key, value)`, or `(key, value, column)` where the tag is about one field.
+#: This is where an Art. 30 record's categories, data subjects, residency and
+#: retention come from — see cordata-tech/qedro#13.
+#:
+#: **Both estates carry it.** Classification is declared by whoever owns the
+#: dataset and travels with the data; whether the *pipeline* declares its
+#: purpose is a separate decision, and that difference is the one the two
+#: estates exist to show.
+#:
+#: Two datasets are deliberately absent. `fraud_raw.device_events` is a vendor
+#: feed nobody classified and `crm_raw.accounts` was never got round to, which
+#: is what an estate looks like — and the record says *nobody said* rather than
+#: *no personal data*.
+CLASSIFICATION: dict[str, tuple[tuple[str, ...], ...]] = {
+    "fraud_raw.transactions": (
+        ("data_category", "financial"),
+        ("data_category", "identification", "iban"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "7y"),
+    ),
+    "fraud_curated.transactions_scored": (
+        ("data_category", "financial"),
+        ("data_category", "behavioural"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "7y"),
+    ),
+    "fraud_curated.scores_checked": (
+        ("data_category", "behavioural"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "1y"),
+    ),
+    "crm_raw.contacts": (
+        ("data_category", "identification"),
+        ("data_category", "contact", "email"),
+        ("subject_type", "prospect"),
+        ("residency", "eu"),
+        ("retention", "7y"),
+    ),
+    "crm_raw.consent_events": (
+        ("data_category", "identification"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "7y"),
+    ),
+    "crm_curated.customers": (
+        ("data_category", "identification"),
+        ("data_category", "contact", "email"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "7y"),
+    ),
+    "crm_curated.consent_state": (
+        ("data_category", "identification"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "7y"),
+    ),
+    "billing_raw.orders": (
+        ("data_category", "financial"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "10y"),
+    ),
+    "billing_curated.invoices": (
+        ("data_category", "financial"),
+        ("subject_type", "customer"),
+        # Ten years, which is what commercial and tax retention duties commonly
+        # require in DACH jurisdictions — a period somebody declared, never a
+        # measurement of how long the table was in fact kept.
+        ("residency", "eu"),
+        ("retention", "10y"),
+    ),
+    "billing_curated.dunning_cases": (
+        ("data_category", "financial"),
+        ("data_category", "behavioural"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "10y"),
+    ),
+}
+
 SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "fraud_raw.transactions": [
         ("tx_id", "VARCHAR"),
@@ -411,6 +496,23 @@ def _dataset(name: str, producer: str, assertions: dict | None = None) -> dict:
             {"fields": [{"name": f, "type": t} for f, t in SCHEMAS[name]]},
             producer,
             f"{FACET_SPEC}/SchemaDatasetFacet.json#/$defs/SchemaDatasetFacet",
+        )
+    if name in CLASSIFICATION:
+        # The standard `tags` dataset facet, spec 1-0-0. `source` says what put
+        # the tag there, as `pipeline-runtime` does with the LF-tags it resolves
+        # (cordata-tech/pipeline-runtime#3); `field` names a column when the tag
+        # is about one rather than about the whole dataset.
+        facets["tags"] = _facet(
+            {
+                "tags": [
+                    {"key": tag[0], "value": tag[1], "source": "CATALOG"}
+                    | ({"field": tag[2]} if len(tag) > 2 else {})
+                    for tag in CLASSIFICATION[name]
+                ]
+            },
+            producer,
+            "https://openlineage.io/spec/facets/1-0-0/TagsDatasetFacet.json"
+            "#/$defs/TagsDatasetFacet",
         )
     out: dict = {"namespace": "warehouse", "name": name, "facets": facets}
     if assertions is not None:

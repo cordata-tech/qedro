@@ -45,6 +45,43 @@ class TestTheEstateIsThere:
                 "spark.ndjson",
             ]
 
+    def test_classification_is_in_both_estates(self):
+        # It is declared by whoever owns the dataset, not by the pipeline, so
+        # tagging a table must not become a second difference between the
+        # tiers — the one difference is whether the pipelines declare.
+        def tags(directory: Path) -> set[tuple[str, str, str]]:
+            out = set()
+            for path in sorted(directory.glob("*.ndjson")):
+                for line in path.read_text(encoding="utf-8").splitlines():
+                    event = json.loads(line)
+                    for dataset in (event.get("inputs") or []) + (event.get("outputs") or []):
+                        for tag in (dataset.get("facets", {}).get("tags", {}) or {}).get(
+                            "tags", []
+                        ):
+                            out.add((dataset["name"], tag["key"], tag["value"]))
+            return out
+
+        declared = tags(DEMO / "lineage-declared")
+        assert declared == tags(DEMO / "lineage")
+        assert ("fraud_raw.transactions", "subject_type", "customer") in declared
+
+    def test_some_datasets_carry_no_classification_on_purpose(self):
+        # An estate where every table is classified is not an estate anybody
+        # has, and *nobody said* has to be visible in the record.
+        from qedro import config, vocabulary
+        from qedro.ropa import build
+        from qedro.sources import read_dir
+
+        record = build(
+            read_dir(DEMO / "lineage-declared")[0],
+            config=config.parse((DEMO / "qedro.yaml").read_text()),
+            vocabulary=vocabulary.load(),
+        )
+        assert record.scope.unclassified == (
+            "warehouse/crm_raw.accounts",
+            "warehouse/fraud_raw.device_events",
+        )
+
     def test_the_two_estates_differ_only_in_the_declaration(self):
         # The comparison in demo/README.md is only worth anything if the
         # estates are otherwise identical. Same jobs, same runs, same times.

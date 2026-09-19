@@ -790,7 +790,7 @@ class TestClassificationFromTheTagsFacet:
         assert out.scope.activities == 2
         assert out.scope.reported == {"c": 1}
         lines = dict(out.scope.lines())
-        assert "1 of 2 activities" in lines["classification"]
+        assert "1 of 2 activities" in lines["reported"]
         assert lines["unclassified"].startswith("1 of 2 datasets carry no classification")
 
 
