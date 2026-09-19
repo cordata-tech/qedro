@@ -18,6 +18,12 @@ before `1.0`.
   as a context manager or a command wrapper. Nothing in this package changes;
   `docs/art30-facet.md` and `docs/compatibility.md` stop describing that emitter as
   wanted and start linking to it.
+- **Its events are a fixture here too**, `tests/fixtures/art30-emit-0.1.0`, because a
+  `works` row has to be named by a test in this repository rather than in the thing it
+  is a claim about. It is the first capture carrying a `tags` dataset facet from a
+  real emitter — no integration sends one as of 1.53.0 — so the Art. 30(1)(c)–(f)
+  path is no longer exercised against generated events alone, and the first where one
+  activity classifies what it reads and what it writes differently.
 - **`1 of 1 dataset carries no classification`**, not `carry`. The noun agrees with the
   total and the verb with the count, and the Flink capture — one job, one dataset — is
   where that showed.
