@@ -139,6 +139,28 @@ vocabularies, the published facet schema and the release workflow. A pull reques
 touching one of those is worth a sentence in its description about which
 commitment it keeps.
 
+## Adding a source, an emitter or a catalog
+
+`docs/compatibility.md` says what Qedro runs against, and a row may only say `works`
+when a test names it. That rule decides when something new gets built, so the queue in
+[#5](https://github.com/cordata-tech/qedro/issues/5) is **pulled by evidence rather
+than pushed by a release**: an integration nobody runs cannot carry a test that would
+fail if it broke, and shipping one on a schedule produces exactly the row that page
+exists to prevent.
+
+**Emitters are the exception, and captures are welcome any time.** Nothing in the code
+changes for a new emitter — anything emitting OpenLineage is readable. The work is
+capturing a real run, which costs about an hour in Docker, needs no account, and finds
+defects: the dbt, Airflow and Spark captures in `tests/fixtures/` produced five issues
+and four bugs between them. A capture with a README naming the emitter version and the
+command that produced it is a good first contribution, and it is what lets a row say
+`works`.
+
+**Sources and catalog adapters are pulled by somebody who runs the thing**, because
+each brings a credential and a dependency. If you have events in a bucket or on a
+topic, or classification in a catalog that no emitter is tagging datasets from, say so
+on #5 — that is the trigger, and the design decisions waiting for it are written there.
+
 ## Releases
 
 `0.x` versions may change interfaces between releases, and the changelog says
