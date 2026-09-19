@@ -70,13 +70,21 @@ that disagree with the spec. Bad records are skipped and *counted*, and the coun
 reaches `ReadReport` → the summary line → the completeness decision. That chain is
 relied on downstream, not diagnostics.
 
-## The other two repos
+## The other three repos
 
 | Repo | Answers | Binding |
 |---|---|---|
 | [`pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime) | *What should this pipeline do, and did it?* | AWS-native by design. LF-tags are correct there |
 | `catalog-mcp` (planned, platform#26) | *What is the policy on this dataset, right now?* | AWS-native by design |
+| [`art30-emit`](https://github.com/cordata-tech/art30-emit) (private, #27) | *How does code nobody instruments say why it processes?* | **must not be** — it implements the published facet |
 | **this** | *What happened, and can I prove it to an auditor?* | **must not be** |
+
+`art30-emit` is a separate repository because **Qedro is read-only by construction**
+and an emitter's whole job is to write events to a backend Qedro also reads. In one
+package that claim needs a paragraph of explanation; in two it stays a property of
+the code. It is also the second implementation of the facet schema, which is the
+usual bar for proposing a facet upstream — so it emits `processing` and the standard
+`TagsDatasetFacet`, never a private spelling of either.
 
 `pipeline_runtime.descriptor` is the shared governance vocabulary. The Art. 30 facet
 schema is **generated from `Processing`, never written beside it** — the published

@@ -47,7 +47,7 @@ the output.
 | Flink | **works** — Flink 1.20.5 with `openlineage-flink` 1.53.0, `tests/fixtures/flink-1.20.5` | no | not in the capture | not in the capture |
 | Dagster, Trino | **candidate** | no | — | — |
 | `pipeline-runtime` | **works** — `tests/fixtures/events`, read in `tests/test_cli.py::test_clean_read_earns_the_tombstone` | **works** — the only emitter that does; `tests/test_ropa.py::test_the_processing_facet_is_read_from_the_pipeline_runtime_capture` | **works** — `tests/test_quality.py::test_assertions_are_read_from_the_pipeline_runtime_capture` | no |
-| Anything else, via a few lines | — | **candidate** | — | — |
+| Anything else, wrapped in [`art30-emit`](https://github.com/cordata-tech/art30-emit) | — | **works** — a context manager or a command wrapper; its `examples/nightly-export` is read back by this tool into a record that earns the mark | — | — |
 
 Each `works` in the first column is a real capture from that emitter, run through
 all three projections, with `tests/test_ropa.py::TestOrchestrationParents` naming the
@@ -61,8 +61,13 @@ carries it. What the captures found is tracked in #8, #9, #22 and #23.
 The gap in the second column is the product problem rather than a coverage
 problem. A pipeline emitting lineage but no `processing` facet produces a record
 that falls back on the mapping file, which is assertion rather than evidence.
-Closing it needs a small vendor-neutral emitter for the published facet, not
-another source adapter.
+Closing it needs a small vendor-neutral emitter for the published facet rather than
+another source adapter, which is what
+[`art30-emit`](https://github.com/cordata-tech/art30-emit) is: `declare(...)` around
+the work, or `art30-emit … -- <command>` around a command that cannot be imported.
+It reaches the systems no integration can — a Lambda, a stored procedure, a cron
+job — rather than adding the facet to dbt or Airflow, where it would have to come
+from those projects.
 
 ## Facets read
 

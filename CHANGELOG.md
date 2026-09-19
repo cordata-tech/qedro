@@ -12,6 +12,12 @@ before `1.0`.
   with `openlineage-flink` 1.53.0 and a Kafka topic on each side. The capture names its
   source on `START` and no datasets at all on the terminal event, which is what an
   activity's datasets being gathered across a job's events now has a fixture for.
+- **The `processing` facet has a second implementation**, and the docs point at it:
+  [`art30-emit`](https://github.com/cordata-tech/art30-emit) puts the facet on the
+  wire from code no integration reaches — a Lambda, a stored procedure, a cron job —
+  as a context manager or a command wrapper. Nothing in this package changes;
+  `docs/art30-facet.md` and `docs/compatibility.md` stop describing that emitter as
+  wanted and start linking to it.
 - **`1 of 1 dataset carries no classification`**, not `carry`. The noun agrees with the
   total and the verb with the count, and the Flink capture — one job, one dataset — is
   where that showed.

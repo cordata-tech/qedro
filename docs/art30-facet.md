@@ -7,6 +7,8 @@ needs and lineage does not otherwise contain: **why** the processing happens, an
 - Schema: [`schemas/openlineage-art30-processing-facet.json`](../schemas/openlineage-art30-processing-facet.json)
 - Facet key: `processing`, in `job.facets`
 - Applies to: any OpenLineage emitter, not only Cordata's
+- Ready-made emitter: [`pip install art30-emit`](https://github.com/cordata-tech/art30-emit),
+  for code no integration reaches
 
 ## Why it has to exist
 
@@ -109,12 +111,37 @@ job = Job(
 )
 ```
 
-A reference emitter that already does this is
-[`cordata-tech/pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime),
-which reads the two fields off a pipeline descriptor and attaches them to every event
-the run produces. Its `_schemaURL` points at its own repository rather than at this
-one — the two documents are separate projections of the same model, not one document
-with two homes.
+### Two implementations you can read
+
+[`cordata-tech/pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime)
+reads the two fields off a pipeline descriptor and attaches them to every event the
+run produces. Its `_schemaURL` points at its own repository rather than at this one —
+the two documents are separate projections of the same model, not one document with
+two homes.
+
+[`cordata-tech/art30-emit`](https://github.com/cordata-tech/art30-emit) is the code
+above, packaged, for the case where the code doing the processing is not a pipeline
+anybody instruments — a Lambda, a stored procedure behind a shell script, a cron job:
+
+```python
+from art30_emit import declare
+
+with declare(
+    "acme.fraud/transactions-scored-daily",
+    purpose="fraud-detection",
+    legal_basis="legitimate-interest",
+    reads=["warehouse/fraud_raw.transactions"],
+    writes=["warehouse/fraud_curated.scores"],
+):
+    score_transactions()
+```
+
+It emits `START` and `COMPLETE` around the work, `FAIL` with the standard
+`errorMessage` facet when the work raises, and the classification tags as the standard
+`TagsDatasetFacet` — so Art. 30(1)(c), (e) and (f) can be evidenced for those systems
+too. `art30-emit … -- <command>` does the same around a command that cannot be
+imported. It decides nothing: no compiled list of purposes, no legal basis inferred
+from a job name, and a field nobody declared is absent rather than empty.
 
 ## What Qedro does with it
 
@@ -127,7 +154,9 @@ is the signal; see the [README](../README.md#the-name).
 
 Emitters that produce OpenLineage but not this facet — dbt, Airflow, Spark, Flink,
 Dagster — work either way. Richer facets produce a richer record, and the difference
-is visible in the output rather than hidden in it.
+is visible in the output rather than hidden in it. Where the processing is a job one
+of those runs, the facet has to come from that project; where it is a script nobody
+orchestrates, `art30-emit` is the shorter route to the same record.
 
 ## Where the schema comes from
 
