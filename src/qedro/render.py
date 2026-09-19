@@ -159,7 +159,8 @@ def _classification_text(activity: Activity, *, width: int) -> list[str]:
         n = len(activity.unclassified)
         out += _detail(
             "unclassified",
-            f"{n} of {total} {words.plural(total, 'dataset carries', 'datasets carry')} "
+            f"{n} of {total} {words.plural(total, 'dataset', 'datasets')} "
+            f"{words.plural(n, 'carries', 'carry')} "
             f"no classification: {', '.join(activity.unclassified)}",
             width=width,
         )

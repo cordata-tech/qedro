@@ -296,8 +296,10 @@ class Scope(scope.Scope):
                 (
                     "unclassified",
                     (
-                        f"{n} of {self.datasets} {words.plural(self.datasets, 'dataset', 'datasets')} "
-                        f"carry no classification the record can use: "
+                        f"{n} of {self.datasets} "
+                        f"{words.plural(self.datasets, 'dataset', 'datasets')} "
+                        f"{words.plural(n, 'carries', 'carry')} "
+                        f"no classification the record can use: "
                         f"{', '.join(self.unclassified)}"
                     ),
                 )

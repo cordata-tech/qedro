@@ -6,6 +6,16 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **Real Flink lineage as a test fixture**, `tests/fixtures/flink-1.20.5`: Flink 1.20.5
+  with `openlineage-flink` 1.53.0 and a Kafka topic on each side. The capture names its
+  source on `START` and no datasets at all on the terminal event, which is what an
+  activity's datasets being gathered across a job's events now has a fixture for.
+- **`1 of 1 dataset carries no classification`**, not `carry`. The noun agrees with the
+  total and the verb with the count, and the Flink capture — one job, one dataset — is
+  where that showed.
+
 ## 0.3.0 — 2026-09-19
 
 The rest of Art. 30(1) that evidence can supply (#13). The record stops covering two

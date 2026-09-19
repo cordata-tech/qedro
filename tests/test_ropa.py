@@ -445,6 +445,17 @@ class TestOrchestrationParents:
         ]
         assert out.scope.jobs == 4
 
+    def test_against_real_flink_lineage(self):
+        # Flink names its datasets on START and none on the terminal event, so a
+        # projection reading only the last event would report a job that touched
+        # nothing. There is no parent run facet either: one job, not a hierarchy.
+        out = real("flink-1.20.5")
+        [activity] = out.activities
+        assert activity.key == "flink_jobs/orders-scored"
+        assert activity.inputs == ("kafka://kafka:9092/orders",)
+        assert out.scope.parents == ()
+        assert out.scope.read_only == ("flink_jobs/orders-scored",)
+
     def test_against_real_spark_lineage(self):
         # The application run is the parent of every action. Spark's own
         # schema-reading actions are still listed; that is #22, and this test
@@ -791,7 +802,8 @@ class TestClassificationFromTheTagsFacet:
         assert out.scope.reported == {"c": 1}
         lines = dict(out.scope.lines())
         assert "1 of 2 activities" in lines["reported"]
-        assert lines["unclassified"].startswith("1 of 2 datasets carry no classification")
+        # The noun agrees with the total and the verb with the count.
+        assert lines["unclassified"].startswith("1 of 2 datasets carries no classification")
 
 
 class TestTheItemsNothingCanEvidence:
