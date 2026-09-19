@@ -658,6 +658,70 @@ def test_the_processing_facet_is_read_from_the_pipeline_runtime_capture():
     assert any(a.evidenced for a in out.activities)
 
 
+class TestTheArt30EmitCapture:
+    """Real events from `cordata-tech/art30-emit`, the second implementation.
+
+    `docs/compatibility.md` says that emitter works, and #5's rule is that a
+    `works` row is named by a test here — not by one in the emitter's own
+    repository, which could go green on an output this tool cannot read.
+
+    It is also the only capture where classification arrives on the wire: the
+    four other emitters send no `tags` dataset facet at all as of 1.53.0, so
+    until this fixture the Art. 30(1)(c)–(f) path was exercised against
+    generated events only.
+    """
+
+    def test_the_purpose_and_basis_are_evidence(self):
+        [activity] = real("art30-emit-0.1.0").activities
+        assert activity.key == "acme.crm/nightly-consent-export"
+        assert activity.purpose.value == "customer-administration"
+        assert activity.purpose.provenance is Provenance.FACET
+        assert activity.legal_basis.provenance is Provenance.FACET
+        assert activity.evidenced
+
+    def test_the_classification_comes_off_the_wire(self):
+        [activity] = real("art30-emit-0.1.0").activities
+        assert {(c.key, c.value) for c in activity.classification} == {
+            ("data_category", "contact"),
+            ("subject_type", "customer"),
+            ("residency", "eu"),
+            ("retention", "P7Y"),
+            ("retention", "P30D"),
+        }
+        assert all(c.provenance is Provenance.FACET for c in activity.classification)
+        assert not any(c.unrecognised for c in activity.classification)
+
+    def test_which_side_carried_a_value_is_kept(self):
+        # The export keeps the source table for seven years and the file it
+        # writes for thirty days. *Reads* and *writes* being different claims
+        # about one activity is the reason #13 kept the sides apart, and this is
+        # the first capture where an emitter actually exercises it.
+        retention = {
+            c.value: (c.reads, c.writes)
+            for c in real("art30-emit-0.1.0").activities[0].classification
+            if c.key == "retention"
+        }
+        assert retention["P7Y"] == (("warehouse/crm_curated.consent_state",), ())
+        assert retention["P30D"] == ((), ("s3://acme-exports/consent/nightly.csv",))
+
+    def test_a_uri_dataset_survives_the_round_trip(self):
+        # The emitter splits `s3://acme-exports/consent/nightly.csv` at the
+        # authority rather than the first slash. A reader that disagreed would
+        # print a dataset nobody can find again.
+        [activity] = real("art30-emit-0.1.0").activities
+        assert activity.inputs == ("warehouse/crm_curated.consent_state",)
+        assert activity.outputs == ("s3://acme-exports/consent/nightly.csv",)
+
+    def test_nothing_is_left_unclassified(self):
+        out = real("art30-emit-0.1.0")
+        assert out.scope.unclassified == ()
+        assert out.scope.datasets == 2
+
+    def test_a_record_built_from_it_earns_the_mark(self):
+        # The claim the emitter's README makes, asserted from this side of it.
+        assert real("art30-emit-0.1.0").complete
+
+
 def tagged(name="scored", reads=(), writes=(), run="r1", facet=EVIDENCED):
     """An event whose datasets carry the standard `tags` dataset facet.
 

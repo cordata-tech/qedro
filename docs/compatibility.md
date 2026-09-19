@@ -47,11 +47,11 @@ the output.
 | Flink | **works** — Flink 1.20.5 with `openlineage-flink` 1.53.0, `tests/fixtures/flink-1.20.5` | no | not in the capture | not in the capture |
 | Dagster, Trino | **candidate** | no | — | — |
 | `pipeline-runtime` | **works** — `tests/fixtures/events`, read in `tests/test_cli.py::test_clean_read_earns_the_tombstone` | **works** — the only emitter that does; `tests/test_ropa.py::test_the_processing_facet_is_read_from_the_pipeline_runtime_capture` | **works** — `tests/test_quality.py::test_assertions_are_read_from_the_pipeline_runtime_capture` | no |
-| Anything else, wrapped in [`art30-emit`](https://github.com/cordata-tech/art30-emit) | — | **works** — a context manager or a command wrapper; its `examples/nightly-export` is read back by this tool into a record that earns the mark | — | — |
+| Anything else, wrapped in [`art30-emit`](https://github.com/cordata-tech/art30-emit) | **works** — art30-emit 0.1.0, `tests/fixtures/art30-emit-0.1.0` | **works** — the second emitter that sends it, and the only one that is not `pipeline-runtime`; `tests/test_ropa.py::TestTheArt30EmitCapture` | — | — |
 
 Each `works` in the first column is a real capture from that emitter, run through
-all three projections, with `tests/test_ropa.py::TestOrchestrationParents` naming the
-fixture. Flink is the narrowest of them: its integration reads lineage from a short
+all three projections, with `tests/test_ropa.py::TestOrchestrationParents` naming
+four of the fixtures and `TestTheArt30EmitCapture` the fifth. Flink is the narrowest of them: its integration reads lineage from a short
 list of connectors rather than from the job's plan, so a Flink job using anything else
 emits a job with no datasets, and the capture also names the source only on `START`. The other columns say what the capture contained rather than what the
 integration can emit in some configuration: until 2026-09-17 they said *emits it*
@@ -77,7 +77,7 @@ from those projects.
 | `dataQualityAssertions` (standard, input facet) | **works** | `quality` — `tests/test_quality.py::TestReadingTheFacet`, and against the real `pipeline-runtime` capture |
 | `sourceCodeLocation` (standard, job facet) | **works** | `provenance` — `tests/test_provenance.py::TestWalkingBackwards::test_the_code_and_commit_come_from_the_standard_facet`. None of the three real captures carries it |
 | `schema` (standard, dataset facet) | **works** | dataset columns — `tests/test_events.py::TestDatasets::test_field_names_come_from_the_schema_facet` |
-| `tags` (standard, dataset facet) | **works** — read, including `field`-level tags — `tests/test_events.py::TestTheTagsDatasetFacet` | classification, for the Art. 30(1)(c)–(f) fields in v0.3 (#13). The spec has it and both clients generate it — `openlineage-python` ships `TagsDatasetFacet` from 1.52.0 — but **no integration emits it** as of 1.53.0: the repository builds job and run tag facets only, and none of the three real captures carries one. What is missing is an emitter, and `pipeline-runtime` is the first (`cordata-tech/pipeline-runtime#3`) |
+| `tags` (standard, dataset facet) | **works** — read, including `field`-level tags — `tests/test_events.py::TestTheTagsDatasetFacet`, and from a real capture in `tests/test_ropa.py::TestTheArt30EmitCapture` | classification, for the Art. 30(1)(c)–(f) fields (#13). The spec has it and both clients generate it — `openlineage-python` ships `TagsDatasetFacet` from 1.52.0 — but **no integration emits it** as of 1.53.0: the repository builds job and run tag facets only, and none of the four captures from dbt, Airflow, Spark or Flink carries one. What is missing is an emitter: `art30-emit` sends it today, and `pipeline-runtime` is adding it (`cordata-tech/pipeline-runtime#3`) |
 | `parent` (standard, run facet) | **works** | `ropa`, to leave orchestration parents out of the activities — `tests/test_ropa.py::TestOrchestrationParents`, against real dbt, Airflow and Spark lineage: the dbt invocation, the Airflow DAG run, and the Spark application run |
 | A model version per run | **works** for the standard `tags` run facet (key `model_version`) and `cordata_provenance.step_params.*.model_version` | `ropa --view deployer` — `tests/test_deployer.py`, including against the captured `pipeline-runtime` event in `docs/evidence/`. There is **no standard facet** for this, which is why the list is short and documented |
 | A signed-commit report | **works** for `cordata_provenance`, `gitProvenance`, `provenance` | `provenance` — `tests/test_provenance.py::TestEverySignatureSpellingIsRead`. There is **no standard spelling** for this, which is why the common answer is *unknown* |
