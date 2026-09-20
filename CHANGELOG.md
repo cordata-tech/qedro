@@ -32,6 +32,24 @@ before `1.0`.
   evidence lost: emitted facet → mapping file` is a finding rather than a silence.
   All four formats, and a JSON consumer gets `loses_evidence` stated rather than
   having to know how `Provenance` is ordered.
+- **`qedro diff register.yaml record.json`** — where a hand-maintained register and
+  the generated record disagree (#24). Same command, dispatching on what each side
+  is, and the order of the two paths does not matter. The finding says which side
+  rests on evidence: a register contradicting an emitted facet is a different problem
+  from two hand-maintained documents disagreeing, and a register naming something the
+  record has no field for is a third. Every finding carries the **owner** of the
+  register row, which is what turns a list of disagreements into a list of things
+  somebody can do.
+- **A field the register does not carry is not a disagreement.** A register is a
+  partial document by nature — it says nothing about residency or retention — and
+  reporting everything it omits would bury the findings that matter. Nor is a
+  difference of provenance between the two sides: a register is declared and a record
+  evidenced by construction, so that is what the two documents *are*.
+- **`demo/register.yaml`**, four rows and four ways a register drifts: one still true,
+  one whose purpose the pipeline changed, one for a pipeline that no longer exists,
+  and one naming a model version no run ever reported. `docs/evidence/register-drift.md`
+  is that comparison captured, and CI now checks both transcripts against what the
+  commands actually print.
 - **A comparison prints no mark, in any format.** ∎ means *this artefact stands on
   its own evidence*, and a comparison's evidence is two documents it cannot verify.
   It reports each record's own verdict instead — so a field that was wrong in both

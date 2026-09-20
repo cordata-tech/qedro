@@ -31,11 +31,12 @@ than a second comparison.
 from __future__ import annotations
 
 import json as _json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import document
 from .errors import ConfigError, UsageError
 from .ropa import Provenance
 from .scope import Scope
@@ -88,6 +89,15 @@ class Entry:
     kind: str
     single: dict[str, Value] = field(default_factory=dict)
     sets: dict[str, tuple[Value, ...]] = field(default_factory=dict)
+    #: Who maintains this entry, where anybody does. Never compared — an owner is
+    #: not an Art. 30 field — but carried, because *who to ask* is the actionable
+    #: half of a drift finding. See cordata-tech/qedro#24.
+    owner: str = ""
+    #: What the entry was written under, where that differs from its key. A
+    #: register row headed `fraud-scoring` naming `job: acme.fraud/scored` is
+    #: found by the job and has to be reported by the name its owner will
+    #: recognise.
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -100,6 +110,10 @@ class Change:
     field: str = ""
     before: Value | None = None
     after: Value | None = None
+    #: Who maintains the register row this finding is about, where there is one.
+    #: A drift report whose reader has to go and ask around for that has done
+    #: half the job. See cordata-tech/qedro#24.
+    owner: str = ""
 
     @property
     def regression(self) -> bool:
@@ -143,6 +157,16 @@ class Side:
         """What has to match on the other side for a comparison to mean anything."""
         return f"{self.projection}/{self.view}" if self.view else self.projection
 
+    @property
+    def is_register(self) -> bool:
+        """A hand-maintained register rather than something this tool produced.
+
+        It has no window, no source it was read from and no verdict — which is
+        not a gap in it but what it *is*, and every renderer has to say so rather
+        than print a blank where a record's coverage would be.
+        """
+        return self.projection == "register"
+
     def window(self) -> str:
         if self.since is None and self.until is None:
             return "all events available from the source"
@@ -172,8 +196,35 @@ class Comparability:
     def like_for_like(self) -> bool:
         return self.same_source and self.overlap == "identical"
 
+    #: A register was never read from a source and covers no window, so the
+    #: questions below have no answers for it rather than unflattering ones.
+    drift: bool = False
+    #: Whether the register names a model the record has no field for. True only
+    #: against the Art. 30 view, which does not carry one; the deployer view does.
+    models_unseen: bool = False
+
     def cautions(self) -> tuple[str, ...]:
         """What a reader has to hold in mind while reading every finding below."""
+        if self.drift:
+            out = [
+                (
+                    "a register covers whatever its owners wrote down, and the record covers "
+                    f"{self.sources[1] or 'what it was read from'} over the window below — so "
+                    "an entry on one side only may be a gap in either, and the record's window "
+                    "is what decides which"
+                )
+            ]
+            if self.models_unseen:
+                # Otherwise every AI register row reads as drift against an
+                # Art. 30 record, which has no field for a model at all — true,
+                # and not what the reader is being asked to look at.
+                out.append(
+                    "the register names a model for one or more entries, and the Art. 30 "
+                    "record has no field for one — compare against `--view deployer`, which "
+                    "reports the model version each run declared, before treating these as "
+                    "drift"
+                )
+            return tuple(out)
         out = []
         if not self.same_source:
             out.append(
@@ -229,9 +280,39 @@ class CompareScope(Scope):
         return self.rows
 
 
+@dataclass(frozen=True)
+class DriftScope(CompareScope):
+    """A register checked against a record covers different ground on each side.
+
+    The record's standing sentence will not do here: one of these documents was
+    not produced by a run at all, and saying it was would misdescribe the half of
+    the comparison a reader is most likely to act on.
+    """
+
+    OUT_OF_VIEW = (
+        "This comparison covers the entries in the register and the activities in the "
+        "record. It verifies neither: a register is what its owners wrote down, and the "
+        "record covers only pipelines that emitted lineage within its window — so an "
+        "entry on one side and not the other is a question rather than an answer."
+    )
+
+
 def _scope(before: Side, after: Side, comparability: Comparability) -> CompareScope:
     starts = [s for s in (before.since, after.since) if s is not None]
     ends = [s for s in (before.until, after.until) if s is not None]
+    if comparability.drift:
+        # Not *before* and *after*: one side is a spreadsheet and the other is a
+        # record built from events, and which is which is the finding.
+        return DriftScope(
+            source=f"{before.origin} against {after.origin}",
+            since=after.since,
+            until=after.until,
+            rows=(
+                ("register", f"{before.origin} — {len(before.entries)} entries"),
+                ("record", f"{after.origin} — {after.window()}"),
+                ("read from", after.source or "unknown"),
+            ),
+        )
     rows = [
         ("before", f"{before.origin} — {before.window()}"),
         ("after", f"{after.origin} — {after.window()}"),
@@ -257,7 +338,7 @@ def _scope(before: Side, after: Side, comparability: Comparability) -> CompareSc
 
 @dataclass(frozen=True)
 class Comparison:
-    """Two records, and what differs. Rendered like any other artefact."""
+    """Two documents, and what differs. Rendered like any other artefact."""
 
     before: Side
     after: Side
@@ -265,6 +346,27 @@ class Comparison:
     changes: tuple[Change, ...]
     unchanged: int
     scope: CompareScope
+
+    @property
+    def drift(self) -> bool:
+        """Whether this is a register checked against a record, not two records.
+
+        The two read differently and a renderer must not print one as the other.
+        *Before* and *after* are symmetric — the same kind of document at two
+        times — while *the register says X, the record says Y* is a disagreement
+        between a spreadsheet and evidence, and which side is which is the
+        finding. See cordata-tech/qedro#24.
+        """
+        return self.before.is_register or self.after.is_register
+
+    @property
+    def register(self) -> Side:
+        """The register side. Only meaningful when `drift` is true."""
+        return self.before if self.before.is_register else self.after
+
+    @property
+    def record(self) -> Side:
+        return self.after if self.before.is_register else self.before
 
     @property
     def regressions(self) -> tuple[Change, ...]:
@@ -284,21 +386,70 @@ class Comparison:
 
 
 def read(path: str) -> Side:
-    """One JSON document from disk, as a comparable side.
+    """One document from disk, as a comparable side.
 
-    What the user named is what raises: a file that is not JSON, or is JSON that
-    is not one of this tool's documents, is a `ConfigError` with the path in it.
+    A record this tool wrote, or a hand-maintained register (#24). Which it is
+    comes from the document rather than from its suffix: a register may be
+    written as JSON and a record always is, so the suffix says nothing while the
+    top-level key says it plainly.
+
+    What the user named is what raises: a file that will not parse, or parses
+    into something that is neither, is a `ConfigError` with the path in it.
     Evidence is skipped and counted; a document somebody passed by name is not
     evidence.
     """
+    from . import register as register_module
+
     text = Path(path).read_text(encoding="utf-8")
+    suffix = Path(path).suffix.lower()
+
+    if suffix in {".yaml", ".yml", ".toml"}:
+        parsed = document.parse(text, origin=path)
+        if parsed is None:
+            raise ConfigError(f"{path} is empty")
+        if not register_module.looks_like(parsed):
+            raise ConfigError(
+                f"{path} has no `register:` mapping, and a record this tool wrote is JSON"
+            )
+        return register_side(register_module.parse(parsed, origin=path), origin=path)
+
     try:
         raw = _json.loads(text)
     except _json.JSONDecodeError as error:
         raise ConfigError(f"{path} is not JSON: {error}") from error
     if not isinstance(raw, dict):
         raise ConfigError(f"{path} is JSON but not a qedro record")
+    if register_module.looks_like(raw):
+        return register_side(register_module.parse(raw, origin=path), origin=path)
     return side(raw, origin=path)
+
+
+def register_side(entries: dict[str, Any], *, origin: str) -> Side:
+    """A register as a comparable side.
+
+    Every field a register lacks is left at the value that says *it has none*
+    rather than one that says *it claims none*: it was never read from a source,
+    covers no window, and has no verdict to report. A renderer that printed a
+    blank window here would be inventing coverage.
+    """
+    from . import register as register_module
+
+    return Side(
+        origin=origin,
+        schema=0,
+        projection="register",
+        view="",
+        version="",
+        source="",
+        since=None,
+        until=None,
+        complete=False,
+        reasons=(),
+        entries={
+            key: register_module.entry(key, fields, origin=origin)
+            for key, fields in entries.items()
+        },
+    )
 
 
 def side(raw: dict[str, Any], *, origin: str) -> Side:
@@ -461,6 +612,25 @@ def _overlap(before: Side, after: Side) -> str:
 
 
 def _comparability(before: Side, after: Side) -> Comparability:
+    if before.is_register or after.is_register:
+        register = before if before.is_register else after
+        record = after if before.is_register else before
+        # A register has no source, window, schema or version of its own. Those
+        # fields carry the record's on both sides rather than the word
+        # "unknown" twice, which would read as two documents nobody can place.
+        return Comparability(
+            same_source=False,
+            sources=(register.origin, record.source or "unknown"),
+            overlap="unknown",
+            same_length=None,
+            schemas=(record.schema, record.schema),
+            versions=(record.version or "unknown", record.version or "unknown"),
+            drift=True,
+            models_unseen=(
+                record.view != "deployer"
+                and any("model" in e.single for e in register.entries.values())
+            ),
+        )
     lengths = [(s.until - s.since) if s.since and s.until else None for s in (before, after)]
     return Comparability(
         same_source=before.source == after.source,
@@ -480,26 +650,40 @@ def compare(before: Side, after: Side) -> Comparison:
     refused, because those comparisons are the ones a reader most often needs and
     the caution is what makes them safe.
     """
-    if before.shape != after.shape:
+    if before.is_register and after.is_register:
+        raise UsageError(
+            f"{before.origin} and {after.origin} are both registers. Two hand-maintained "
+            "documents can disagree with each other all day; what makes a disagreement "
+            "worth reporting is that one side is a record built from evidence"
+        )
+    records = [s for s in (before, after) if not s.is_register]
+    if len(records) == 2 and before.shape != after.shape:
         raise UsageError(
             f"these are different documents: {before.origin} is {before.shape} and "
             f"{after.origin} is {after.shape}. A comparison between them would have "
             "nothing to say that was true of either"
         )
-    if before.projection not in COMPARABLE:
-        raise UsageError(
-            f"{before.projection or 'this'} records cannot be compared yet — only "
-            "`ropa`. See cordata-tech/qedro#14"
-        )
-    for s in (before, after):
+    for s in records:
+        if s.projection not in COMPARABLE:
+            raise UsageError(
+                f"{s.projection or 'this'} records cannot be compared yet — only "
+                "`ropa`. See cordata-tech/qedro#14"
+            )
         if s.schema not in KNOWN_SCHEMAS:
             raise UsageError(
                 f"{s.origin} is schema {s.schema}, which this build of qedro "
                 f"({', '.join(str(k) for k in sorted(KNOWN_SCHEMAS))}) cannot read"
             )
 
+    # The register is always the `before` side, whichever way round it was
+    # typed. Nothing downstream then has to ask which argument it was: *in the
+    # register only* is `removed` and *in the record only* is `added`, and a
+    # reader who typed the two paths the other way round gets the same answer.
+    if after.is_register:
+        before, after = after, before
+
     comparability = _comparability(before, after)
-    changes, unchanged = _changes(before, after)
+    changes, unchanged = _changes(before, after, drift=comparability.drift)
     return Comparison(
         before=before,
         after=after,
@@ -510,7 +694,7 @@ def compare(before: Side, after: Side) -> Comparison:
     )
 
 
-def _changes(before: Side, after: Side) -> tuple[tuple[Change, ...], int]:
+def _changes(before: Side, after: Side, *, drift: bool = False) -> tuple[tuple[Change, ...], int]:
     changes: list[Change] = []
     unchanged = 0
     for key in sorted(set(before.entries) | set(after.entries)):
@@ -519,22 +703,38 @@ def _changes(before: Side, after: Side) -> tuple[tuple[Change, ...], int]:
             changes.append(Change(entry=key, kind=ADDED, entry_kind=new.kind))
             continue
         if new is None and old is not None:
-            changes.append(Change(entry=key, kind=REMOVED, entry_kind=old.kind))
+            changes.append(Change(entry=key, kind=REMOVED, entry_kind=old.kind, owner=old.owner))
             continue
         assert old is not None and new is not None
-        found = _entry_changes(old, new)
+        found = _entry_changes(old, new, drift=drift)
         changes.extend(found)
         if not found:
             unchanged += 1
     return tuple(changes), unchanged
 
 
-def _entry_changes(old: Entry, new: Entry) -> list[Change]:
+def _entry_changes(old: Entry, new: Entry, *, drift: bool = False) -> list[Change]:
+    """What differs between one entry and its counterpart.
+
+    **A field the register does not carry is not compared.** A register is a
+    partial document by nature — it says nothing about residency, retention or
+    which datasets a job wrote — and reporting every field it was never meant to
+    carry would bury the four findings that matter under a page of things nobody
+    claimed. Where the register *does* carry a field and the record has nothing,
+    that is a finding, because then somebody claimed something.
+    """
     out: list[Change] = []
     for name in sorted(set(old.single) | set(new.single)):
         before = old.single.get(name, Value(""))
         after = new.single.get(name, Value(""))
         if before == after:
+            continue
+        if drift and not before.value:
+            continue
+        if drift and before.value == after.value:
+            # They agree. A register is declared and a record is evidenced by
+            # definition, so a difference of provenance between them is what the
+            # two documents *are* rather than something either got wrong.
             continue
         if before.value != after.value:
             kind = CHANGED
@@ -556,6 +756,8 @@ def _entry_changes(old: Entry, new: Entry) -> list[Change]:
     for name in sorted(set(old.sets) | set(new.sets)):
         was = {v.value: v for v in old.sets.get(name, ())}
         now = {v.value: v for v in new.sets.get(name, ())}
+        if drift and not was:
+            continue
         for value in sorted(set(now) - set(was)):
             out.append(
                 Change(
@@ -567,7 +769,10 @@ def _entry_changes(old: Entry, new: Entry) -> list[Change]:
                 Change(entry=old.key, kind=LOST, entry_kind=old.kind, field=name, before=was[value])
             )
         for value in sorted(set(was) & set(now)):
-            if was[value].provenance == now[value].provenance:
+            # Same reason as above: in a drift comparison the two sides rest on
+            # different things by construction, and a dataset both documents
+            # name is agreement.
+            if drift or was[value].provenance == now[value].provenance:
                 continue
             kind = (
                 REGRESSED if RANK[now[value].provenance] > RANK[was[value].provenance] else REPAIRED
@@ -582,4 +787,8 @@ def _entry_changes(old: Entry, new: Entry) -> list[Change]:
                     after=now[value],
                 )
             )
+    # Stamped once rather than threaded through five constructors: the owner is
+    # a property of the register row, so it is the same on every finding about it.
+    if old.owner:
+        return [replace(change, owner=old.owner) for change in out]
     return out

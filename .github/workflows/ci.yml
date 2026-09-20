@@ -57,6 +57,15 @@ jobs:
       - name: The demo estate matches its generator
         run: python tools/seed.py --check
 
+      # The transcripts in docs/evidence are quoted by published posts and by
+      # platform#48. Both went stale once before this ran here: the tests assert
+      # the facts in them but not the wording, so a change to how the output
+      # reads leaves each file describing a commit it no longer matches.
+      - name: The captured transcripts match what the commands print
+        run: |
+          python tools/capture_deployer_view.py --check
+          python tools/capture_register_drift.py --check
+
       - name: The wordmark is a valid SVG and carries a text alternative
         run: |
           python -c "

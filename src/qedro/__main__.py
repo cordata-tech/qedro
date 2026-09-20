@@ -300,8 +300,16 @@ def _diff(before: str, after: str, *, fmt: str | None, out: str | None) -> int:
     fmt = _format(fmt, out)
     renderer = render.FORMATS[fmt]
     if _deliver(renderer(comparison), out):
-        losses = len(comparison.regressions)
-        print(f"  wrote {out}  {len(comparison.changes)} findings, {losses} a loss of evidence")
+        found = len(comparison.changes)
+        # A register disagreeing with a record has lost nothing — the two were
+        # never in step — so the second half of this line has to say something
+        # else or it would be telling the reader the wrong thing about it.
+        detail = (
+            f"{comparison.unchanged} entries agree throughout"
+            if comparison.drift
+            else f"{len(comparison.regressions)} a loss of evidence"
+        )
+        print(f"  wrote {out}  {found} findings, {detail}")
     # Cautions reach stderr even when the file was written, for the same reason
     # withheld reasons do: the run succeeded and the answer is still conditional.
     for caution in comparison.comparability.cautions():
@@ -493,10 +501,14 @@ def main(argv: list[str] | None = None) -> int:
             "Compares two JSON records this tool produced — a before and an after that "
             "a team keeps in Git, with no database between them. Reports a purpose that "
             "stopped being emitted even when its value did not change, and prints no "
-            "mark of its own: it cannot verify either document."
+            "mark of its own: it cannot verify either document. Hand one side a "
+            "register instead (a YAML, JSON or TOML document with a `register:` mapping) "
+            "and it reports where that register and the record disagree."
         ),
     )
-    diff_cmd.add_argument("before", help="the earlier record, as JSON")
+    diff_cmd.add_argument(
+        "before", help="the earlier record as JSON, or a register (#24) in either position"
+    )
     diff_cmd.add_argument("after", help="the later record, as JSON")
     diff_cmd.add_argument(
         "--format",

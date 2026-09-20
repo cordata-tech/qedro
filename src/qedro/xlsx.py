@@ -364,6 +364,22 @@ COMPARISON_COLUMNS: tuple[tuple[str, int], ...] = (
     ("Loses evidence", 16),
 )
 
+#: The same table when one side is a register. `Owner` is what turns a list of
+#: disagreements into a list of things somebody can go and do, and it is the
+#: column a reader sorts by. There is no `Register source` column: everything a
+#: register says is an assertion, so a column repeating that on every row would
+#: carry nothing.
+DRIFT_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("Activity", 38),
+    ("Owner", 28),
+    ("Field", 22),
+    ("Finding", 14),
+    ("Register says", 28),
+    ("Record says", 28),
+    ("Record's source", 20),
+    ("What it means", 44),
+)
+
 
 def comparison_workbook(comparison: Any) -> bytes:
     """A comparison as ``.xlsx`` bytes.
@@ -375,7 +391,11 @@ def comparison_workbook(comparison: Any) -> bytes:
     """
     book = Workbook()
     book.properties.creator = "qedro"
-    book.properties.title = "What changed between two records"
+    book.properties.title = (
+        "Where the register and the record disagree"
+        if comparison.drift
+        else "What changed between two records"
+    )
     book.properties.description = comparison.scope.OUT_OF_VIEW
 
     _findings(book.active, comparison)
@@ -387,19 +407,26 @@ def comparison_workbook(comparison: Any) -> bytes:
 
 
 def _findings(sheet: Any, comparison: Any) -> None:
+    drift = comparison.drift
     sheet.title = "Findings"
 
-    sheet["A1"] = "What changed between two records"
+    sheet["A1"] = (
+        "Where the register and the record disagree"
+        if drift
+        else "What changed between two records"
+    )
     sheet["A1"].font = TITLE
-    sheet["A2"] = f"{comparison.before.origin} → {comparison.after.origin}"
+    joiner = " against " if drift else " → "
+    sheet["A2"] = f"{comparison.before.origin}{joiner}{comparison.after.origin}"
 
     row = 3
     for caution in comparison.comparability.cautions():
         sheet.cell(row=row, column=1, value=f"! {caution}").font = STRONG
         row += 1
 
+    columns = DRIFT_COLUMNS if drift else COMPARISON_COLUMNS
     header = row + 1
-    for index, (heading, width) in enumerate(COMPARISON_COLUMNS, start=1):
+    for index, (heading, width) in enumerate(columns, start=1):
         cell = sheet.cell(row=header, column=index, value=heading)
         cell.font = HEADING
         cell.fill = HEADING_FILL
@@ -407,23 +434,57 @@ def _findings(sheet: Any, comparison: Any) -> None:
     sheet.freeze_panes = sheet.cell(row=header + 1, column=1)
 
     for offset, change in enumerate(comparison.changes, start=header + 1):
-        values = (
-            change.entry,
-            change.label,
-            change.kind,
-            _comparison_value(change.before),
-            _comparison_source(change.before),
-            _comparison_value(change.after),
-            _comparison_source(change.after),
-            # A word rather than TRUE, because this column is the one a reader
-            # filters on and `TRUE` says nothing about what was lost.
-            "evidence lost" if change.regression else "",
-        )
+        values = _drift_row(change) if drift else _comparison_row(change)
         for index, value in enumerate(values, start=1):
             cell = sheet.cell(row=offset, column=index, value=value)
             cell.alignment = TOP
-            if change.regression:
+            # No tint on a drift row. Every one of them is a disagreement, and a
+            # sheet tinted end to end says nothing that the rows do not.
+            if change.regression and not drift:
                 cell.fill = ASSERTED_FILL
+
+
+def _comparison_row(change: Any) -> tuple[str, ...]:
+    return (
+        change.entry,
+        change.label,
+        change.kind,
+        _comparison_value(change.before),
+        _comparison_source(change.before),
+        _comparison_value(change.after),
+        _comparison_source(change.after),
+        # A word rather than TRUE, because this column is the one a reader
+        # filters on and `TRUE` says nothing about what was lost.
+        "evidence lost" if change.regression else "",
+    )
+
+
+def _drift_row(change: Any) -> tuple[str, ...]:
+    """One disagreement between a register and a record.
+
+    What the record's side rests on gets its own column: a register contradicting
+    an emitted facet is a different problem from two hand-maintained documents
+    disagreeing, and a reader deciding which rows to chase needs to sort by it.
+    """
+    from .render import DISAGREEMENT
+
+    means = ""
+    if change.before is not None and change.after is not None:
+        means = DISAGREEMENT.get(str(change.after.provenance), "")
+    elif change.kind == "removed":
+        means = "no pipeline emitted it in the window"
+    elif change.kind == "added":
+        means = "nobody wrote this one down"
+    return (
+        change.entry,
+        change.owner,
+        change.label,
+        change.kind,
+        _comparison_value(change.before),
+        _comparison_value(change.after),
+        _comparison_source(change.after),
+        means,
+    )
 
 
 def _comparison_value(value: Any) -> str:
@@ -464,8 +525,22 @@ def _comparison_scope(sheet: Any, comparison: Any) -> None:
     # Each record's verdict, never this comparison's. A workbook that printed a
     # mark here would be claiming something no comparison can earn.
     row += 2
-    sheet.cell(row=row, column=1, value="The records' own verdicts").font = STRONG
-    for label, side in (("before", comparison.before), ("after", comparison.after)):
+    heading = "The documents' own verdicts" if comparison.drift else "The records' own verdicts"
+    sheet.cell(row=row, column=1, value=heading).font = STRONG
+    sides = (
+        (("register", comparison.register), ("record", comparison.record))
+        if comparison.drift
+        else (("before", comparison.before), ("after", comparison.after))
+    )
+    for label, side in sides:
+        if side.is_register:
+            sheet.cell(
+                row=row,
+                column=2,
+                value=f"{label}: a hand-maintained document; it makes no claim",
+            )
+            row += 1
+            continue
         if side.complete:
             sheet.cell(row=row, column=2, value=f"{label}: stands on its own evidence")
             row += 1

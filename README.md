@@ -370,6 +370,32 @@ own verdict and none of its own. It also says first whether the two records cove
 same source and window, because a difference in coverage otherwise reads as a
 difference in processing.
 
+### Or a register against the record
+
+Hand one side a register instead of a record and the same command reports where the
+two disagree — which is the AI governance programme's spreadsheet checked against what
+the pipelines actually did:
+
+```console
+$ qedro diff demo/register.yaml record.json
+
+  acme.crm/customers-curated  — crm-enrichment, Customer Platform, S. Okafor
+    purpose       register: marketing · record: customer-administration
+                  the register contradicts the evidence
+```
+
+Which side rests on evidence is the finding. A register contradicting an emitted facet
+means the register is wrong or the pipeline is doing something nobody wrote down; two
+hand-maintained documents disagreeing means somebody has to decide; and a register
+naming a model no run ever reported is a claim nothing can check. Every finding carries
+the owner of the register row, because a report whose reader has to go and ask around
+for that has done half the job.
+
+A field the register does not carry is not a disagreement — a register is a partial
+document by nature, and reporting everything it omits would bury the findings that
+matter. See [`docs/evidence/register-drift.md`](docs/evidence/register-drift.md) for
+the whole thing, captured from a real run.
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and

@@ -1158,7 +1158,43 @@ BINARY = frozenset({"xlsx"})
 # as a mark this artefact earned.
 
 
-def _finding(change) -> tuple[str, str]:
+def _words_for(value) -> str:
+    """A provenance as somebody who did not write this tool would say it."""
+    from .xlsx import SOURCE
+
+    return SOURCE.get(str(value.provenance), str(value.provenance))
+
+
+#: How a disagreement between a register and a record reads, by what the
+#: **record's** side rests on. Which side is evidence is the whole finding: a
+#: register contradicting an emitted facet is a different problem from two
+#: hand-maintained documents disagreeing, and the second is not even obviously
+#: the register's fault. See cordata-tech/qedro#24.
+DISAGREEMENT = {
+    "facet": "the register contradicts the evidence",
+    "mapping": "two assertions disagree — neither side is evidence",
+    "declared": "two assertions disagree — both are hand-maintained",
+    "absent": "the register claims something the record cannot see",
+}
+
+
+def _drift_finding(change) -> tuple[str, str]:
+    """One finding where a register is being checked against a record."""
+    if change.kind == compare_module.ADDED:
+        return "in the record and not in the register", "nobody wrote this one down"
+    if change.kind == compare_module.REMOVED:
+        return "in the register and not in the record", "no pipeline emitted it in the window"
+    if change.kind == compare_module.GAINED:
+        return f"record: {change.after}", "the register does not list it"
+    if change.kind == compare_module.LOST:
+        return f"register: {change.before}", "the record does not report it"
+
+    assert change.before is not None and change.after is not None
+    said = f"register: {change.before} · record: {change.after}"
+    return said, DISAGREEMENT.get(str(change.after.provenance), "")
+
+
+def _finding(change, *, drift: bool = False) -> tuple[str, str]:
     """One finding as *what it says* and *what it costs*, for text and markdown.
 
     The second half is the part that does not exist in either document alone: the
@@ -1166,11 +1202,10 @@ def _finding(change) -> tuple[str, str]:
     spelled out rather than left to a reader who would have to know the ordering
     of `Provenance` to see it.
     """
-    from .xlsx import SOURCE
+    if drift:
+        return _drift_finding(change)
 
-    def words_for(value) -> str:
-        return SOURCE.get(str(value.provenance), str(value.provenance))
-
+    words_for = _words_for
     kind = change.kind
     if kind == compare_module.ADDED:
         return "added to the record", ""
@@ -1193,10 +1228,26 @@ def _finding(change) -> tuple[str, str]:
     return said, ""
 
 
+def _sides(comparison) -> tuple[tuple[str, object], ...]:
+    """The two documents and what to call each one.
+
+    *Before* and *after* are symmetric; *register* and *record* are not, and a
+    reader acting on a drift finding needs to know which side is a spreadsheet.
+    """
+    if comparison.drift:
+        return (("register", comparison.register), ("record", comparison.record))
+    return (("before", comparison.before), ("after", comparison.after))
+
+
 def _verdicts_text(comparison, *, width: int) -> list[str]:
     """Each record's verdict, in words. Never this comparison's, which has none."""
-    out = ["  The records' own verdicts"]
-    for label, side in (("before", comparison.before), ("after", comparison.after)):
+    out = ["  The documents' own verdicts" if comparison.drift else "  The records' own verdicts"]
+    for label, side in _sides(comparison):
+        if side.is_register:
+            # Not a blank and not a verdict: a register has none to report, and
+            # printing one either way would misdescribe what it is.
+            out += _detail(label, "a hand-maintained document; it makes no claim", width=width)
+            continue
         if side.complete:
             out += _detail(label, "stands on its own evidence", width=width)
             continue
@@ -1206,9 +1257,31 @@ def _verdicts_text(comparison, *, width: int) -> list[str]:
     return out
 
 
+def _attribution(comparison, key: str) -> str:
+    """The register row behind these findings: what it is called, and whose it is.
+
+    A drift report whose reader has to go and ask around for who maintains the
+    row has done half the job — and the row's own name is how its owner will
+    recognise it, which is not always the job key the finding is filed under.
+    """
+    if not comparison.drift:
+        return ""
+    entry = comparison.register.entries.get(key)
+    if entry is None:
+        return "  — not in the register"
+    parts = [p for p in (entry.name if entry.name != key else "", entry.owner) if p]
+    return f"  — {', '.join(parts)}" if parts else ""
+
+
+def _comparison_title(comparison) -> str:
+    if comparison.drift:
+        return "Where the register and the record disagree"
+    return "What changed between two records"
+
+
 @text.register
 def _(record: compare_module.Comparison, *, symbol: bool = True, width: int = 88) -> str:
-    out = ["What changed between two records", ""]
+    out = [_comparison_title(record), ""]
 
     for caution in record.comparability.cautions():
         for line in _wrap(f"! {caution}", width - 2):
@@ -1217,12 +1290,12 @@ def _(record: compare_module.Comparison, *, symbol: bool = True, width: int = 88
         out.append("")
 
     if not record.changes:
-        out.append("  nothing in the Art. 30 content of these two records differs")
+        out.append(f"  {_nothing_found(record)}")
         out.append("")
     for entry, changes in record.by_entry():
-        out.append(f"  {entry}")
+        out.append(f"  {entry}{_attribution(record, entry)}")
         for change in changes:
-            said, cost = _finding(change)
+            said, cost = _finding(change, drift=record.drift)
             out += _detail(change.label or change.kind, said, width=width)
             if cost:
                 out.append(f"{INDENT}{cost}")
@@ -1236,37 +1309,69 @@ def _(record: compare_module.Comparison, *, symbol: bool = True, width: int = 88
     return "\n".join(out) + "\n"
 
 
+def _nothing_found(comparison) -> str:
+    """What to print when the two documents agree on everything compared."""
+    if comparison.drift:
+        return "every entry in the register agrees with the record"
+    return "nothing in the Art. 30 content of these two records differs"
+
+
 def _findings_summary(comparison) -> str:
     """The count, and how much of it is a loss of evidence rather than a change."""
-    unchanged = f"{comparison.unchanged} unchanged"
+    unchanged = f"{comparison.unchanged} agree throughout"
     if not comparison.changes:
         return f"no findings; {unchanged}"
     entries = len(comparison.by_entry())
-    return (
+    across = (
         f"{words.count(len(comparison.changes), 'finding')} across "
-        f"{entries} {words.plural(entries, 'activity', 'activities')}, "
-        f"{len(comparison.regressions)} of them a loss of evidence; {unchanged}"
+        f"{entries} {words.plural(entries, 'entry', 'entries')}"
+    )
+    if comparison.drift:
+        # A register disagreeing with a record is not a loss of evidence —
+        # nothing was lost, the two were never in step. What a reader needs
+        # counted is how many entries only one side knows about.
+        only_register = sum(1 for c in comparison.changes if c.kind == compare_module.REMOVED)
+        only_record = sum(1 for c in comparison.changes if c.kind == compare_module.ADDED)
+        return (
+            f"{across}; {only_register} in the register only, "
+            f"{only_record} in the record only; {unchanged}"
+        )
+    return (
+        f"{across}, "
+        f"{len(comparison.regressions)} of them a loss of evidence; "
+        f"{comparison.unchanged} unchanged"
     )
 
 
 @markdown.register
 def _(record: compare_module.Comparison) -> str:
-    out = ["# What changed between two records", ""]
+    out = [f"# {_comparison_title(record)}", ""]
     for caution in record.comparability.cautions():
         out.append(f"> **Caution.** {caution}")
         out.append("")
 
     if record.changes:
-        out.append("| Activity | Field | What changed | Evidence |")
-        out.append("|---|---|---|---|")
+        if record.drift:
+            # The owner is a column rather than a footnote: it is what turns a
+            # list of disagreements into a list of things somebody can go and do.
+            out.append("| Activity | Owner | Field | Register vs record | What it means |")
+            out.append("|---|---|---|---|---|")
+        else:
+            out.append("| Activity | Field | What changed | Evidence |")
+            out.append("|---|---|---|---|")
         for entry, changes in record.by_entry():
             for index, change in enumerate(changes):
-                said, cost = _finding(change)
+                said, cost = _finding(change, drift=record.drift)
                 label = change.label or change.kind
-                out.append(f"| {entry if index == 0 else ''} | {label} | {said} | {cost or '—'} |")
+                first = entry if index == 0 else ""
+                if record.drift:
+                    owner = change.owner if index == 0 else ""
+                    out.append(f"| {first} | {owner} | {label} | {said} | {cost or '—'} |")
+                else:
+                    out.append(f"| {first} | {label} | {said} | {cost or '—'} |")
         out.append("")
     else:
-        out.append("Nothing in the Art. 30 content of these two records differs.")
+        out.append(_nothing_found(record)[0].upper() + _nothing_found(record)[1:] + ".")
         out.append("")
 
     summary = _findings_summary(record)
@@ -1274,9 +1379,13 @@ def _(record: compare_module.Comparison) -> str:
     out.append("")
     out += _scope_markdown(record.scope, title="Scope of this comparison")
     out.append("")
-    out.append("## The records' own verdicts")
+    out.append(f"## The {'documents' if record.drift else 'records'} own verdicts")
     out.append("")
-    for label, side in (("Before", record.before), ("After", record.after)):
+    for name, side in _sides(record):
+        label = name[0].upper() + name[1:]
+        if side.is_register:
+            out.append(f"- **{label}** is a hand-maintained document; it makes no claim.")
+            continue
         if side.complete:
             out.append(f"- **{label}** stands on its own evidence.")
             continue
@@ -1299,24 +1408,30 @@ def _(record: compare_module.Comparison, *, indent: int = 2) -> str:
             "versions": list(record.comparability.versions),
             "cautions": list(record.comparability.cautions()),
         },
+        "drift": record.drift,
         "findings": [
             {
                 "activity": change.entry,
                 "entry": change.entry_kind,
                 "change": change.kind,
                 "field": change.label,
-                "before": _finding_side(change.before),
-                "after": _finding_side(change.after),
+                # `before`/`after` are the register and the record when one side
+                # is a register, and the keys say which rather than leaving a
+                # consumer to infer it from `drift`.
+                ("register" if record.drift else "before"): _finding_side(change.before),
+                ("record" if record.drift else "after"): _finding_side(change.after),
                 # Stated rather than left to a consumer that would have to know
-                # the ordering of `Provenance` to work it out.
-                "loses_evidence": change.regression,
+                # the ordering of `Provenance` to work it out. Never true of a
+                # drift finding: nothing was lost, the two were never in step.
+                "loses_evidence": False if record.drift else change.regression,
+                **({"owner": change.owner} if change.owner else {}),
             }
             for change in record.changes
         ],
         "unchanged": record.unchanged,
         "scope": {
-            "before": _side_json(record.before),
-            "after": _side_json(record.after),
+            ("register" if record.drift else "before"): _side_json(record.before),
+            ("record" if record.drift else "after"): _side_json(record.after),
             "window": {
                 "since": _when(record.scope.since),
                 "until": _when(record.scope.until),

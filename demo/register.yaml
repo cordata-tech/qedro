@@ -1,0 +1,72 @@
+# The demo company's AI register, maintained by hand in a separate programme.
+#
+# Written eighteen months ago by the AI governance workstream, because the Art. 30
+# record "did not cover AI". Nobody maintains both documents, which is the claim
+# cordata-tech/platform#48 makes and this file exists to make checkable:
+#
+#   qedro ropa demo/lineage-declared --config demo/qedro.yaml --format json --out record.json
+#   qedro diff demo/register.yaml record.json
+#
+# Every value here is an assertion by whoever owns the row. Nothing in it is
+# evidence, which is the whole asymmetry: where this disagrees with a purpose the
+# pipeline emitted, the register is wrong or the pipeline is doing something
+# nobody wrote down — and where it disagrees with the mapping file, two people
+# with spreadsheets disagree and somebody has to decide.
+#
+# Four rows and four ways a register drifts. None of them is invented for the
+# demo; each is a thing that happens to a document nobody runs.
+
+register:
+  # 1. Still true. Kept so the output has agreement in it as well as drift —
+  #    a report where everything disagrees teaches a reader to distrust the tool
+  #    rather than the register.
+  fraud-scoring:
+    job: acme.fraud/transactions-scored-daily
+    owner: Risk Analytics, T. Brandt
+    purpose: fraud-detection
+    legal_basis: legitimate-interest
+    inputs:
+      - warehouse/fraud_raw.transactions
+      - warehouse/fraud_raw.device_events
+    note: >-
+      Reviewed at the last DPIA and unchanged since. Names no model on purpose:
+      the Art. 30 record has no field for one, so a model here would report as
+      drift against every row rather than only where there is any.
+
+  # 2. The pipeline's emitted purpose moved and the register did not. The record
+  #    has `customer-administration` from the facet; this row still says what the
+  #    pipeline did before it was rewritten.
+  crm-enrichment:
+    job: acme.crm/customers-curated
+    owner: Customer Platform, S. Okafor
+    purpose: marketing
+    legal_basis: consent
+    inputs:
+      - warehouse/crm_raw.customers
+    note: >-
+      Added when the pipeline fed the campaign tool. It no longer does, and this
+      row was never revisited.
+
+  # 3. A row for a pipeline that no longer exists. The team rewrote the weekly
+  #    dunning job into the invoicing one and the register kept both.
+  dunning-legacy:
+    job: acme.billing/dunning-legacy
+    owner: Billing, unassigned since 2025-11
+    purpose: debt-collection
+    legal_basis: legitimate-interest
+    note: Superseded, allegedly. Nobody closed the row.
+
+  # 4. A model version nobody can evidence. The register names a model; no run
+  #    reported one, so the record cannot see it at all. This is the row
+  #    platform#48's refusal (b) is about.
+  churn-prediction:
+    job: acme.crm/consent-sync
+    owner: Data Science, M. Lindqvist
+    purpose: churn-prediction
+    legal_basis: legitimate-interest
+    model: churn-v4
+    inputs:
+      - warehouse/crm_curated.customers
+    note: >-
+      Listed as in production. The pipeline it names emits lineage and has never
+      reported a model version.
