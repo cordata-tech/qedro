@@ -6,24 +6,16 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.4.0 — 2026-09-20
 
-- **Real Flink lineage as a test fixture**, `tests/fixtures/flink-1.20.5`: Flink 1.20.5
-  with `openlineage-flink` 1.53.0 and a Kafka topic on each side. The capture names its
-  source on `START` and no datasets at all on the terminal event, which is what an
-  activity's datasets being gathered across a job's events now has a fixture for.
-- **The `processing` facet has a second implementation**, and the docs point at it:
-  [`art30-emit`](https://github.com/cordata-tech/art30-emit) puts the facet on the
-  wire from code no integration reaches — a Lambda, a stored procedure, a cron job —
-  as a context manager or a command wrapper. Nothing in this package changes;
-  `docs/art30-facet.md` and `docs/compatibility.md` stop describing that emitter as
-  wanted and start linking to it.
-- **Its events are a fixture here too**, `tests/fixtures/art30-emit-0.1.0`, because a
-  `works` row has to be named by a test in this repository rather than in the thing it
-  is a claim about. It is the first capture carrying a `tags` dataset facet from a
-  real emitter — no integration sends one as of 1.53.0 — so the Art. 30(1)(c)–(f)
-  path is no longer exercised against generated events alone, and the first where one
-  activity classifies what it reads and what it writes differently.
+Comparing two records without a database (#14), and checking a hand-maintained
+register against one (#24). Both answer a question no single record can: a purpose
+emitted by the pipeline and the same purpose typed into a mapping file are the same
+string and a different claim, and only a comparison can say which one you have now.
+
+Neither prints the mark. ∎ means *this artefact stands on its own evidence*, and a
+comparison's evidence is two documents it cannot verify.
+
 - **`qedro diff before.json after.json`** — what changed between two records, with no
   database between them (#14). The finding it exists for is invisible in either
   document alone: a purpose emitted by the pipeline and the same purpose read from
@@ -40,16 +32,6 @@ before `1.0`.
   record has no field for is a third. Every finding carries the **owner** of the
   register row, which is what turns a list of disagreements into a list of things
   somebody can do.
-- **A field the register does not carry is not a disagreement.** A register is a
-  partial document by nature — it says nothing about residency or retention — and
-  reporting everything it omits would bury the findings that matter. Nor is a
-  difference of provenance between the two sides: a register is declared and a record
-  evidenced by construction, so that is what the two documents *are*.
-- **`demo/register.yaml`**, four rows and four ways a register drifts: one still true,
-  one whose purpose the pipeline changed, one for a pipeline that no longer exists,
-  and one naming a model version no run ever reported. `docs/evidence/register-drift.md`
-  is that comparison captured, and CI now checks both transcripts against what the
-  commands actually print.
 - **A comparison prints no mark, in any format.** ∎ means *this artefact stands on
   its own evidence*, and a comparison's evidence is two documents it cannot verify.
   It reports each record's own verdict instead — so a field that was wrong in both
@@ -59,6 +41,11 @@ before `1.0`.
   refusal is two documents of different shape. A difference in coverage is reported
   as a difference in coverage and never attributed to a particular finding, because
   that attribution would be a guess wearing a caveat.
+- **A field the register does not carry is not a disagreement.** A register is a
+  partial document by nature — it says nothing about residency or retention — and
+  reporting everything it omits would bury the findings that matter. Nor is a
+  difference of provenance between the two sides: a register is declared and a record
+  evidenced by construction, so that is what the two documents *are*.
 - **Art. 30 content is compared, volume is not.** Runs, events and timestamps differ
   between any two windows, and reporting them would bury the findings that matter
   under arithmetic — both numbers are already in the two scope statements.
@@ -72,6 +59,27 @@ before `1.0`.
   change in processing.
 - **Breaking, deployer view JSON:** the top-level `"view": "deployer"` key is now
   `qedro.view`. Which document this is has one spelling rather than two.
+- **`demo/register.yaml`**, four rows and four ways a register drifts: one still true,
+  one whose purpose the pipeline changed, one for a pipeline that no longer exists,
+  and one naming a model version no run ever reported. `docs/evidence/register-drift.md`
+  is that comparison captured, and CI now checks both transcripts against what the
+  commands actually print.
+- **Real Flink lineage as a test fixture**, `tests/fixtures/flink-1.20.5`: Flink 1.20.5
+  with `openlineage-flink` 1.53.0 and a Kafka topic on each side. The capture names its
+  source on `START` and no datasets at all on the terminal event, which is what an
+  activity's datasets being gathered across a job's events now has a fixture for.
+- **The `processing` facet has a second implementation**, and the docs point at it:
+  [`art30-emit`](https://github.com/cordata-tech/art30-emit) puts the facet on the
+  wire from code no integration reaches — a Lambda, a stored procedure, a cron job —
+  as a context manager or a command wrapper. Nothing in this package changes;
+  `docs/art30-facet.md` and `docs/compatibility.md` stop describing that emitter as
+  wanted and start linking to it.
+- **Its events are a fixture here too**, `tests/fixtures/art30-emit-0.1.0`, because a
+  `works` row has to be named by a test in this repository rather than in the thing it
+  is a claim about. It is the first capture carrying a `tags` dataset facet from a
+  real emitter — no integration sends one as of 1.53.0 — so the Art. 30(1)(c)–(f)
+  path is no longer exercised against generated events alone, and the first where one
+  activity classifies what it reads and what it writes differently.
 - **`1 of 1 dataset carries no classification`**, not `carry`. The noun agrees with the
   total and the verb with the count, and the Flink capture — one job, one dataset — is
   where that showed.
