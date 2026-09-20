@@ -79,10 +79,9 @@ def capture() -> str | int:
     parts = [PREAMBLE.format(version=__version__, commit=commit, python=python)]
 
     with tempfile.TemporaryDirectory() as tmp:
-        # The record goes to a temporary file, and the transcript names the path
-        # a reader would use rather than the one the capture used. That is the
-        # one edit made to the output, and it is made to the *command line*
-        # rather than to anything the command printed.
+        # The record goes to a temporary file rather than into the repository:
+        # it is generated, and a committed copy would be one more thing to keep
+        # in step with the demo estate.
         record = Path(tmp) / "record.json"
         built = _run(
             [
@@ -98,14 +97,23 @@ def capture() -> str | int:
             cwd=REPO,
         )
         if built.returncode != 0:
-            print(f"building the record exited {built.returncode}:\n{built.stderr}", file=sys.stderr)
+            print(
+                f"building the record exited {built.returncode}:\n{built.stderr}", file=sys.stderr
+            )
             return 1
+
+        # The temporary path is in what both commands printed as well as in the
+        # command lines, and it changes on every run — so it is rewritten to the
+        # path a reader would use, and `--check` compares like with like.
+        def readable(text: str) -> str:
+            return text.replace(str(record), "record.json")
+
         parts.append(
             "## 1. The record the register is checked against\n\n"
             "```console\n"
             "$ qedro ropa demo/lineage-declared --config demo/qedro.yaml "
             "--format json --out record.json\n"
-            f"{built.stdout}```\n"
+            f"{readable(built.stdout)}```\n"
         )
 
         result = _run(["diff", "demo/register.yaml", str(record)], cwd=REPO)
@@ -116,7 +124,7 @@ def capture() -> str | int:
             "## 2. Where the register and the record disagree\n\n"
             "```console\n"
             "$ qedro diff demo/register.yaml record.json\n"
-            f"{result.stdout.replace(str(record), 'record.json')}```\n"
+            f"{readable(result.stdout)}```\n"
             f"\nExit status {result.returncode}. The cautions above also go to standard error, "
             "so a run whose output was redirected to a file still shows them.\n"
         )
