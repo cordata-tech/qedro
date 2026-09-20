@@ -163,6 +163,19 @@ def main() -> int:
                 f"{TARGET.relative_to(REPO)} is out of date: the command prints something else now",
                 file=sys.stderr,
             )
+            # What differs, not only that something does. A check that fails on
+            # a machine the author is not sitting at is worth little if finding
+            # out why means reproducing that machine.
+            import difflib
+
+            for line in difflib.unified_diff(
+                _body(current).splitlines(),
+                _body(captured).splitlines(),
+                fromfile="committed",
+                tofile="this run",
+                lineterm="",
+            ):
+                print(line, file=sys.stderr)
             return 1
         print(f"{TARGET.relative_to(REPO)} matches what the command prints")
         return 0
