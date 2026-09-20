@@ -637,6 +637,18 @@ class TestTheDiffCommand:
         # The value did not change, which is the whole point of the finding.
         assert "fraud-detection, unchanged" in out
 
+    def test_it_reports_the_provenance_moving_from_mapping_to_facet(self, tmp_path, capsys):
+        # The other direction, and the one #14's acceptance names: pipelines
+        # that started declaring. A repair is reported as plainly as a loss, or
+        # the command would only ever be read as bad news.
+        declared, mapped = self.records(tmp_path)
+        capsys.readouterr()
+
+        assert main(["diff", mapped, declared]) == 0
+        out = capsys.readouterr().out
+        assert "now evidenced: mapping file → emitted facet" in out
+        assert "0 of them a loss of evidence" in out
+
     def test_it_prints_no_mark_of_its_own(self, tmp_path, capsys):
         before, _ = self.records(tmp_path)
         capsys.readouterr()
