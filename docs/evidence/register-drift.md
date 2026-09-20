@@ -1,6 +1,6 @@
 # Transcript: `qedro diff` against a hand-maintained register
 
-Captured by script from qedro 0.3.0, at commit `8f1f968` with a clean working tree,
+Captured by script from qedro 0.3.0, at commit `aea509e` with a clean working tree,
 on Python 3.12.13. The output below is what the command printed, unedited. Run the same
 commands from the repository root to reproduce it.
 
@@ -87,8 +87,7 @@ Where the register and the record disagree
     source        demo/register.yaml against record.json
     window        2026-07-06T01:30:00+00:00 to 2026-07-26T04:06:00+00:00
     register      demo/register.yaml — 4 entries
-    record        record.json
-                  — 2026-07-06T01:30:00+00:00 to 2026-07-26T04:06:00+00:00
+    record        record.json — 2026-07-06T01:30:00+00:00 to 2026-07-26T04:06:00+00:00
     read from     demo/lineage-declared
     This comparison covers the entries in the register and the activities in the record.
     It verifies neither: a register is what its owners wrote down, and the record covers
