@@ -343,6 +343,33 @@ run facet with key `model_version`, and `step_params.<step>.model_version` in th
 `cordata_provenance` facet that `pipeline-runtime` emits. An activity whose runs report
 neither is counted in the scope statement and not listed.
 
+## What changed between two records
+
+`qedro diff` compares two JSON records with no database between them — a before and
+an after a team keeps in Git. It reports the thing neither document shows on its own:
+
+```console
+$ qedro ropa ./lineage --format json --out records/2026-06.json
+$ qedro ropa ./lineage --format json --out records/2026-09.json
+$ qedro diff records/2026-06.json records/2026-09.json
+
+  acme.fraud/transactions-scored-daily
+    purpose       fraud-detection, unchanged
+                  evidence lost: emitted facet → mapping file
+```
+
+The purpose is the same string in both records, and the claim behind it is not. A
+pipeline that stopped emitting its facet still produces a record that reads
+correctly; what it stopped producing is the evidence, and only a comparison can say
+so. The same applies to a cloud migration: the before-and-after legal asks for is two
+records, not a database.
+
+**A diff prints no mark.** ∎ means *this artefact stands on its own evidence*, and a
+comparison's evidence is two documents it cannot verify — so it reports each record's
+own verdict and none of its own. It also says first whether the two records cover the
+same source and window, because a difference in coverage otherwise reads as a
+difference in processing.
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and

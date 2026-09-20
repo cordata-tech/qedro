@@ -347,6 +347,136 @@ def _scope(sheet: Any, record: Record) -> None:
         sheet.cell(row=row, column=2, value=reason).alignment = WRAP
 
 
+# --- what changed between two records, #14 ---------------------------------
+
+
+#: The findings table. `Before` and `After` are split from what each rests on,
+#: because the column a reader sorts by to find lost evidence is the source, not
+#: the value — and the value is often identical on both sides.
+COMPARISON_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("Activity", 38),
+    ("Field", 22),
+    ("Change", 14),
+    ("Before", 28),
+    ("Before source", 20),
+    ("After", 28),
+    ("After source", 20),
+    ("Loses evidence", 16),
+)
+
+
+def comparison_workbook(comparison: Any) -> bytes:
+    """A comparison as ``.xlsx`` bytes.
+
+    **No verdict cell of its own.** Every other workbook here opens with whether
+    the artefact claims to be a proof; a comparison has no such claim to make, so
+    what sits above the table is what the reader has to hold in mind instead —
+    the cautions, if the two records do not cover the same ground.
+    """
+    book = Workbook()
+    book.properties.creator = "qedro"
+    book.properties.title = "What changed between two records"
+    book.properties.description = comparison.scope.OUT_OF_VIEW
+
+    _findings(book.active, comparison)
+    _comparison_scope(book.create_sheet("Scope"), comparison)
+
+    buffer = BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def _findings(sheet: Any, comparison: Any) -> None:
+    sheet.title = "Findings"
+
+    sheet["A1"] = "What changed between two records"
+    sheet["A1"].font = TITLE
+    sheet["A2"] = f"{comparison.before.origin} → {comparison.after.origin}"
+
+    row = 3
+    for caution in comparison.comparability.cautions():
+        sheet.cell(row=row, column=1, value=f"! {caution}").font = STRONG
+        row += 1
+
+    header = row + 1
+    for index, (heading, width) in enumerate(COMPARISON_COLUMNS, start=1):
+        cell = sheet.cell(row=header, column=index, value=heading)
+        cell.font = HEADING
+        cell.fill = HEADING_FILL
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    sheet.freeze_panes = sheet.cell(row=header + 1, column=1)
+
+    for offset, change in enumerate(comparison.changes, start=header + 1):
+        values = (
+            change.entry,
+            change.label,
+            change.kind,
+            _comparison_value(change.before),
+            _comparison_source(change.before),
+            _comparison_value(change.after),
+            _comparison_source(change.after),
+            # A word rather than TRUE, because this column is the one a reader
+            # filters on and `TRUE` says nothing about what was lost.
+            "evidence lost" if change.regression else "",
+        )
+        for index, value in enumerate(values, start=1):
+            cell = sheet.cell(row=offset, column=index, value=value)
+            cell.alignment = TOP
+            if change.regression:
+                cell.fill = ASSERTED_FILL
+
+
+def _comparison_value(value: Any) -> str:
+    """The value, or a word for there having been no side at all."""
+    if value is None:
+        return "—"
+    return value.value or "not stated"
+
+
+def _comparison_source(value: Any) -> str:
+    if value is None:
+        return "—"
+    return SOURCE.get(str(value.provenance), str(value.provenance))
+
+
+def _comparison_scope(sheet: Any, comparison: Any) -> None:
+    scope = comparison.scope
+    sheet.column_dimensions["A"].width = 26
+    sheet.column_dimensions["B"].width = 96
+
+    sheet["A1"] = "Scope of this comparison"
+    sheet["A1"].font = TITLE
+
+    rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
+    rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
+
+    row = 3
+    for label, value in rows:
+        sheet.cell(row=row, column=1, value=label).font = STRONG
+        sheet.cell(row=row, column=2, value=value).alignment = WRAP
+        row += 1
+
+    row += 1
+    sheet.cell(row=row, column=1, value="Not covered").font = STRONG
+    sheet.cell(row=row, column=2, value=scope.OUT_OF_VIEW).alignment = WRAP
+    sheet.row_dimensions[row].height = 64
+
+    # Each record's verdict, never this comparison's. A workbook that printed a
+    # mark here would be claiming something no comparison can earn.
+    row += 2
+    sheet.cell(row=row, column=1, value="The records' own verdicts").font = STRONG
+    for label, side in (("before", comparison.before), ("after", comparison.after)):
+        if side.complete:
+            sheet.cell(row=row, column=2, value=f"{label}: stands on its own evidence")
+            row += 1
+            continue
+        sheet.cell(row=row, column=2, value=f"{label}: does not claim to be a proof")
+        for reason in side.reasons:
+            row += 1
+            sheet.cell(row=row, column=2, value=reason).alignment = WRAP
+        row += 1
+
+
 # --- the assertion history -------------------------------------------------
 
 #: One row per expectation rather than per dataset. A reader filtering for

@@ -25,6 +25,7 @@ from openpyxl import load_workbook
 from qedro import TOMBSTONE, __version__, config, deployer, provenance, quality, render, vocabulary
 from qedro.ropa import build
 
+from .test_compare import activity, compared, document
 from .test_deployer import a_declared
 from .test_deployer import event as deployer_event
 from .test_provenance import event as provenance_event
@@ -619,3 +620,95 @@ class TestOrchestrationParentsAreNamedInEveryFormat:
         payload = json_lib.loads(render.json(built))
         assert payload["scope"]["parents"] == ["dbt/dbt-run-project"]
         assert [a["job"] for a in payload["activities"]] == ["dbt/model.orders"]
+
+
+class TestTheComparisonRendersInEveryFormat:
+    """#14. A comparison is an artefact like any other, with one difference.
+
+    **It prints no mark in any format.** ∎ means *this artefact stands on its own
+    evidence*, and a comparison's evidence is two documents it cannot verify.
+    What every format prints instead is each record's own verdict — so nothing
+    here can be read as a mark this artefact earned.
+
+    Where a property reads differently for a machine, the JSON case is asserted
+    separately rather than skipped: a consumer wants `"loses_evidence": true` and
+    a reader wants *evidence lost*, and neither should be made to take the other.
+    """
+
+    @staticmethod
+    def built(before=None, after=None, **kw):
+        return compared(
+            document(before if before is not None else [activity()]),
+            document(after if after is not None else [activity()], **kw),
+        )
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_no_format_prints_the_mark(self, fmt):
+        # Two identical records: the case where a renderer that borrowed the
+        # record's verdict would most plausibly print one.
+        assert TOMBSTONE not in readable(self.built(), fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_states_what_a_comparison_cannot_verify(self, fmt):
+        assert "verifies neither" in readable(self.built(), fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_reports_a_regression_with_the_value_unchanged(self, fmt):
+        built = self.built(after=[activity(provenance="mapping")])
+        out = readable(built, fmt)
+        assert "fraud-detection" in out
+        if fmt == "json":
+            [finding] = [
+                f for f in json_lib.loads(render.json(built))["findings"] if f["field"] == "purpose"
+            ]
+            assert finding["loses_evidence"] is True
+            assert finding["before"]["provenance"] == "facet"
+        else:
+            # The words, not the enum: a reader has not read `Provenance`.
+            assert "emitted facet" in out
+            assert "mapping file" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_carries_both_verdicts(self, fmt):
+        built = self.built(complete=False)
+        if fmt == "json":
+            scope = json_lib.loads(render.json(built))["scope"]
+            assert (scope["before"]["complete"], scope["after"]["complete"]) == (True, False)
+        else:
+            out = readable(built, fmt)
+            assert "stands on its own evidence" in out
+            assert "does not claim to be a proof" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_carries_the_cautions(self, fmt):
+        assert "different sources" in readable(self.built(source="s3://exports"), fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_a_comparison_with_no_findings_says_so_rather_than_printing_nothing(self, fmt):
+        built = self.built()
+        assert not built.changes
+        assert "unchanged" in readable(built, fmt)
+
+    def test_the_json_names_its_own_shape(self):
+        payload = json_lib.loads(render.json(self.built()))
+        assert payload["qedro"]["projection"] == "diff"
+        assert payload["qedro"]["schema"] == render.SCHEMA
+
+    def test_the_json_uses_null_for_a_side_that_was_not_there(self):
+        built = compared(document(), document([activity()]))
+        [finding] = json_lib.loads(render.json(built))["findings"]
+        # `null` rather than an empty value: a dataset that was not there is not
+        # a dataset with an empty name, and a consumer should not have to tell
+        # them apart by guessing.
+        assert finding["before"] is None and finding["after"] is None
+        assert finding["change"] == "added"
+
+    def test_the_workbook_names_what_was_lost_rather_than_printing_true(self):
+        built = self.built(after=[activity(provenance="mapping")])
+        book = load_workbook(BytesIO(render.xlsx(built)))
+        assert book.sheetnames == ["Findings", "Scope"]
+        # The column a reader filters on to find lost evidence has to say what
+        # was lost; `TRUE` in that cell says nothing.
+        assert any(
+            cell.value == "evidence lost" for row in book["Findings"].iter_rows() for cell in row
+        )

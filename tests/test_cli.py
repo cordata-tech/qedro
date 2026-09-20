@@ -594,3 +594,125 @@ class TestTheDeployerView:
         argv = ["ropa", str(events), "--config", str(config), "--view", "deployer"]
         assert main([*argv, "--activities", str(bad)]) == 2
         assert "unknown keys legalbasis" in capsys.readouterr().err
+
+
+class TestTheDiffCommand:
+    """`qedro diff` end to end — cordata-tech/qedro#14.
+
+    The acceptance case in that issue is the demo estate: `demo/lineage` and
+    `demo/lineage-declared` are identical apart from the `processing` facet, so
+    comparing them is the provenance regression with nothing else moving.
+    """
+
+    @staticmethod
+    def records(tmp_path, *, config="demo/qedro.yaml"):
+        paths = []
+        for name in ("lineage-declared", "lineage"):
+            path = tmp_path / f"{name}.json"
+            assert (
+                main(
+                    [
+                        "ropa",
+                        f"demo/{name}",
+                        "--config",
+                        config,
+                        "--format",
+                        "json",
+                        "--out",
+                        str(path),
+                    ]
+                )
+                == 0
+            )
+            paths.append(str(path))
+        return paths
+
+    def test_it_reports_the_provenance_moving_from_facet_to_mapping(self, tmp_path, capsys):
+        before, after = self.records(tmp_path)
+        capsys.readouterr()
+
+        assert main(["diff", before, after]) == 0
+        out = capsys.readouterr().out
+        assert "evidence lost: emitted facet → mapping file" in out
+        # The value did not change, which is the whole point of the finding.
+        assert "fraud-detection, unchanged" in out
+
+    def test_it_prints_no_mark_of_its_own(self, tmp_path, capsys):
+        before, _ = self.records(tmp_path)
+        capsys.readouterr()
+
+        main(["diff", before, before])
+        assert TOMBSTONE not in capsys.readouterr().out
+
+    def test_it_reports_each_record_s_own_verdict(self, tmp_path, capsys):
+        before, after = self.records(tmp_path)
+        capsys.readouterr()
+
+        main(["diff", before, after])
+        out = capsys.readouterr().out
+        assert "before        stands on its own evidence" in out
+        assert "does not claim to be a proof" in out
+
+    def test_cautions_reach_stderr_as_withheld_reasons_do(self, tmp_path, capsys):
+        before, after = self.records(tmp_path)
+        capsys.readouterr()
+
+        main(["diff", before, after, "--out", str(tmp_path / "diff.md")])
+        cap = capsys.readouterr()
+        assert "wrote" in cap.out
+        assert "12 findings, 12 a loss of evidence" in cap.out
+        assert "different sources" in cap.err
+
+    def test_the_format_is_inferred_from_the_filename(self, tmp_path):
+        before, after = self.records(tmp_path)
+        out = tmp_path / "diff.md"
+        assert main(["diff", before, after, "--out", str(out)]) == 0
+        assert out.read_text().startswith("# What changed between two records")
+
+    def test_xlsx_without_out_fails_in_the_first_millisecond(self, tmp_path, capsys):
+        before, after = self.records(tmp_path)
+        capsys.readouterr()
+
+        assert main(["diff", before, after, "--format", "xlsx"]) == 2
+        assert "nowhere to put it" in capsys.readouterr().err
+
+    def test_two_documents_of_different_shape_are_refused(self, tmp_path, capsys):
+        before, _ = self.records(tmp_path)
+        other = tmp_path / "quality.json"
+        assert (
+            main(
+                [
+                    "quality",
+                    "demo/lineage",
+                    "--config",
+                    "demo/qedro.yaml",
+                    "--format",
+                    "json",
+                    "--out",
+                    str(other),
+                ]
+            )
+            == 0
+        )
+        capsys.readouterr()
+
+        assert main(["diff", before, str(other)]) == 2
+        assert "different documents" in capsys.readouterr().err
+
+    def test_a_file_that_is_not_a_record_is_a_sentence_not_a_traceback(self, tmp_path, capsys):
+        path = tmp_path / "nope.json"
+        path.write_text("{}")
+        before, _ = self.records(tmp_path)
+        capsys.readouterr()
+
+        assert main(["diff", before, str(path)]) == 2
+        assert "does not look like a record" in capsys.readouterr().err
+
+    def test_comparing_a_record_with_itself_finds_nothing(self, tmp_path, capsys):
+        before, _ = self.records(tmp_path)
+        capsys.readouterr()
+
+        assert main(["diff", before, before]) == 0
+        out = capsys.readouterr().out
+        assert "nothing in the Art. 30 content of these two records differs" in out
+        assert "no findings" in out

@@ -32,6 +32,7 @@ from datetime import datetime
 from functools import singledispatch
 
 from . import TOMBSTONE, __version__, words
+from . import compare as compare_module
 from . import deployer as deployer_module
 from . import provenance as provenance_module
 from . import quality as quality_module
@@ -1146,6 +1147,216 @@ FORMATS: dict[str, object] = {
 #: Formats that return bytes. A caller has to know before it decides whether
 #: standard output is somewhere this can go — see `is_binary`.
 BINARY = frozenset({"xlsx"})
+
+
+# --- what changed between two records, #14 ---------------------------------
+#
+# A comparison prints **no mark of its own**, in any format. ∎ means *this
+# artefact stands on its own evidence*, and a comparison's evidence is two
+# documents it cannot verify. What it prints instead is each record's own
+# verdict, in words rather than as the glyph, so that nothing here can be read
+# as a mark this artefact earned.
+
+
+def _finding(change) -> tuple[str, str]:
+    """One finding as *what it says* and *what it costs*, for text and markdown.
+
+    The second half is the part that does not exist in either document alone: the
+    same value resting on something weaker is a loss of evidence, and it is
+    spelled out rather than left to a reader who would have to know the ordering
+    of `Provenance` to see it.
+    """
+    from .xlsx import SOURCE
+
+    def words_for(value) -> str:
+        return SOURCE.get(str(value.provenance), str(value.provenance))
+
+    kind = change.kind
+    if kind == compare_module.ADDED:
+        return "added to the record", ""
+    if kind == compare_module.REMOVED:
+        return "no longer in the record", "every field it carried went with it"
+    if kind == compare_module.GAINED:
+        return f"+ {change.after}", ""
+    if kind == compare_module.LOST:
+        return f"− {change.before}", "no longer reported"
+
+    assert change.before is not None and change.after is not None
+    moved = f"{words_for(change.before)} → {words_for(change.after)}"
+    if change.before.value == change.after.value:
+        # The finding the command exists for: nothing about the value moved.
+        verb = "evidence lost" if change.regression else "now evidenced"
+        return f"{change.before}, unchanged", f"{verb}: {moved}"
+    said = f"{change.before} → {change.after}"
+    if change.before.provenance != change.after.provenance:
+        return said, f"{'evidence lost' if change.regression else 'now evidenced'}: {moved}"
+    return said, ""
+
+
+def _verdicts_text(comparison, *, width: int) -> list[str]:
+    """Each record's verdict, in words. Never this comparison's, which has none."""
+    out = ["  The records' own verdicts"]
+    for label, side in (("before", comparison.before), ("after", comparison.after)):
+        if side.complete:
+            out += _detail(label, "stands on its own evidence", width=width)
+            continue
+        out += _detail(label, "does not claim to be a proof:", width=width)
+        for reason in side.reasons:
+            out += [f"{INDENT}! {line}" for line in _wrap(reason, width - len(INDENT) - 2)]
+    return out
+
+
+@text.register
+def _(record: compare_module.Comparison, *, symbol: bool = True, width: int = 88) -> str:
+    out = ["What changed between two records", ""]
+
+    for caution in record.comparability.cautions():
+        for line in _wrap(f"! {caution}", width - 2):
+            out.append(f"  {line}")
+    if record.comparability.cautions():
+        out.append("")
+
+    if not record.changes:
+        out.append("  nothing in the Art. 30 content of these two records differs")
+        out.append("")
+    for entry, changes in record.by_entry():
+        out.append(f"  {entry}")
+        for change in changes:
+            said, cost = _finding(change)
+            out += _detail(change.label or change.kind, said, width=width)
+            if cost:
+                out.append(f"{INDENT}{cost}")
+        out.append("")
+
+    out.append(f"  {_findings_summary(record)}")
+    out.append("")
+    out += _scope_text(record.scope, width=width, title="Scope of this comparison")
+    out.append("")
+    out += _verdicts_text(record, width=width)
+    return "\n".join(out) + "\n"
+
+
+def _findings_summary(comparison) -> str:
+    """The count, and how much of it is a loss of evidence rather than a change."""
+    unchanged = f"{comparison.unchanged} unchanged"
+    if not comparison.changes:
+        return f"no findings; {unchanged}"
+    entries = len(comparison.by_entry())
+    return (
+        f"{words.count(len(comparison.changes), 'finding')} across "
+        f"{entries} {words.plural(entries, 'activity', 'activities')}, "
+        f"{len(comparison.regressions)} of them a loss of evidence; {unchanged}"
+    )
+
+
+@markdown.register
+def _(record: compare_module.Comparison) -> str:
+    out = ["# What changed between two records", ""]
+    for caution in record.comparability.cautions():
+        out.append(f"> **Caution.** {caution}")
+        out.append("")
+
+    if record.changes:
+        out.append("| Activity | Field | What changed | Evidence |")
+        out.append("|---|---|---|---|")
+        for entry, changes in record.by_entry():
+            for index, change in enumerate(changes):
+                said, cost = _finding(change)
+                label = change.label or change.kind
+                out.append(f"| {entry if index == 0 else ''} | {label} | {said} | {cost or '—'} |")
+        out.append("")
+    else:
+        out.append("Nothing in the Art. 30 content of these two records differs.")
+        out.append("")
+
+    summary = _findings_summary(record)
+    out.append(summary[0].upper() + summary[1:] + ".")
+    out.append("")
+    out += _scope_markdown(record.scope, title="Scope of this comparison")
+    out.append("")
+    out.append("## The records' own verdicts")
+    out.append("")
+    for label, side in (("Before", record.before), ("After", record.after)):
+        if side.complete:
+            out.append(f"- **{label}** stands on its own evidence.")
+            continue
+        out.append(f"- **{label}** does not claim to be a proof:")
+        out += [f"  - {reason}" for reason in side.reasons]
+    return "\n".join(out) + "\n"
+
+
+@json.register
+def _(record: compare_module.Comparison, *, indent: int = 2) -> str:
+    payload = {
+        "qedro": _document("diff"),
+        "comparability": {
+            "like_for_like": record.comparability.like_for_like,
+            "same_source": record.comparability.same_source,
+            "sources": list(record.comparability.sources),
+            "windows": record.comparability.overlap,
+            "same_length": record.comparability.same_length,
+            "schemas": list(record.comparability.schemas),
+            "versions": list(record.comparability.versions),
+            "cautions": list(record.comparability.cautions()),
+        },
+        "findings": [
+            {
+                "activity": change.entry,
+                "entry": change.entry_kind,
+                "change": change.kind,
+                "field": change.label,
+                "before": _finding_side(change.before),
+                "after": _finding_side(change.after),
+                # Stated rather than left to a consumer that would have to know
+                # the ordering of `Provenance` to work it out.
+                "loses_evidence": change.regression,
+            }
+            for change in record.changes
+        ],
+        "unchanged": record.unchanged,
+        "scope": {
+            "before": _side_json(record.before),
+            "after": _side_json(record.after),
+            "window": {
+                "since": _when(record.scope.since),
+                "until": _when(record.scope.until),
+            },
+            "out_of_view": record.scope.OUT_OF_VIEW,
+        },
+    }
+    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+
+
+def _finding_side(value) -> dict[str, object] | None:
+    """One side of a finding, or `null` where there was no side at all.
+
+    `null` rather than an empty value: a dataset that was not there is not a
+    dataset with an empty name, and a consumer should not have to tell them
+    apart by guessing.
+    """
+    if value is None:
+        return None
+    return {"value": value.value, "provenance": str(value.provenance)}
+
+
+def _side_json(side) -> dict[str, object]:
+    return {
+        "origin": side.origin,
+        "source": side.source,
+        "schema": side.schema,
+        "version": side.version,
+        "window": {"since": _when(side.since), "until": _when(side.until)},
+        "complete": side.complete,
+        "reasons": list(side.reasons),
+    }
+
+
+@xlsx.register
+def _(record: compare_module.Comparison) -> bytes:
+    from .xlsx import comparison_workbook
+
+    return comparison_workbook(record)
+
 
 #: File suffix to format, for inferring from `--out`. Someone writing
 #: `--out ropa.md` means markdown, and silently filling that file with terminal

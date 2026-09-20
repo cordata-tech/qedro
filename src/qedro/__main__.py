@@ -19,7 +19,18 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, declared, deployer, provenance, quality, render, ropa, vocabulary, words
+from . import (
+    __version__,
+    compare,
+    declared,
+    deployer,
+    provenance,
+    quality,
+    render,
+    ropa,
+    vocabulary,
+    words,
+)
 from . import config as config_module
 from .errors import ConfigError, QedroError, UsageError
 from .mark import Completeness
@@ -261,20 +272,50 @@ def _format(fmt: str | None, out: str | None) -> str:
     return fmt
 
 
-def _emit(record, *, fmt: str, out: str | None, symbol: bool) -> int:
-    """Render and deliver, the same way for every projection."""
-    renderer = render.FORMATS[fmt]
-    rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
+def _deliver(rendered, out: str | None) -> bool:
+    """Print it or write it. Whether it earned a mark is not this function's business.
 
+    Split out because a comparison has no verdict to report and must not borrow
+    one — see cordata-tech/qedro#14. Returns whether it went to a file.
+    """
     if not out:
         print(rendered, end="")
-        return 0
+        return False
 
     path = Path(out)
     if isinstance(rendered, bytes):
         path.write_bytes(rendered)
     else:
         path.write_text(rendered, encoding="utf-8")
+    return True
+
+
+def _diff(before: str, after: str, *, fmt: str | None, out: str | None) -> int:
+    """Two records, and what changed between them.
+
+    No `--since` or `--until`: the window is whatever each document was built
+    with, and re-cutting it here would be inventing coverage neither record has.
+    """
+    comparison = compare.compare(compare.read(before), compare.read(after))
+    fmt = _format(fmt, out)
+    renderer = render.FORMATS[fmt]
+    if _deliver(renderer(comparison), out):
+        losses = len(comparison.regressions)
+        print(f"  wrote {out}  {len(comparison.changes)} findings, {losses} a loss of evidence")
+    # Cautions reach stderr even when the file was written, for the same reason
+    # withheld reasons do: the run succeeded and the answer is still conditional.
+    for caution in comparison.comparability.cautions():
+        print(f"  ! {caution}", file=sys.stderr)
+    return 0
+
+
+def _emit(record, *, fmt: str, out: str | None, symbol: bool) -> int:
+    """Render and deliver, the same way for every projection."""
+    renderer = render.FORMATS[fmt]
+    rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
+
+    if not _deliver(rendered, out):
+        return 0
 
     mark = record.completeness.suffix(symbol=symbol)
     print(f"  wrote {out}{'  ' + mark if mark else ''}")
@@ -444,6 +485,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     provenance_cmd.add_argument("--out", help="write to this file instead of standard output")
 
+    diff_cmd = sub.add_parser(
+        "diff",
+        parents=[common],
+        help="what changed between two records, from their JSON output",
+        description=(
+            "Compares two JSON records this tool produced — a before and an after that "
+            "a team keeps in Git, with no database between them. Reports a purpose that "
+            "stopped being emitted even when its value did not change, and prints no "
+            "mark of its own: it cannot verify either document."
+        ),
+    )
+    diff_cmd.add_argument("before", help="the earlier record, as JSON")
+    diff_cmd.add_argument("after", help="the later record, as JSON")
+    diff_cmd.add_argument(
+        "--format",
+        dest="fmt",
+        choices=sorted(render.names()),
+        default=None,
+        help="output format. Defaults to the one implied by --out, else text",
+    )
+    diff_cmd.add_argument("--out", help="write to this file instead of standard output")
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     # The env var is for CI logs and containers, where nobody is around to
@@ -478,6 +541,8 @@ def main(argv: list[str] | None = None) -> int:
                 fmt=args.fmt,
                 out=args.out,
             )
+        if args.command == "diff":
+            return _diff(args.before, args.after, fmt=args.fmt, out=args.out)
         if args.command == "ropa":
             return _ropa(
                 args.source,

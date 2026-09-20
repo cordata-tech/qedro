@@ -24,6 +24,26 @@ before `1.0`.
   real emitter — no integration sends one as of 1.53.0 — so the Art. 30(1)(c)–(f)
   path is no longer exercised against generated events alone, and the first where one
   activity classifies what it reads and what it writes differently.
+- **`qedro diff before.json after.json`** — what changed between two records, with no
+  database between them (#14). The finding it exists for is invisible in either
+  document alone: a purpose emitted by the pipeline and the same purpose read from
+  the mapping file are the same string and a different claim, so the provenance
+  order decides what counts as a loss of evidence, and `fraud-detection, unchanged —
+  evidence lost: emitted facet → mapping file` is a finding rather than a silence.
+  All four formats, and a JSON consumer gets `loses_evidence` stated rather than
+  having to know how `Provenance` is ordered.
+- **A comparison prints no mark, in any format.** ∎ means *this artefact stands on
+  its own evidence*, and a comparison's evidence is two documents it cannot verify.
+  It reports each record's own verdict instead — so a field that was wrong in both
+  records is reported as unchanged, and unchanged is not the same as correct.
+- **What is comparable is said before anything else**: a different source, and
+  windows that are identical, overlapping, adjacent, disjoint or unknown. The one
+  refusal is two documents of different shape. A difference in coverage is reported
+  as a difference in coverage and never attributed to a particular finding, because
+  that attribution would be a guess wearing a caveat.
+- **Art. 30 content is compared, volume is not.** Runs, events and timestamps differ
+  between any two windows, and reporting them would bury the findings that matter
+  under arithmetic — both numbers are already in the two scope statements.
 - **Every JSON document says what it is**, in a `qedro` block at the top: `schema`
   (an integer, 1, which changes only when a consumer reading the old shape would now
   be wrong), `projection`, `view` where there is one, and the `version` that produced
