@@ -24,6 +24,16 @@ before `1.0`.
   real emitter — no integration sends one as of 1.53.0 — so the Art. 30(1)(c)–(f)
   path is no longer exercised against generated events alone, and the first where one
   activity classifies what it reads and what it writes differently.
+- **Every JSON document says what it is**, in a `qedro` block at the top: `schema`
+  (an integer, 1, which changes only when a consumer reading the old shape would now
+  be wrong), `projection`, `view` where there is one, and the `version` that produced
+  it. `qedro diff` (#14) has to refuse two documents of different shape, and it can
+  only refuse what it can name — inferring the projection from which keys are present
+  is a guess. There is deliberately **no generation timestamp**: two runs over the
+  same events produce the same bytes, or every diff reports a change that is not a
+  change in processing.
+- **Breaking, deployer view JSON:** the top-level `"view": "deployer"` key is now
+  `qedro.view`. Which document this is has one spelling rather than two.
 - **`1 of 1 dataset carries no classification`**, not `carry`. The noun agrees with the
   total and the verb with the count, and the Flink capture — one job, one dataset — is
   where that showed.

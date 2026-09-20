@@ -31,12 +31,19 @@ from collections.abc import Iterable
 from datetime import datetime
 from functools import singledispatch
 
-from . import TOMBSTONE, words
+from . import TOMBSTONE, __version__, words
 from . import deployer as deployer_module
 from . import provenance as provenance_module
 from . import quality as quality_module
 from .ropa import ART30_ASSERTED_ONLY, ART30_COVERED, ART30_ITEMS, Activity, Record
 from .scope import Scope
+
+#: The shape of the JSON documents, which `qedro diff` needs before it can
+#: compare two of them (#14). It changes only when a consumer that read the old
+#: shape would now be **wrong** — adding a key is not that, which is why this can
+#: stay at 1 across several releases. A document with no `qedro` block at all was
+#: written by 0.1 to 0.3 and is schema 0.
+SCHEMA = 1
 
 #: What each provenance looks like in a rendered table. The evidenced case gets
 #: no decoration: it is the normal case, and marking it would make the record
@@ -47,6 +54,27 @@ BADGE = {
     "declared": " (declared)",
     "absent": "",
 }
+
+
+def _document(projection: str, view: str = "") -> dict[str, object]:
+    """What this document is, for whoever reads it back.
+
+    The projection is stated rather than left to be inferred from which keys are
+    present: a consumer can tell a `ropa` document from a `quality` one that way,
+    but a comparison handed one of each has to refuse instead of guessing, and it
+    can only refuse what it can name. `view` distinguishes the two documents the
+    Art. 30 projection produces, which are not comparable with each other.
+
+    **No generation timestamp**, deliberately. Two runs over the same events must
+    produce the same bytes or every diff reports a change that is not one; when
+    the evidence is from is already in `scope.window`, and that is the date a
+    reader needs.
+    """
+    document: dict[str, object] = {"schema": SCHEMA, "projection": projection}
+    if view:
+        document["view"] = view
+    document["version"] = __version__
+    return document
 
 
 def _when(value: datetime | None) -> str:
@@ -373,6 +401,7 @@ def json(record: object, *, indent: int = 2) -> str:
 @json.register
 def _(record: Record, *, indent: int = 2) -> str:
     payload = {
+        "qedro": _document("ropa", "art30"),
         "controller": {
             "name": record.controller.name,
             "contact": record.controller.contact,
@@ -645,6 +674,7 @@ def _(record: quality_module.Record) -> str:
 @json.register
 def _(record: quality_module.Record, *, indent: int = 2) -> str:
     payload = {
+        "qedro": _document("quality"),
         "controller": {
             "name": record.controller.name,
             "contact": record.controller.contact,
@@ -782,6 +812,7 @@ def _(record: provenance_module.Record) -> str:
 @json.register
 def _(record: provenance_module.Record, *, indent: int = 2) -> str:
     payload = {
+        "qedro": _document("provenance"),
         "dataset": record.dataset,
         "steps": [
             {
@@ -1014,7 +1045,11 @@ def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
         }
 
     payload = {
-        "view": "deployer",
+        # Was a top-level `"view": "deployer"` before 0.4. It moved into the
+        # block rather than being kept in both places: which document this is now
+        # has one spelling, and two would be the thing this project argues
+        # against everywhere else.
+        "qedro": _document("ropa", "deployer"),
         "controller": {
             "name": record.controller.name,
             "contact": record.controller.contact,

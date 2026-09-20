@@ -22,7 +22,7 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from qedro import TOMBSTONE, config, deployer, provenance, quality, render, vocabulary
+from qedro import TOMBSTONE, __version__, config, deployer, provenance, quality, render, vocabulary
 from qedro.ropa import build
 
 from .test_deployer import a_declared
@@ -336,6 +336,31 @@ class TestEveryProjectionKeepsTheProperties:
     @pytest.mark.parametrize(("projection", "fmt"), CASES)
     def test_the_window_is_stated(self, projection, fmt):
         assert "2026-03-01" in readable(PROJECTIONS[projection](), fmt)
+
+    @pytest.mark.parametrize("projection", sorted(PROJECTIONS))
+    def test_the_json_says_what_document_it_is(self, projection):
+        """#14: a comparison handed two shapes has to refuse, so it must be able
+        to name them. Inferring the projection from which keys are present is a
+        guess, and a guess is what this block exists to remove."""
+        document = json_lib.loads(render.FORMATS["json"](PROJECTIONS[projection]()))["qedro"]
+        assert document["schema"] == render.SCHEMA
+        assert document["version"] == __version__
+        # The deployer view is the same projection as a different document, and
+        # the two are not comparable with each other.
+        expected = {"ropa": ("ropa", "art30"), "deployer": ("ropa", "deployer")}
+        projected, view = expected.get(projection, (projection, None))
+        assert document["projection"] == projected
+        assert document.get("view") == view
+
+    @pytest.mark.parametrize("projection", sorted(PROJECTIONS))
+    def test_the_json_is_the_same_bytes_twice(self, projection):
+        """No generation timestamp anywhere in it.
+
+        Two runs over the same events that differ by a field naming the run would
+        make every diff report a change that is not a change in processing.
+        """
+        built = PROJECTIONS[projection]()
+        assert render.FORMATS["json"](built) == render.FORMATS["json"](built)
 
     @pytest.mark.parametrize(("projection", "fmt"), DOMAIN_CASES)
     def test_a_silent_domain_is_named(self, projection, fmt):
