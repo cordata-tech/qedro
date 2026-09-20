@@ -23,9 +23,9 @@ recaptured.
 from __future__ import annotations
 
 import argparse
+import difflib
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -78,11 +78,20 @@ def capture() -> str | int:
     python = ".".join(str(n) for n in sys.version_info[:3])
     parts = [PREAMBLE.format(version=__version__, commit=commit, python=python)]
 
-    with tempfile.TemporaryDirectory() as tmp:
-        # The record goes to a temporary file rather than into the repository:
-        # it is generated, and a committed copy would be one more thing to keep
-        # in step with the demo estate.
-        record = Path(tmp) / "record.json"
+    # `record.json` in the repository root, not a temporary directory, and
+    # removed again below. The path is printed by the first command *and* is one
+    # of the values the second one wraps its scope statement around, so a long
+    # temporary path wraps differently from a short one and no two machines
+    # produce the same transcript. Rewriting the path afterwards cannot fix that:
+    # by then the line breaks have already been decided. A fixed relative path is
+    # also what a reader would type.
+    record = REPO / "record.json"
+    if record.exists():
+        # It is removed again below, so a file already there belongs to somebody
+        # and this script is not entitled to it.
+        print(f"{record} already exists; move it out of the way first", file=sys.stderr)
+        return 2
+    try:
         built = _run(
             [
                 "ropa",
@@ -92,7 +101,7 @@ def capture() -> str | int:
                 "--format",
                 "json",
                 "--out",
-                str(record),
+                "record.json",
             ],
             cwd=REPO,
         )
@@ -101,22 +110,15 @@ def capture() -> str | int:
                 f"building the record exited {built.returncode}:\n{built.stderr}", file=sys.stderr
             )
             return 1
-
-        # The temporary path is in what both commands printed as well as in the
-        # command lines, and it changes on every run — so it is rewritten to the
-        # path a reader would use, and `--check` compares like with like.
-        def readable(text: str) -> str:
-            return text.replace(str(record), "record.json")
-
         parts.append(
             "## 1. The record the register is checked against\n\n"
             "```console\n"
             "$ qedro ropa demo/lineage-declared --config demo/qedro.yaml "
             "--format json --out record.json\n"
-            f"{readable(built.stdout)}```\n"
+            f"{built.stdout}```\n"
         )
 
-        result = _run(["diff", "demo/register.yaml", str(record)], cwd=REPO)
+        result = _run(["diff", "demo/register.yaml", "record.json"], cwd=REPO)
         if result.returncode != 0:
             print(f"the comparison exited {result.returncode}:\n{result.stderr}", file=sys.stderr)
             return 1
@@ -124,10 +126,12 @@ def capture() -> str | int:
             "## 2. Where the register and the record disagree\n\n"
             "```console\n"
             "$ qedro diff demo/register.yaml record.json\n"
-            f"{readable(result.stdout)}```\n"
+            f"{result.stdout}```\n"
             f"\nExit status {result.returncode}. The cautions above also go to standard error, "
             "so a run whose output was redirected to a file still shows them.\n"
         )
+    finally:
+        record.unlink(missing_ok=True)
 
     return "\n".join(parts)
 
@@ -166,8 +170,6 @@ def main() -> int:
             # What differs, not only that something does. A check that fails on
             # a machine the author is not sitting at is worth little if finding
             # out why means reproducing that machine.
-            import difflib
-
             for line in difflib.unified_diff(
                 _body(current).splitlines(),
                 _body(captured).splitlines(),
