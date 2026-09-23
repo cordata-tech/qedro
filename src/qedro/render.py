@@ -34,6 +34,7 @@ from functools import singledispatch
 from . import TOMBSTONE, __version__, words
 from . import compare as compare_module
 from . import deployer as deployer_module
+from . import erasure as erasure_module
 from . import provenance as provenance_module
 from . import quality as quality_module
 from .ropa import ART30_ASSERTED_ONLY, ART30_COVERED, ART30_ITEMS, Activity, Record
@@ -872,6 +873,139 @@ def _(record: provenance_module.Record) -> bytes:
 
 
 # --- the deployer view -------------------------------------------------------
+
+
+# --- the erasure projection, #4 -------------------------------------------
+#
+# The rule this projection lives under, in every format: **it reports datasets,
+# not rows.** The scope statement carries the sentence, and nothing below is
+# allowed to phrase a finding in a way that outruns it — a descendant is
+# *rewritten since the tombstone*, never *erased*, and the difference is the
+# whole reason the projection is safe to ship.
+
+
+def _reached_text(descendant) -> str:
+    """What happened to one descendant since the erasure, in one line."""
+    if descendant.rewritten is not None:
+        runs = words.count(descendant.runs_since, "run")
+        return f"rewritten {_when(descendant.rewritten)} — {runs} since the tombstone"
+    if descendant.incomplete:
+        n = descendant.incomplete
+        return (
+            f"not known — {n} {words.plural(n, 'run', 'runs')} started after the "
+            f"tombstone and never reported completion"
+        )
+    return "not rewritten since the tombstone"
+
+
+@text.register
+def _(record: erasure_module.Record, *, symbol: bool = True, width: int = 88) -> str:
+    out = [f"Erasure of {record.dataset}", ""]
+    out += _detail("tombstone", record.tombstone.describe(), width=width)
+    out.append("")
+
+    if not record.descendants:
+        out.append("  nothing in the window read it — no descendants were found")
+        out.append("")
+    for descendant in record.descendants:
+        indent = "  " + "  " * descendant.depth
+        out.append(f"{indent}{descendant.dataset}")
+        out.append(f"{indent}  derived by    {descendant.through or 'unreported'}")
+        out.append(f"{indent}  state         {_reached_text(descendant)}")
+        if descendant.truncated:
+            out.append(f"{indent}  — the walk stopped here at the depth limit")
+        out.append("")
+
+    out.extend(_scope_text(record.scope, width=width, title="Scope of this record"))
+    out.append("")
+    out.extend(
+        _verdict_text(
+            record,
+            "every descendant was rewritten after an emitted erasure",
+            symbol=symbol,
+            withheld="record",
+        )
+    )
+    return "\n".join(out) + "\n"
+
+
+@markdown.register
+def _(record: erasure_module.Record) -> str:
+    out = [f"# Erasure of `{record.dataset}`", ""]
+    out += [f"**Tombstone:** {record.tombstone.describe()}", ""]
+    if record.descendants:
+        out += [
+            "| Depth | Descendant | Derived by | Since the tombstone |",
+            "|---|---|---|---|",
+        ]
+        for d in record.descendants:
+            state = _reached_text(d) + (" _(depth limit)_" if d.truncated else "")
+            out.append(f"| {d.depth} | `{d.dataset}` | `{d.through or '—'}` | {state} |")
+    else:
+        out.append("Nothing in the window read it — no descendants were found.")
+    out += _scope_markdown(record.scope)
+    out += _verdict_markdown(
+        record, "Every descendant was rewritten after an emitted erasure.", withheld="record"
+    )
+    return "\n".join(out)
+
+
+@json.register
+def _(record: erasure_module.Record, *, indent: int = 2) -> str:
+    payload = {
+        "qedro": _document("erasure"),
+        "dataset": record.dataset,
+        "tombstone": {
+            "at": _when(record.tombstone.at),
+            "provenance": str(record.tombstone.provenance),
+            # The lifecycle state that proved it, where one did. Empty on an
+            # instant that came from `--since`, which the provenance also says.
+            "lifecycle_state": record.tombstone.state,
+            "evidenced": record.tombstone.evidenced,
+            "asserted_at": _when(record.tombstone.asserted_at),
+        },
+        "descendants": [
+            {
+                "dataset": d.dataset,
+                "depth": d.depth,
+                "derived_by": d.through,
+                # `null`, not a date and not `false`: *nothing rewrote it* and
+                # *we could not tell* are different answers, and the second is
+                # what `incomplete` is for.
+                "rewritten": _when(d.rewritten),
+                "runs_since": d.runs_since,
+                "incomplete_runs": d.incomplete,
+                "truncated": d.truncated,
+                "reached": d.reached,
+            }
+            for d in record.descendants
+        ],
+        "scope": {
+            "source": record.scope.source,
+            "window": {
+                "since": _when(record.scope.since),
+                "until": _when(record.scope.until),
+            },
+            "events": record.scope.events,
+            "descendants": record.scope.descendants,
+            "rewritten": record.scope.rewritten,
+            "not_rewritten": record.scope.not_rewritten,
+            "incomplete": record.scope.incomplete,
+            "truncated": record.scope.truncated,
+            "depth_limit": record.scope.depth_limit,
+            "out_of_view": record.scope.OUT_OF_VIEW,
+        },
+        "complete": record.complete,
+        "reasons": list(record.completeness.reasons),
+    }
+    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+
+
+@xlsx.register
+def _(record: erasure_module.Record) -> bytes:
+    from .xlsx import erasure_workbook
+
+    return erasure_workbook(record)
 
 
 def _models_text(use_case) -> list[str]:

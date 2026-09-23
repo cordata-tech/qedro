@@ -39,7 +39,7 @@ from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
 from .ropa import Provenance
-from .sources import ReadReport
+from .sources import ReadReport, utc
 from .words import count, plural
 
 #: How far downstream to walk before stopping and saying so. The same default as
@@ -222,15 +222,18 @@ def find_tombstone(events: Iterable[Event], dataset: str, *, since: datetime | N
         for output in event.outputs:
             if output.key != dataset or event.event_time is None:
                 continue
+            # Naive is UTC, the one assumption `sources` already makes.
+            # Refusing to compare would be worse, and inventing a second
+            # rule here would be worse still.
             state = _lifecycle(output)
             if state in ERASURES:
-                found.append((event.event_time, state))
+                found.append((utc(event.event_time), state))
 
     if found:
         at, state = max(found, key=lambda pair: pair[0])
         # `since` is kept rather than dropped, so the record can say the two
         # disagree instead of quietly preferring one.
-        superseded = since if since is not None and since != at else None
+        superseded = utc(since) if since is not None and utc(since) != at else None
         return Tombstone(
             dataset=dataset,
             at=at,
@@ -240,7 +243,7 @@ def find_tombstone(events: Iterable[Event], dataset: str, *, since: datetime | N
         )
 
     if since is not None:
-        return Tombstone(dataset=dataset, at=since, provenance=Provenance.DECLARED)
+        return Tombstone(dataset=dataset, at=utc(since), provenance=Provenance.DECLARED)
     return Tombstone(dataset=dataset)
 
 
@@ -296,7 +299,6 @@ def build(
         descendants,
         dataset=dataset,
         tombstone=tombstone,
-        config=config,
         report=report,
         since=since,
         until=until,
@@ -328,15 +330,18 @@ def _measure(descendant: Descendant, events: Sequence[Event], tombstone: Tombsto
     rewritten: datetime | None = None
     runs, incomplete = set(), set()
     for event in events:
-        if event.event_time is None or event.event_time <= tombstone.at:
+        if event.event_time is None:
+            continue
+        when = utc(event.event_time)
+        if when <= tombstone.at:
             continue
         if descendant.dataset not in {o.key for o in event.outputs}:
             continue
-        run = event.run.run_id or f"{event.job.key}@{event.event_time.isoformat()}"
+        run = event.run.run_id or f"{event.job.key}@{when.isoformat()}"
         if event.event_type == "COMPLETE":
             runs.add(run)
-            if rewritten is None or event.event_time > rewritten:
-                rewritten = event.event_time
+            if rewritten is None or when > rewritten:
+                rewritten = when
         else:
             incomplete.add(run)
 
@@ -356,18 +361,20 @@ def _scope(
     *,
     dataset: str,
     tombstone: Tombstone,
-    config: Config,
     report: ReadReport | None,
     since: datetime | None,
     until: datetime | None,
     depth: int,
 ) -> Scope:
+    # No declared domains, as `provenance` also carries none: this record is
+    # about one dataset and everything derived from it, so *this domain produced
+    # no lineage* is not a claim it is in a position to make. Passing them would
+    # report every domain in the config as silent on every run.
     return Scope(
         source=report.origin if report else "",
         since=since,
         until=until,
         events=report.events if report else 0,
-        domains_declared=config.domains,
         dataset=dataset,
         descendants=len(descendants),
         rewritten=sum(1 for d in descendants if d.reached),

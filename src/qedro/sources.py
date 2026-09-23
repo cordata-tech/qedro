@@ -112,7 +112,7 @@ class ReadReport:
         return out
 
 
-def _utc(value: datetime) -> datetime:
+def utc(value: datetime) -> datetime:
     """Naive timestamps are read as UTC.
 
     Emitters disagree about the suffix, and refusing to compare is worse than
@@ -133,10 +133,10 @@ def in_window(event: Event, since: datetime | None, until: datetime | None) -> b
     when = event.event_time
     if when is None:
         return False
-    when = _utc(when)
-    if since is not None and when < _utc(since):
+    when = utc(when)
+    if since is not None and when < utc(since):
         return False
-    return until is None or when <= _utc(until)
+    return until is None or when <= utc(until)
 
 
 # --------------------------------------------------------------------------
@@ -265,9 +265,9 @@ def lineage_url(
     # backend that ignores them, or spells them differently, still yields a
     # correct result rather than a silently wider one.
     if since is not None:
-        query["after"] = _utc(since).isoformat()
+        query["after"] = utc(since).isoformat()
     if until is not None:
-        query["before"] = _utc(until).isoformat()
+        query["before"] = utc(until).isoformat()
 
     return urllib.parse.urlunsplit(
         (parsed.scheme, parsed.netloc, path, urllib.parse.urlencode(query), "")

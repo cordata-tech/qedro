@@ -22,7 +22,17 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from qedro import TOMBSTONE, __version__, config, deployer, provenance, quality, render, vocabulary
+from qedro import (
+    TOMBSTONE,
+    __version__,
+    config,
+    deployer,
+    erasure,
+    provenance,
+    quality,
+    render,
+    vocabulary,
+)
 from qedro.ropa import build
 
 from .test_compare import activity, compared, document
@@ -68,6 +78,38 @@ def deployer_record(cfg="controller: ACME GmbH\n"):
     return deployer.build(record, events)
 
 
+def erasure_record(cfg="controller: ACME GmbH\n"):
+    """An erasure whose instant was typed rather than emitted, so it withholds.
+
+    Not the silent domain the other projections withhold for: this one has no
+    domains at all, because a record about one dataset is in no position to say
+    that a domain produced nothing. The asserted tombstone is its own reason and
+    the shared property holds all the same.
+    """
+    from .test_erasure import ERASED, at, chain
+
+    return erasure.build(
+        chain(day=10),
+        dataset=ERASED,
+        config=config.parse(cfg),
+        since=at(1),
+    )
+
+
+def erasure_earned(cfg="controller: ACME GmbH\n"):
+    """The same record with an emitted tombstone, which earns the mark.
+
+    Kept beside the one above because the standing sentence matters most here:
+    a renderer that dropped it on a record claiming to be a proof is the failure
+    this projection cannot afford.
+    """
+    from .test_erasure import ERASED, chain
+    from .test_erasure import event as erasure_event
+
+    events = [erasure_event("drop", writes=[ERASED], day=5, lifecycle="DROP"), *chain(day=10)]
+    return erasure.build(events, dataset=ERASED, config=config.parse(cfg))
+
+
 #: Every artefact a renderer can be handed. The properties below hold for all
 #: of them or they are not properties.
 PROJECTIONS = {
@@ -75,6 +117,7 @@ PROJECTIONS = {
     "quality": quality_record,
     "provenance": provenance_record,
     "deployer": deployer_record,
+    "erasure": erasure_record,
 }
 CASES = [(p, f) for p in sorted(PROJECTIONS) for f in FORMATS]
 
@@ -712,3 +755,85 @@ class TestTheComparisonRendersInEveryFormat:
         assert any(
             cell.value == "evidence lost" for row in book["Findings"].iter_rows() for cell in row
         )
+
+
+class TestTheErasureRecordRendersInEveryFormat:
+    """#4. One rule outranks the rest here: **it reports datasets, not rows.**
+
+    The standing sentence is the only thing standing between this artefact and
+    the claim it must never make, so it is asserted per format on a record that
+    *earns* the mark — the case where a renderer could most plausibly drop it
+    and nothing else would look wrong.
+    """
+
+    @staticmethod
+    def unreached():
+        """A descendant nothing rewrote since the erasure — the work list."""
+        from .test_erasure import ERASED, at, chain
+        from .test_erasure import event as erasure_event
+
+        events = [
+            *chain(day=3),
+            erasure_event("stale", reads=[ERASED], writes=["wh/old"], day=3),
+        ]
+        return erasure.build(
+            events,
+            dataset=ERASED,
+            config=config.parse("controller: ACME GmbH\n"),
+            since=at(5),
+        )
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_says_it_reports_datasets_and_not_rows(self, fmt):
+        out = readable(erasure_record(), fmt)
+        assert "covers datasets, not rows" in out
+        assert "no lineage event carries that" in out
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_including_on_a_record_that_earns_the_mark(self, fmt):
+        built = erasure_earned()
+        assert built.complete
+        assert "not proof that it was complete" in readable(built, fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_states_where_the_tombstone_came_from(self, fmt):
+        # An instant somebody typed and an instant somebody emitted are the
+        # same date and a different claim, which is the provenance rule
+        # applied to this projection.
+        if fmt == "json":
+            emitted = json_lib.loads(render.json(erasure_earned()))["tombstone"]
+            typed = json_lib.loads(render.json(erasure_record()))["tombstone"]
+            assert (emitted["evidenced"], emitted["lifecycle_state"]) == (True, "DROP")
+            assert (typed["evidenced"], typed["provenance"]) == (False, "declared")
+        else:
+            assert "emitted drop" in readable(erasure_earned(), fmt)
+            assert "not emitted" in readable(erasure_record(), fmt)
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_every_format_names_a_descendant_the_erasure_did_not_reach(self, fmt):
+        built = self.unreached()
+        out = readable(built, fmt)
+        assert "wh/old" in out
+        if fmt == "json":
+            # A consumer gets the field, not the phrasing.
+            payload = json_lib.loads(render.json(built))
+            assert all(d["reached"] is False for d in payload["descendants"])
+        else:
+            assert "not rewritten" in out
+
+    def test_the_json_uses_null_for_a_descendant_nothing_rewrote(self):
+        payload = json_lib.loads(render.json(self.unreached()))
+        [unreached] = [d for d in payload["descendants"] if d["dataset"] == "wh/old"]
+        # `null` rather than a date or `false`: *nothing rewrote it* and *we
+        # could not tell* are different answers, and `incomplete_runs` is the
+        # second one.
+        assert unreached["rewritten"] == ""
+        assert unreached["reached"] is False
+
+    def test_the_workbook_tints_what_the_erasure_did_not_reach_and_says_so(self):
+        book = load_workbook(BytesIO(render.xlsx(self.unreached())))
+        assert book.sheetnames == ["Descendants", "Scope"]
+        values = [c.value for row in book["Descendants"].iter_rows() for c in row if c.value]
+        assert "not rewritten since the erasure" in values
+        # No column headed *erased*: that would read as the row-level claim.
+        assert not any(isinstance(v, str) and v.strip() == "Erased" for v in values)

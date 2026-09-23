@@ -24,6 +24,7 @@ from . import (
     compare,
     declared,
     deployer,
+    erasure,
     provenance,
     quality,
     render,
@@ -244,6 +245,52 @@ def _provenance(
         )
 
     record = provenance.build(
+        events,
+        dataset=matches[0],
+        config=settings,
+        report=report,
+        since=since,
+        until=until,
+        depth=depth,
+    )
+    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+
+
+def _erasure(
+    source: str,
+    *,
+    symbol: bool,
+    since: datetime | None,
+    until: datetime | None,
+    dataset: str,
+    depth: int,
+    config_path: str | None,
+    fmt: str | None,
+    out: str | None,
+) -> int:
+    fmt = _format(fmt, out)
+    settings = config_module.load(config_module.find(config_path))
+
+    events, report = read(source, since=since, until=until)
+    events = list(events)
+
+    # The same resolution `provenance` does, and for the same reason: nobody
+    # types the namespace, and an ambiguous name is a question rather than a
+    # silently wrong answer. Here a wrong answer would be a proof about the
+    # wrong dataset, which is worse than no answer.
+    matches = provenance.resolve(events, dataset)
+    if not matches:
+        raise ConfigError(
+            f"no dataset named {dataset!r} appears in {report.origin or source} "
+            "— check the spelling, or widen the window"
+        )
+    if len(matches) > 1:
+        listed = "\n    ".join(matches)
+        raise ConfigError(
+            f"{dataset!r} matches more than one dataset. Name one in full:\n    {listed}"
+        )
+
+    record = erasure.build(
         events,
         dataset=matches[0],
         config=settings,
@@ -493,6 +540,59 @@ def main(argv: list[str] | None = None) -> int:
     )
     provenance_cmd.add_argument("--out", help="write to this file instead of standard output")
 
+    erasure_cmd = sub.add_parser(
+        "erasure",
+        parents=[common],
+        help="what descends from an erased dataset, and whether the erasure reached it",
+        description=(
+            "Walks the lineage graph forwards from a dataset somebody erased and reports "
+            "every dataset derived from it, with whether a job rewrote each one "
+            "afterwards. It reports datasets and not rows: no lineage event says that a "
+            "particular data subject's rows are gone, and this never claims otherwise."
+        ),
+    )
+    erasure_cmd.add_argument(
+        "source",
+        help="a directory of .json, .ndjson or .jsonl events, "
+        "or the base URL of a Marquez-compatible API",
+    )
+    erasure_cmd.add_argument(
+        "--dataset",
+        required=True,
+        help="the dataset that was erased. A bare name is matched where it is unambiguous",
+    )
+    erasure_cmd.add_argument(
+        "--since",
+        type=_instant,
+        help="when the erasure happened, and the start of the window. An emitted "
+        "lifecycleStateChange in the window supersedes it and is evidence rather than "
+        "an assertion",
+    )
+    erasure_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
+    erasure_cmd.add_argument(
+        "--days",
+        type=int,
+        help="shorthand for --since N days before --until (or before now)",
+    )
+    erasure_cmd.add_argument(
+        "--depth",
+        type=int,
+        default=erasure.DEPTH,
+        help=f"how many hops downstream to follow (default {erasure.DEPTH})",
+    )
+    erasure_cmd.add_argument(
+        "--config",
+        help="qedro.yaml (or .json/.toml). Defaults to one beside the working directory",
+    )
+    erasure_cmd.add_argument(
+        "--format",
+        dest="fmt",
+        choices=sorted(render.names()),
+        default=None,
+        help="output format. Defaults to the one implied by --out, else text",
+    )
+    erasure_cmd.add_argument("--out", help="write to this file instead of standard output")
+
     diff_cmd = sub.add_parser(
         "diff",
         parents=[common],
@@ -543,6 +643,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "provenance":
             since, until = _window(args)
             return _provenance(
+                args.source,
+                symbol=not no_symbol,
+                since=since,
+                until=until,
+                dataset=args.dataset,
+                depth=args.depth,
+                config_path=args.config,
+                fmt=args.fmt,
+                out=args.out,
+            )
+        if args.command == "erasure":
+            since, until = _window(args)
+            return _erasure(
                 args.source,
                 symbol=not no_symbol,
                 since=since,

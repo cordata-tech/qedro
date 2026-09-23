@@ -347,6 +347,123 @@ def _scope(sheet: Any, record: Record) -> None:
         sheet.cell(row=row, column=2, value=reason).alignment = WRAP
 
 
+# --- proving an erasure reached its descendants, #4 ------------------------
+
+
+#: `Rewritten since` is the column a reader sorts by, and the blank cells are the
+#: work list. There is deliberately no *erased* column: this reports datasets and
+#: not rows, and a column headed *erased* would be read as the row-level claim the
+#: whole projection refuses to make.
+ERASURE_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("Descendant", 44),
+    ("Depth", 8),
+    ("Derived by", 32),
+    ("Rewritten since the erasure", 28),
+    ("Runs since", 12),
+    ("Unfinished runs", 16),
+    ("State", 40),
+)
+
+
+def erasure_workbook(record: Any) -> bytes:
+    """An erasure record as ``.xlsx`` bytes."""
+    book = Workbook()
+    book.properties.creator = "qedro"
+    book.properties.title = f"Erasure of {record.dataset}"
+    book.properties.description = record.scope.OUT_OF_VIEW
+
+    _descendants(book.active, record)
+    _erasure_scope(book.create_sheet("Scope"), record)
+
+    buffer = BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def _descendants(sheet: Any, record: Any) -> None:
+    sheet.title = "Descendants"
+
+    sheet["A1"] = f"Erasure of {record.dataset}"
+    sheet["A1"].font = TITLE
+    sheet["A2"] = f"Tombstone: {record.tombstone.describe()}"
+    # The verdict goes where the file opens, as in every other workbook here.
+    sheet["A3"] = _erasure_verdict(record)
+    sheet["A3"].font = STRONG
+
+    header = 5
+    for index, (heading, width) in enumerate(ERASURE_COLUMNS, start=1):
+        cell = sheet.cell(row=header, column=index, value=heading)
+        cell.font = HEADING
+        cell.fill = HEADING_FILL
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    sheet.freeze_panes = sheet.cell(row=header + 1, column=1)
+
+    for offset, d in enumerate(record.descendants, start=header + 1):
+        values = (
+            d.dataset,
+            d.depth,
+            d.through,
+            _when(d.rewritten),
+            d.runs_since,
+            d.incomplete,
+            _erasure_state(d),
+        )
+        for index, value in enumerate(values, start=1):
+            cell = sheet.cell(row=offset, column=index, value=value)
+            cell.alignment = TOP
+            # Tinted where the proof does not reach, and the State column says
+            # the same thing in words — the tint carries nothing on its own.
+            if not d.reached:
+                cell.fill = ASSERTED_FILL
+
+
+def _erasure_state(descendant: Any) -> str:
+    if descendant.rewritten is not None:
+        return "rewritten since the erasure"
+    if descendant.incomplete:
+        return "not known — a run started after the erasure and never finished"
+    return "not rewritten since the erasure"
+
+
+def _erasure_verdict(record: Any) -> str:
+    if record.complete:
+        return f"Every descendant was rewritten after an emitted erasure. {TOMBSTONE}"
+    return "This record does not claim to be a proof — see the Scope sheet."
+
+
+def _erasure_scope(sheet: Any, record: Any) -> None:
+    scope = record.scope
+    sheet.column_dimensions["A"].width = 26
+    sheet.column_dimensions["B"].width = 96
+
+    sheet["A1"] = "Scope of this record"
+    sheet["A1"].font = TITLE
+
+    rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
+    rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
+
+    row = 3
+    for label, value in rows:
+        sheet.cell(row=row, column=1, value=label).font = STRONG
+        sheet.cell(row=row, column=2, value=value).alignment = WRAP
+        row += 1
+
+    row += 1
+    sheet.cell(row=row, column=1, value="Not covered").font = STRONG
+    sheet.cell(row=row, column=2, value=scope.OUT_OF_VIEW).alignment = WRAP
+    sheet.row_dimensions[row].height = 80
+
+    row += 2
+    sheet.cell(row=row, column=1, value="Completeness").font = STRONG
+    if record.complete:
+        sheet.cell(row=row, column=2, value=_erasure_verdict(record))
+        return
+    sheet.cell(row=row, column=2, value="This record does not claim to be a proof.").font = STRONG
+    for reason in record.completeness.reasons:
+        row += 1
+        sheet.cell(row=row, column=2, value=reason).alignment = WRAP
+
+
 # --- what changed between two records, #14 ---------------------------------
 
 

@@ -728,3 +728,78 @@ class TestTheDiffCommand:
         out = capsys.readouterr().out
         assert "nothing in the Art. 30 content of these two records differs" in out
         assert "no findings" in out
+
+
+class TestTheErasureCommand:
+    """`qedro erasure` end to end — cordata-tech/qedro#4."""
+
+    DATASET = "crm_curated.customers"
+
+    @staticmethod
+    def run(*args, **kw):
+        return main(
+            [
+                "erasure",
+                "demo/lineage-declared",
+                "--config",
+                "demo/qedro.yaml",
+                *args,
+            ],
+            **kw,
+        )
+
+    def test_it_walks_forwards_to_the_descendants(self, capsys):
+        assert self.run("--dataset", self.DATASET, "--since", "2026-07-10") == 0
+        out = capsys.readouterr().out
+        assert "warehouse/billing_curated.invoices" in out
+        # Transitive: the dunning cases descend from the invoices, not directly.
+        assert "warehouse/billing_curated.dunning_cases" in out
+
+    def test_a_typed_instant_withholds_the_mark_and_says_why(self, capsys):
+        self.run("--dataset", self.DATASET, "--since", "2026-07-10")
+        out = " ".join(capsys.readouterr().out.split())
+        assert TOMBSTONE not in out
+        # In the verdict block, where the reasons go when nothing was written to
+        # a file; `--out` sends them to stderr instead, as every projection does.
+        assert "--since rather than from an emitted lifecycle event" in out
+
+    def test_and_the_reason_reaches_stderr_when_a_file_was_written(self, tmp_path, capsys):
+        out = tmp_path / "erasure.md"
+        self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--out", str(out))
+        cap = capsys.readouterr()
+        assert out.exists()
+        assert TOMBSTONE not in cap.out
+        assert "--since rather than from an emitted lifecycle event" in cap.err
+
+    def test_it_reports_datasets_and_not_rows(self, capsys):
+        self.run("--dataset", self.DATASET, "--since", "2026-07-10")
+        assert "covers datasets, not rows" in " ".join(capsys.readouterr().out.split())
+
+    def test_a_bare_name_is_matched(self, capsys):
+        # Nobody types the namespace, and `provenance` already decided this.
+        assert self.run("--dataset", "crm_curated.customers", "--since", "2026-07-10") == 0
+        assert "warehouse/crm_curated.customers" in capsys.readouterr().out
+
+    def test_a_name_that_matches_nothing_is_a_sentence(self, capsys):
+        assert self.run("--dataset", "no_such_table", "--since", "2026-07-10") == 2
+        assert "no dataset named" in capsys.readouterr().err
+
+    def test_the_depth_limit_is_reported_rather_than_silently_applied(self, capsys):
+        assert self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--depth", "1") == 0
+        cap = capsys.readouterr()
+        assert "depth limit of 1" in cap.out + cap.err
+
+    def test_every_format_runs(self, tmp_path):
+        for fmt in ("text", "markdown", "json"):
+            assert (
+                self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--format", fmt) == 0
+            )
+        out = tmp_path / "erasure.xlsx"
+        assert self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--out", str(out)) == 0
+        assert out.exists()
+
+    def test_the_json_names_the_projection(self, capsys):
+        self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--format", "json")
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["qedro"]["projection"] == "erasure"
+        assert payload["tombstone"]["evidenced"] is False
