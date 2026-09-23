@@ -4,7 +4,7 @@ Three weeks of OpenLineage from a company that does not exist. Everything here
 is synthetic and committed, so `qedro` can be run against something real-shaped
 without anyone needing a warehouse, an account, or a client's data.
 
-**ACME Finanz GmbH** runs six pipelines across three domains, emitted by dbt,
+**ACME Finanz GmbH** runs seven pipelines across three domains, emitted by dbt,
 Airflow and Spark. There is no Cordata infrastructure anywhere in it — no
 LakeFormation, no AWS, no descriptor model. That is the point: the tool has to
 work against what people already run, and a demo that quietly needed our own
@@ -30,14 +30,14 @@ That is what makes the comparison below mean something.
 $ qedro ropa demo/lineage
 ```
 
-Six activities, every one of them with no purpose and no lawful basis. Lineage
+Seven activities, every one of them with no purpose and no lawful basis. Lineage
 says *what happened*; Art. 30(1)(b) asks *why*, and no graph of jobs and datasets
 contains that. The mark is withheld, and the reasons say so:
 
 ```
   this record does not claim to be a proof:
     ! no controller is declared, and Art. 30(1)(a) requires one — set `controller:` in qedro.yaml
-    ! 6 of 6 activities have no purpose or no legal basis from any source
+    ! 7 of 7 activities have no purpose or no legal basis from any source
 ```
 
 ### 2. Lineage plus the mapping file
@@ -59,8 +59,8 @@ pipeline that ran:
 Still no mark, for two reasons — and the second is the interesting one:
 
 ```
-    ! 5 of 6 activities rely on the mapping file rather than on an emitted facet, so those entries are asserted rather than proven
-    ! 1 of 6 activities has no purpose or no legal basis from any source
+    ! 6 of 7 activities rely on the mapping file rather than on an emitted facet, so those entries are asserted rather than proven
+    ! 1 of 7 activities has no purpose or no legal basis from any source
 ```
 
 **That one activity is `acme.crm/consent-sync`.** It matches none of the patterns
@@ -77,7 +77,7 @@ $ qedro ropa demo/lineage-declared --config demo/qedro.yaml
 ```
 
 ```
-  provenance    6 evidenced, 0 from the mapping file, 0 undeclared
+  provenance    7 evidenced, 0 from the mapping file, 0 undeclared
 
   every activity stands on emitted evidence   ∎
 ```
@@ -126,7 +126,7 @@ $ qedro ropa demo/lineage-declared --config demo/qedro.yaml --activities demo/ac
 
 `activities.yaml` declares two uses that emit no lineage: a monthly payroll run in an
 HR vendor's SaaS, and support staff drafting replies in a vendor's assistant. Both
-appear beside the six evidenced activities as `declared, no lineage`, with `no lineage`
+appear beside the seven evidenced activities as `declared, no lineage`, with `no lineage`
 wherever the events would have supplied a value. The scope statement adds a line —
 *2 activities declared with no lineage* — without changing the evidenced counts, and
 the record no longer claims to be a proof, because nothing in the events shows either

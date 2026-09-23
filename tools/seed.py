@@ -292,6 +292,15 @@ class Pipeline:
     #: Days (0-based, from START) this run fails. A fortnight of production
     #: lineage with nothing failing in it is not production lineage.
     fails_on: tuple[int, ...] = ()
+    #: Days this job runs on, when it is not scheduled at all. An erasure
+    #: happens once, in response to a request, and a demo where it recurred
+    #: nightly would be describing something else.
+    only_on: tuple[int, ...] = ()
+    #: The output this job erases, and how. Emitted as the standard
+    #: `lifecycleStateChange` dataset facet, which is what lets `qedro erasure`
+    #: read the instant as evidence rather than take it from `--since`.
+    erases: str = ""
+    lifecycle: str = "OVERWRITE"
     sql: str = ""
     #: Path in the platform repository. The `sourceCodeLocation` job facet is
     #: standard OpenLineage and dbt, Airflow and Spark all emit it — which is
@@ -326,6 +335,8 @@ class Pipeline:
         return current
 
     def runs_on(self, day: int) -> bool:
+        if self.only_on:
+            return day in self.only_on
         return (START + timedelta(days=day)).weekday() == 0 if self.weekly else True
 
 
@@ -439,6 +450,29 @@ PIPELINES = (
             "from billing_curated.invoices where due_on < current_date"
         ),
     ),
+    Pipeline(
+        domain="crm",
+        name="subject-erasure",
+        code_path="dags/crm/subject_erasure.py",
+        emitter="airflow",
+        hour=9,
+        minute=12,
+        # Reads nothing and rewrites the table in place, which is what an
+        # erasure job does: the rows for one data subject are deleted and the
+        # table is written back. It is itself processing, and belongs in the
+        # Art. 30 record like any other job.
+        inputs=(),
+        outputs=("crm_raw.contacts",),
+        erases="crm_raw.contacts",
+        purpose="subject-rights-handling",
+        legal_basis="legal-obligation",
+        # Once, on the 22nd. Late enough that the weekly dunning job does not
+        # run again inside the window — so the demo shows an erasure that
+        # propagated to two descendants out of three, and names the third.
+        # An estate where everything was rewritten in time is not one anybody
+        # has, and the hole is the output this projection exists for.
+        only_on=(16,),
+    ),
 )
 
 #: Namespace for the deterministic run IDs. Any fixed UUID would do; this one
@@ -480,7 +514,13 @@ def _assertions(pipeline: Pipeline, day: int, producer: str) -> dict:
     )
 
 
-def _dataset(name: str, producer: str, assertions: dict | None = None) -> dict:
+def _dataset(
+    name: str,
+    producer: str,
+    assertions: dict | None = None,
+    *,
+    lifecycle: str = "",
+) -> dict:
     facets = {
         "dataSource": _facet(
             {
@@ -513,6 +553,15 @@ def _dataset(name: str, producer: str, assertions: dict | None = None) -> dict:
             producer,
             "https://openlineage.io/spec/facets/1-0-0/TagsDatasetFacet.json"
             "#/$defs/TagsDatasetFacet",
+        )
+    if lifecycle:
+        # A dataset facet rather than an output facet: *this table was
+        # overwritten* is true of the table, not only of one run's use of it.
+        facets["lifecycleStateChange"] = _facet(
+            {"lifecycleStateChange": lifecycle},
+            producer,
+            "https://openlineage.io/spec/facets/1-0-1/LifecycleStateChangeDatasetFacet.json"
+            "#/$defs/LifecycleStateChangeDatasetFacet",
         )
     out: dict = {"namespace": "warehouse", "name": name, "facets": facets}
     if assertions is not None:
@@ -649,7 +698,14 @@ def _events(pipeline: Pipeline, day: int, *, declared: bool) -> list[dict]:
         _dataset(name, producer, asserted if name == pipeline.asserts_on else None)
         for name in pipeline.inputs
     ]
-    complete["outputs"] = [_dataset(name, producer) for name in pipeline.outputs]
+    complete["outputs"] = [
+        _dataset(
+            name,
+            producer,
+            lifecycle=pipeline.lifecycle if name == pipeline.erases else "",
+        )
+        for name in pipeline.outputs
+    ]
     events.append(complete)
     return events
 

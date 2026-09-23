@@ -50,6 +50,15 @@ jobs:
     purpose: customer-administration
     legal_basis: contract
 
+  # The erasure job is processing like any other, and belongs in the record.
+  # Art. 17 is a right the controller is obliged to honour, so the basis is the
+  # legal obligation rather than the contract the data was collected under.
+  "acme.crm/subject-erasure":
+    purpose: subject-rights-handling
+    legal_basis: legal-obligation
+    security_measures:
+      - the request and its approval are recorded in the ticketing system
+
   "acme.billing/invoices-*":
     purpose: invoicing
     legal_basis: contract

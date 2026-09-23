@@ -6,6 +6,29 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro erasure`** — what descends from a dataset somebody erased, and whether the
+  erasure reached it (#4). Walks the lineage graph forwards from the erased dataset and
+  reports every dataset derived from it, transitively, with whether a job rewrote each
+  one afterwards. The descendants nothing rewrote are **named rather than counted**:
+  that list is the output, and it is the answer Art. 17 conversations rarely give.
+- **The tombstone is evidence or an assertion**, and no facet had to be invented for
+  it. OpenLineage has `lifecycleStateChange`, whose `DROP`, `TRUNCATE` and `OVERWRITE`
+  are erasures and whose `ALTER`, `CREATE` and `RENAME` are not — a rename is not a
+  deletion. An emitted one is the instant somebody proved; `--since` is the same instant
+  typed by hand, works against any lineage, and withholds the mark. Where both exist the
+  emitted one wins and both are printed.
+- **It reports datasets, not rows**, in every format and on runs that earn the mark as
+  much as on runs that do not. It can show that a dataset descends from the erased one
+  and that a job rewrote it afterwards; no lineage event says a particular data
+  subject's rows are gone, and this never implies otherwise.
+- **The demo estate carries an erasure**: `acme.crm/subject-erasure` overwrites
+  `crm_raw.contacts` on 2026-07-22 and emits the lifecycle facet, so the evidenced path
+  runs against committed events. Two of its three descendants were rewritten in time
+  and the weekly dunning job was not, which is the hole the record names. The erasure
+  job is itself in the Art. 30 record, because honouring a right is processing.
+
 ## 0.4.0 — 2026-09-20
 
 Comparing two records without a database (#14), and checking a hand-maintained

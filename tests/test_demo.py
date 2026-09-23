@@ -135,12 +135,12 @@ class TestLineageAlone:
 
     def test_it_finds_the_estate(self, capsys):
         payload = record(PLAIN, capsys=capsys)
-        assert len(payload["activities"]) == 6
-        assert payload["scope"]["events"] == 216
+        assert len(payload["activities"]) == 7
+        assert payload["scope"]["events"] == 218
 
     def test_but_cannot_say_why_any_of_it_happened(self, capsys):
         payload = record(PLAIN, capsys=capsys)
-        assert payload["scope"]["provenance"]["undeclared"] == 6
+        assert payload["scope"]["provenance"]["undeclared"] == 7
         assert payload["complete"] is False
 
     def test_and_says_that_the_controller_is_missing(self, capsys):
@@ -154,7 +154,7 @@ class TestLineagePlusTheMappingFile:
     def test_the_record_is_populated(self, capsys):
         payload = record(PLAIN, "--config", CONFIG, capsys=capsys)
         assert payload["controller"]["name"] == "ACME Finanz GmbH"
-        assert payload["scope"]["provenance"]["from_mapping"] == 5
+        assert payload["scope"]["provenance"]["from_mapping"] == 6
 
     def test_every_filled_value_is_labelled_as_an_assertion(self, capsys):
         payload = record(PLAIN, "--config", CONFIG, capsys=capsys)
@@ -168,7 +168,7 @@ class TestLineagePlusTheMappingFile:
         payload = record(PLAIN, "--config", CONFIG, capsys=capsys)
         [missed] = [a for a in payload["activities"] if not a["purpose"]["value"]]
         assert missed["job"] == "acme.crm/consent-sync"
-        assert any("1 of 6 activities has no purpose" in r for r in payload["reasons"])
+        assert any("1 of 7 activities has no purpose" in r for r in payload["reasons"])
 
     def test_and_the_record_still_does_not_claim_to_be_a_proof(self, capsys):
         assert record(PLAIN, "--config", CONFIG, capsys=capsys)["complete"] is False
@@ -180,7 +180,7 @@ class TestLineageThatDeclares:
     def test_every_activity_stands_on_emitted_evidence(self, capsys):
         payload = record(DECLARED, "--config", CONFIG, capsys=capsys)
         assert payload["scope"]["provenance"] == {
-            "evidenced": 6,
+            "evidenced": 7,
             "from_mapping": 0,
             "undeclared": 0,
         }
@@ -220,7 +220,7 @@ class TestTheWholeThingAsAnAuditorReceivesIt:
         assert sheet["A2"].value == "ACME Finanz GmbH"
         assert "stands on emitted evidence" in sheet["A4"].value
         # Six activities under one header row.
-        assert sheet.max_row == 12
+        assert sheet.max_row == 13
 
 
 class TestTheAssertionHistory:
@@ -329,9 +329,9 @@ class TestTheProvenanceChain:
     def test_the_source_tables_are_ends_not_failures(self, capsys):
         payload = self.chain("billing_curated.dunning_cases", capsys=capsys)
         ends = [s for s in payload["steps"] if s["production"] is None]
-        assert len(ends) == 3
+        assert len(ends) == 2
         assert all("nothing in the window produced it" in s["ended"] for s in ends)
-        assert payload["scope"]["ends_unproduced"] == 3
+        assert payload["scope"]["ends_unproduced"] == 2
 
     def test_the_daily_job_wrote_the_dataset_many_times(self, capsys):
         # *The latest* must not read as *the only*.
@@ -362,7 +362,7 @@ class TestTheDeployerViewOnTheDemo:
     def test_the_scoring_job_is_the_one_use_case(self, capsys):
         payload = self.deployer(DECLARED, capsys=capsys)
         assert [u["job"] for u in payload["use_cases"]] == ["acme.fraud/transactions-scored-daily"]
-        assert payload["scope"]["activities"] == 6
+        assert payload["scope"]["activities"] == 7
 
     def test_it_names_both_model_versions_with_their_runs(self, capsys):
         [use_case] = self.deployer(DECLARED, capsys=capsys)["use_cases"]

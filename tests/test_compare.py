@@ -445,6 +445,9 @@ class TestTheDemoEstate:
             "acme.billing/dunning-weekly",
             "acme.billing/invoices-nightly",
             "acme.crm/customers-curated",
+            # The erasure job is processing like any other, so it declares in
+            # one tier and falls back to the mapping file in the other.
+            "acme.crm/subject-erasure",
             "acme.fraud/scores-validated",
             "acme.fraud/transactions-scored-daily",
         }

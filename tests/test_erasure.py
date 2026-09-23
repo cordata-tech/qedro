@@ -328,3 +328,79 @@ class TestTheScopeStatement:
         events = [*chain(day=10), event("stale", reads=[ERASED], writes=["wh/old"], day=3)]
         rows = dict(record(events, since=at(5)).scope.lines())
         assert rows["propagation"] == "1 of 2 rewritten since the tombstone, 1 not"
+
+
+class TestTheDemoEstate:
+    """The whole thing against committed events, and the only evidenced tier.
+
+    Every other test here builds its events in memory. This one runs against
+    `demo/lineage-declared`, where the erasure job emits the standard lifecycle
+    facet — so the evidenced path is exercised by something a reader can open
+    rather than only by a fixture written beside the assertion.
+    """
+
+    @staticmethod
+    def built(**kw):
+        from pathlib import Path
+
+        from qedro.sources import read_dir
+
+        events, report = read_dir(Path("demo/lineage-declared"))
+        return erasure.build(
+            events,
+            dataset="warehouse/crm_raw.contacts",
+            config=config.parse(CONTROLLER),
+            report=report,
+            **kw,
+        )
+
+    def test_the_tombstone_is_evidence_rather_than_a_typed_date(self):
+        out = self.built()
+        assert out.tombstone.evidenced
+        assert out.tombstone.state == "OVERWRITE"
+        assert out.tombstone.at == datetime(2026, 7, 22, 9, 18, tzinfo=UTC)
+
+    def test_the_closure_is_transitive_through_three_levels(self):
+        out = self.built()
+        assert [(d.depth, d.dataset) for d in out.descendants] == [
+            (1, "warehouse/crm_curated.customers"),
+            (2, "warehouse/billing_curated.invoices"),
+            (3, "warehouse/billing_curated.dunning_cases"),
+        ]
+
+    def test_the_weekly_job_is_the_hole_the_erasure_did_not_reach(self):
+        # Dunning runs on Mondays and the erasure landed on a Wednesday, so the
+        # window ends before it runs again. An estate where everything was
+        # rewritten in time is not one anybody has.
+        out = self.built()
+        assert [d.dataset for d in out.unreached] == ["warehouse/billing_curated.dunning_cases"]
+        assert out.scope.rewritten == 2
+        assert out.scope.not_rewritten == 1
+
+    def test_so_the_record_does_not_claim_to_be_a_proof(self):
+        out = self.built()
+        assert not out.complete
+        # Named, and the tombstone is *not* among the reasons: it was emitted.
+        [reason] = out.completeness.reasons
+        assert "warehouse/billing_curated.dunning_cases" in reason
+        assert "--since" not in reason
+
+    def test_the_erasure_job_is_itself_in_the_art30_record(self):
+        # It processes personal data to honour a right, which is processing. A
+        # demo where the erasure job was invisible to `ropa` would be arguing
+        # that erasure is somehow outside the record.
+        from pathlib import Path
+
+        from qedro import ropa, vocabulary
+        from qedro.sources import read_dir
+
+        events, report = read_dir(Path("demo/lineage-declared"))
+        record = ropa.build(
+            events,
+            config=config.parse(CONTROLLER),
+            vocabulary=vocabulary.load(),
+            report=report,
+        )
+        [job] = [a for a in record.activities if a.key == "acme.crm/subject-erasure"]
+        assert job.purpose.value == "subject-rights-handling"
+        assert job.legal_basis.value == "legal-obligation"

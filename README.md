@@ -458,7 +458,7 @@ $ qedro provenance demo/lineage --dataset billing_curated.dunning_cases
       produced by   acme.billing/invoices-nightly
       ...
 
-      warehouse/crm_raw.contacts
+      warehouse/crm_raw.accounts
         — nothing in the window produced it
 ```
 
@@ -476,6 +476,53 @@ identical.
 
 Nothing here calls a forge API to resolve a commit. Read-only is a property of what
 the code can reach.
+
+## Proving an erasure reached what was derived from it
+
+Art. 17 needs three things and this does one of them. Finding where a subject's data
+lives is a catalog's job; deleting it is an orchestrator's, and never this tool's.
+Proving it happened — and saying where the proof does not reach — is what lineage is
+actually for, because every failure mode is a derived dataset somebody forgot: the
+materialised view, the monthly rollup, the vector index that already ingested the row.
+
+`qedro erasure` walks the graph forwards from the erased dataset:
+
+```console
+$ qedro erasure demo/lineage-declared --dataset crm_raw.contacts
+Erasure of warehouse/crm_raw.contacts
+
+    tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite
+
+    warehouse/crm_curated.customers
+      state         rewritten 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
+
+      warehouse/billing_curated.invoices
+        state         rewritten 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
+
+        warehouse/billing_curated.dunning_cases
+          state         not rewritten since the tombstone
+
+  this record does not claim to be a proof:
+    ! 1 of 3 descendants has not been rewritten since the tombstone:
+      warehouse/billing_curated.dunning_cases
+```
+
+The weekly dunning job has not run since the erasure, so one branch of the closure is
+a place the proof does not reach. **That list is the output.** A record where
+everything had been rewritten in time would be a record nobody needs.
+
+**The tombstone is evidence or an assertion.** OpenLineage already has the facet —
+`lifecycleStateChange`, whose `DROP`, `TRUNCATE` and `OVERWRITE` values are erasures
+and whose `ALTER`, `CREATE` and `RENAME` values are not. An erasure job that emits it
+gives an instant somebody proved. `--since` gives the same instant typed by hand, works
+against any lineage at all, and withholds the mark, because every rewrite below is then
+measured against a date rather than an event.
+
+**It reports datasets, not rows.** It can show that a dataset descends from the erased
+one and that a job rewrote it afterwards. It cannot show that a particular data
+subject's rows are gone, because no lineage event carries that — and a tool that blurred
+the two would be producing the artefact this project exists to argue against. The
+sentence is in the scope statement of every run, including one that earns the mark.
 
 ## The reader
 

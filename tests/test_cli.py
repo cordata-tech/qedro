@@ -672,7 +672,7 @@ class TestTheDiffCommand:
         main(["diff", before, after, "--out", str(tmp_path / "diff.md")])
         cap = capsys.readouterr()
         assert "wrote" in cap.out
-        assert "12 findings, 12 a loss of evidence" in cap.out
+        assert "14 findings, 14 a loss of evidence" in cap.out
         assert "different sources" in cap.err
 
     def test_the_format_is_inferred_from_the_filename(self, tmp_path):
