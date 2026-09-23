@@ -1,6 +1,6 @@
 # Transcript: `qedro ropa --view deployer`
 
-Captured by script from qedro 0.4.0, at commit `85ef563` with a clean working tree,
+Captured by script from qedro 0.4.0, at commit `b2fbd8e` with a clean working tree,
 on Python 3.12.13. The output below is what the command printed, unedited. Run the same
 commands from the repository root to reproduce it.
 

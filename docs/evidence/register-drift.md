@@ -1,6 +1,6 @@
 # Transcript: `qedro diff` against a hand-maintained register
 
-Captured by script from qedro 0.3.0, at commit `aea509e` with a clean working tree,
+Captured by script from qedro 0.4.0, at commit `b2fbd8e` with a clean working tree,
 on Python 3.12.13. The output below is what the command printed, unedited. Run the same
 commands from the repository root to reproduce it.
 
@@ -77,11 +77,15 @@ Where the register and the record disagree
     reads         register: warehouse/crm_raw.customers
                   the record does not report it
 
+  acme.crm/subject-erasure  — not in the register
+    added         in the record and not in the register
+                  nobody wrote this one down
+
   acme.fraud/scores-validated  — not in the register
     added         in the record and not in the register
                   nobody wrote this one down
 
-  14 findings across 6 entries; 1 in the register only, 3 in the record only; 1 agree throughout
+  15 findings across 7 entries; 1 in the register only, 4 in the record only; 1 agree throughout
 
   Scope of this comparison
     source        demo/register.yaml against record.json
