@@ -63,17 +63,29 @@ belongs only in the Art. 30 record.
 """
 
 
+def _dirty() -> str:
+    """Uncommitted changes, ignoring the captured transcripts themselves.
+
+    The check exists so the commit named in the file is the code that produced
+    the output. A transcript sitting uncommitted is not that code — and there is
+    more than one of them, so recapturing both in one go would otherwise have
+    each refusing because of the other.
+    """
+    status = subprocess.run(
+        ["git", "-C", str(REPO), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    return "\n".join(line for line in status if "docs/evidence/" not in line).strip()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Capture the deployer-view transcript.")
     parser.add_argument("--check", action="store_true", help="fail if the file is out of date")
     args = parser.parse_args()
 
-    dirty = subprocess.run(
-        ["git", "-C", str(REPO), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    dirty = _dirty()
     if dirty and not args.check:
         print(
             "working tree is dirty; commit first so the transcript can name the commit it came from",
