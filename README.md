@@ -24,8 +24,9 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. All three projections work, in four output formats, and the test
-> suite runs against real lineage captured from dbt, Airflow and Spark. `0.x`
+> Early development. All four projections work, in four output formats, and the test
+> suite runs against real lineage captured from dbt, Airflow, Spark, Flink and
+> `art30-emit`. `0.x`
 > interfaces may still move between releases, and [`CHANGELOG.md`](CHANGELOG.md) says
 > which.
 

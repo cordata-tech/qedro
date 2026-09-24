@@ -1,9 +1,11 @@
 # Qedro — working notes
 
 Turns emitted evidence into the artefacts an auditor asks for. Reads OpenLineage,
-produces a GDPR (DSGVO) Art. 30 record of processing activities, an assertion history, and
-the provenance chain from a published number back to the signed commit that
-authorised it. All three projections are built.
+produces a GDPR (DSGVO) Art. 30 record of processing activities, an assertion history,
+the provenance chain from a published number back to the signed commit that authorised
+it, and proof that an Art. 17 erasure reached everything derived from the erased data.
+All four projections are built, with the AI Act deployer view beside them as a view of
+`ropa`, and `qedro diff` comparing two records or a register against one.
 
 Planning lives in this repository: **#1** is the epic, **#2** is v1, **#3** constrains
 what any projection's output must contain. Read #2 before starting anything

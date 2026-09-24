@@ -57,6 +57,13 @@ jobs:
       - name: The demo estate matches its generator
         run: python tools/seed.py --check
 
+      # `docs/compatibility.md` states a rule about itself — a row may only say
+      # `works` if a test names it — and it was kept by hand. Both halves have
+      # been broken in practice: a row marked `works` on the strength of a test
+      # in another repository, and a row naming a test file that never existed.
+      - name: The compatibility page keeps its own rule
+        run: python tools/check_compatibility.py
+
       # The transcripts in docs/evidence are quoted by published posts and by
       # platform#48. Both went stale once before this ran here: the tests assert
       # the facts in them but not the wording, so a change to how the output

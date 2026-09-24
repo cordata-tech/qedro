@@ -33,6 +33,21 @@ Tracked in [#5](https://github.com/cordata-tech/qedro/issues/5).
 | DataHub, OpenMetadata, Egeria | **candidate** | Each has its own API. Worth doing where somebody actually runs one |
 | Accepting pushed events into a store of ours | **no** | It would make Qedro a second lineage warehouse competing with the backend you already run, and re-acquire the precondition that reading OpenLineage removed. Adapters run client-side instead |
 
+## Documents read, other than events
+
+Not every input is lineage. These are the documents a run can be handed, and each is
+read for a different reason — which matters, because two of them are assertions and
+the page would be misleading if it listed them beside evidence without saying so.
+
+| | State | Notes |
+|---|---|---|
+| `qedro.yaml` — controller, domains, mapping rules | **works** | `tests/test_config.py`. YAML, JSON or TOML. The `jobs:` rules are a **fallback**, labelled as asserted wherever a value comes from them |
+| A vocabulary document | **works** | `tests/test_vocabulary.py`. Replaces the shipped GDPR baseline wholesale rather than merging with it |
+| A declared-activities document, `--activities` | **works** | `tests/test_ropa.py::TestDeclaredActivities` and `tests/test_deployer.py::TestDeclaredUseCases`. Processing that emits no lineage, **merged into the record** and marked declared; any declared entry withholds the mark (#6) |
+| A register, as a side of `qedro diff` | **works** | `tests/test_register.py`. The declared-activities shape plus `job` and `owner`, **never merged into a record** — it is an outside claim being checked against one (#24) |
+| A record this tool wrote, as a side of `qedro diff` | **works** | `tests/test_compare.py::TestTheReaderMatchesTheWriter`. The JSON output of an earlier run, identified by its `qedro` block; schema 0 is a document from 0.1 to 0.3 and is read with the difference stated (#14) |
+| A spreadsheet register | **candidate** | The trigger is written down rather than left to feel: the first register somebody actually has that is a CSV. What its columns mean is a different question from the one `register.py` answers |
+
 ## Emitters — who produces what we read
 
 **This column needs no work from us**, which is the point of the design. Anything
@@ -41,22 +56,23 @@ the output.
 
 | | Lineage | Art. 30 `processing` facet | `dataQualityAssertions` | `sourceCodeLocation` |
 |---|---|---|---|---|
-| dbt | **works** — openlineage-dbt 1.53.0, `tests/fixtures/dbt-1.53` | no | not in the captured `dbt-ol run`, which ran no tests | not in the capture |
-| Airflow | **works** — provider 2.20.1 on Airflow 3.3.1, `tests/fixtures/airflow-3.3.1` | no | not in the capture; a Great Expectations operator would send it | not in the capture: the provider sent `sourceCode`, the bash command itself |
-| Spark | **works** — openlineage-spark 1.53.0 on Spark 4.2.0, `tests/fixtures/spark-4.2.0` | no | not in the capture | not in the capture |
-| Flink | **works** — Flink 1.20.5 with `openlineage-flink` 1.53.0, `tests/fixtures/flink-1.20.5` | no | not in the capture | not in the capture |
+| dbt | **works** — openlineage-dbt 1.53.0, `tests/fixtures/dbt-1.53`, read in `tests/test_ropa.py::TestOrchestrationParents` | no | not in the captured `dbt-ol run`, which ran no tests | not in the capture |
+| Airflow | **works** — provider 2.20.1 on Airflow 3.3.1, `tests/fixtures/airflow-3.3.1`, read in `tests/test_ropa.py::TestOrchestrationParents` | no | not in the capture; a Great Expectations operator would send it | not in the capture: the provider sent `sourceCode`, the bash command itself |
+| Spark | **works** — openlineage-spark 1.53.0 on Spark 4.2.0, `tests/fixtures/spark-4.2.0`, read in `tests/test_ropa.py::TestOrchestrationParents` | no | not in the capture | not in the capture |
+| Flink | **works** — Flink 1.20.5 with `openlineage-flink` 1.53.0, `tests/fixtures/flink-1.20.5`, read in `tests/test_ropa.py::TestOrchestrationParents` | no | not in the capture | not in the capture |
 | Dagster, Trino | **candidate** | no | — | — |
 | `pipeline-runtime` | **works** — `tests/fixtures/events`, read in `tests/test_cli.py::test_clean_read_earns_the_tombstone` | **works** — the only emitter that does; `tests/test_ropa.py::test_the_processing_facet_is_read_from_the_pipeline_runtime_capture` | **works** — `tests/test_quality.py::test_assertions_are_read_from_the_pipeline_runtime_capture` | no |
 | Anything else, wrapped in [`art30-emit`](https://github.com/cordata-tech/art30-emit) | **works** — art30-emit 0.1.0, `tests/fixtures/art30-emit-0.1.0` | **works** — the second emitter that sends it, and the only one that is not `pipeline-runtime`; `tests/test_ropa.py::TestTheArt30EmitCapture` | — | — |
 
-Each `works` in the first column is a real capture from that emitter, run through
-all three projections, with `tests/test_ropa.py::TestOrchestrationParents` naming
-four of the fixtures and `TestTheArt30EmitCapture` the fifth. Flink is the narrowest of them: its integration reads lineage from a short
+Each `works` in the first column is a real capture from that emitter, run through every
+projection. Flink is the narrowest of them: its integration reads lineage from a short
 list of connectors rather than from the job's plan, so a Flink job using anything else
-emits a job with no datasets, and the capture also names the source only on `START`. The other columns say what the capture contained rather than what the
-integration can emit in some configuration: until 2026-09-17 they said *emits it*
-for `sourceCodeLocation` on dbt, Airflow and Spark, and none of the three captures
-carries it. What the captures found is tracked in #8, #9, #22 and #23.
+emits a job with no datasets, and the capture also names the source only on `START`.
+
+The other columns say what the capture contained rather than what the integration can
+emit in some configuration. Until 2026-09-17 they said *emits it* for
+`sourceCodeLocation` on dbt, Airflow and Spark, and none of the five captures carries
+it. What the captures found is tracked in #8, #9, #22 and #23.
 
 The gap in the second column is the product problem rather than a coverage
 problem. A pipeline emitting lineage but no `processing` facet produces a record
@@ -75,10 +91,12 @@ from those projects.
 |---|---|---|
 | `processing` (this repo's Art. 30 facet) | **works** | `ropa` — `tests/test_ropa.py::TestProvenancePrecedence`, and against the real `pipeline-runtime` capture; the key is held to that capture by `tests/test_facet_schema.py` |
 | `dataQualityAssertions` (standard, input facet) | **works** | `quality` — `tests/test_quality.py::TestReadingTheFacet`, and against the real `pipeline-runtime` capture |
-| `sourceCodeLocation` (standard, job facet) | **works** | `provenance` — `tests/test_provenance.py::TestWalkingBackwards::test_the_code_and_commit_come_from_the_standard_facet`. None of the three real captures carries it |
+| `sourceCodeLocation` (standard, job facet) | **works** | `provenance` — `tests/test_provenance.py::TestWalkingBackwards::test_the_code_and_commit_come_from_the_standard_facet`. None of the five real captures carries it |
 | `schema` (standard, dataset facet) | **works** | dataset columns — `tests/test_events.py::TestDatasets::test_field_names_come_from_the_schema_facet` |
 | `tags` (standard, dataset facet) | **works** — read, including `field`-level tags — `tests/test_events.py::TestTheTagsDatasetFacet`, and from a real capture in `tests/test_ropa.py::TestTheArt30EmitCapture` | classification, for the Art. 30(1)(c)–(f) fields (#13). The spec has it and both clients generate it — `openlineage-python` ships `TagsDatasetFacet` from 1.52.0 — but **no integration emits it** as of 1.53.0: the repository builds job and run tag facets only, and none of the four captures from dbt, Airflow, Spark or Flink carries one. What is missing is an emitter: `art30-emit` sends it today, and `pipeline-runtime` is adding it (`cordata-tech/pipeline-runtime#3`) |
-| `lifecycleStateChange` (standard, dataset facet) | **works** | `erasure`, as the instant an erasure happened — `tests/test_erasure.py::TestTheTombstone` and, against the demo estate, `TestTheDemoEstate`. `DROP`, `TRUNCATE` and `OVERWRITE` are read as erasures and `ALTER`, `CREATE` and `RENAME` are not, because a rename is not a deletion. **No integration emits it** as of 1.53.0: none of the five captures carries one, so the demo's erasure job is what exercises it. Where it is absent, `--since` supplies the instant and the record says it was asserted |
+| `lifecycleStateChange` (standard, dataset facet) | **works** | `erasure`, as the instant an erasure happened — `tests/test_erasure.py::TestTheTombstone` and, against the demo estate,
+`tests/test_erasure.py::TestTheDemoEstate` — spelled in full because
+`tests/test_compare.py::TestTheDemoEstate` is a different class. `DROP`, `TRUNCATE` and `OVERWRITE` are read as erasures and `ALTER`, `CREATE` and `RENAME` are not, because a rename is not a deletion. **No integration emits it** as of 1.53.0: none of the five captures carries one, so the demo's erasure job is what exercises it. Where it is absent, `--since` supplies the instant and the record says it was asserted |
 | `parent` (standard, run facet) | **works** | `ropa`, to leave orchestration parents out of the activities — `tests/test_ropa.py::TestOrchestrationParents`, against real dbt, Airflow and Spark lineage: the dbt invocation, the Airflow DAG run, and the Spark application run |
 | A model version per run | **works** for the standard `tags` run facet (key `model_version`) and `cordata_provenance.step_params.*.model_version` | `ropa --view deployer` — `tests/test_deployer.py`, including against the captured `pipeline-runtime` event in `docs/evidence/`. There is **no standard facet** for this, which is why the list is short and documented |
 | The application release behind what a run read | **works** for `cordata_provenance.source_published_by` and `.source_published_release`, with `source_schema_version` and `source_table` naming what was published — `tests/test_provenance.py::TestTheApplicationBehindWhatWasRead`. There is **no standard facet**: `datasetVersion` says which version a run read and never who published it, and `ownership` names owners of the dataset as a standing fact, with no release. The tests are synthetic — `tests/fixtures/events` was captured from pipeline-runtime 0.1.0 before `722ac7e` added the fields, so **no capture carries them yet**. Re-capture when a pipeline-runtime release emits them (#25) |
