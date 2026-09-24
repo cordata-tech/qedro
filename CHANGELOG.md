@@ -23,6 +23,20 @@ before `1.0`.
   much as on runs that do not. It can show that a dataset descends from the erased one
   and that a job rewrote it afterwards; no lineage event says a particular data
   subject's rows are gone, and this never implies otherwise.
+- **`provenance` names the application release behind the data a run read** (#25), one
+  hop further out than the commit behind the pipeline. Read from
+  `cordata_provenance.source_published_by` and `.source_published_release`, with
+  `source_schema_version` and `source_table` naming what was published — so the step
+  says *version 7 of fraud_raw.transactions, published by catalog-loader release
+  2026.07.3* rather than leaving the claim floating.
+- **An unknown publisher is counted, not a withholding reason.** The signature withholds
+  because the chain claims authorisation and cannot show it; a missing publisher says
+  nothing about authorisation, so it joins the commit and signature counts in the scope
+  statement. The rule this settles, for the next field somebody adds: the mark is
+  withheld for what the chain claims and counted for what it merely covers.
+- **Absent reads as unknown, never as unpublished**, as the signature does. An unset
+  field means the catalog recorded no producer for that version, or the run read
+  nothing.
 - **The demo estate carries an erasure**: `acme.crm/subject-erasure` overwrites
   `crm_raw.contacts` on 2026-07-22 and emits the lifecycle facet, so the evidenced path
   runs against committed events. Two of its three descendants were rewritten in time

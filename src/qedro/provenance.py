@@ -32,9 +32,10 @@ a CLI that reads a directory.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from . import scope as scope_module
 from .config import Config, Controller
@@ -54,6 +55,28 @@ CODE = "sourceCodeLocation"
 #: unknown, which withholds the mark rather than guessing. Tracked in #5.
 SIGNATURE_FACETS = ("cordata_provenance", "gitProvenance", "provenance")
 SIGNATURE_KEYS = ("descriptor_git_commit_signed", "commit_signed", "signed")
+
+#: Where the application release behind the data a run *read* is reported. The
+#: chain otherwise stops at the pipeline: this run, this commit, signed or not.
+#: A published number usually depends on data somebody else's application wrote,
+#: and this is the first evidence of that hop that arrives without asking anyone.
+#:
+#: One spelling, for the same reason as the signature list above: there is no
+#: standard facet for it. `datasetVersion` says *which* version a run read and
+#: never who published it; `ownership` names owners of the dataset — its own
+#: example value is `application:app_name` — but that is a standing fact about
+#: the dataset rather than evidence about the version one run consumed, and it
+#: carries no release. Merging the two would be exactly the dataset-facet versus
+#: input-facet confusion this repository keeps apart everywhere else. A second
+#: spelling gets added when a second emitter exists. Tracked in #5.
+PUBLISHER_FACETS = ("cordata_provenance",)
+PUBLISHER_KEYS = ("source_published_by",)
+RELEASE_KEYS = ("source_published_release",)
+#: What was published, where the same facet says so. Read because *published by
+#: catalog-loader release R* invites *published what?* — and the answer is one
+#: more lookup in a facet already open.
+VERSION_KEYS = ("source_schema_version",)
+TABLE_KEYS = ("source_table",)
 
 #: How far upstream to walk before stopping. Deep enough for any real pipeline
 #: graph, and bounded because a cycle in emitted lineage is not hypothetical.
@@ -111,6 +134,46 @@ class Signature:
 
 
 @dataclass(frozen=True)
+class Published:
+    """The application release behind the data this run read.
+
+    Three states, as the signature has, and for a related reason: an unset field
+    means the catalog recorded no producer for that version — a table a crawler
+    wrote, or a job that set no parameters — or that the run read nothing. The
+    client drops a `None`-valued field on the way out, so **an absent key is the
+    wire spelling of *nobody recorded it***.
+
+    Unlike the signature it does not withhold the mark. The chain claims
+    authorisation, and a missing publisher says nothing about that; it says the
+    chain reaches one hop less far than it could, which is coverage and is
+    counted in the scope statement. See cordata-tech/qedro#25.
+    """
+
+    by: str = ""
+    release: str = ""
+    #: What was published, where the same facet says so.
+    version: str = ""
+    table: str = ""
+
+    @property
+    def known(self) -> bool:
+        return bool(self.by)
+
+    def describe(self) -> str:
+        if not self.known:
+            return "publisher unknown — nothing reported it"
+        what = ""
+        if self.version and self.table:
+            what = f"version {self.version} of {self.table}, "
+        elif self.version:
+            what = f"version {self.version}, "
+        elif self.table:
+            what = f"{self.table}, "
+        at = f" release {self.release}" if self.release else " at an unreported release"
+        return f"{what}published by {self.by}{at}"
+
+
+@dataclass(frozen=True)
 class Production:
     """One run that wrote one dataset."""
 
@@ -121,6 +184,7 @@ class Production:
     code: Code
     signature: Signature
     reads: tuple[str, ...] = ()
+    published: Published = field(default_factory=Published)
 
     @property
     def authorised(self) -> bool:
@@ -155,6 +219,10 @@ class Scope(scope_module.Scope):
     steps: int = 0
     with_commit: int = 0
     with_signature: int = 0
+    #: Steps naming the application release behind what they read. Counted
+    #: rather than a withholding reason: the chain claims authorisation, and a
+    #: missing publisher is coverage. See cordata-tech/qedro#25.
+    with_publisher: int = 0
     ends_unproduced: int = 0
     ends_at_depth: int = 0
     depth_limit: int = DEPTH
@@ -174,7 +242,8 @@ class Scope(scope_module.Scope):
                 "evidence",
                 (
                     f"{self.with_commit} of {self.steps} steps name a commit, "
-                    f"{self.with_signature} report a signature"
+                    f"{self.with_signature} report a signature, "
+                    f"{self.with_publisher} name the application that published what they read"
                 ),
             ),
         ]
@@ -335,7 +404,41 @@ def _production(event: Event) -> Production:
         code=_code(event),
         signature=_signature(event),
         reads=tuple(sorted({d.key for d in event.inputs})),
+        published=_published(event),
     )
+
+
+def _scalar(facet: Mapping[str, Any], keys: tuple[str, ...]) -> str:
+    """The first of *keys* the facet reports, as text, or "".
+
+    A number counts. `source_schema_version` arrives as an integer, and refusing
+    to read it because it is not a string would report *nobody said* about
+    something somebody said. A boolean does not: `True` is not a version.
+    """
+    for key in keys:
+        value = facet.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+    return ""
+
+
+def _published(event: Event) -> Published:
+    """The application release behind what this run read, if anything said."""
+    for name in PUBLISHER_FACETS:
+        facet = event.run_facet(name)
+        if not facet:
+            continue
+        by = _scalar(facet, PUBLISHER_KEYS)
+        if by:
+            return Published(
+                by=by,
+                release=_scalar(facet, RELEASE_KEYS),
+                version=_scalar(facet, VERSION_KEYS),
+                table=_scalar(facet, TABLE_KEYS),
+            )
+    return Published()
 
 
 def _code(event: Event) -> Code:
@@ -396,6 +499,7 @@ def _scope(
         steps=len(steps),
         with_commit=sum(1 for s in steps if s.production and s.production.code.commit),
         with_signature=sum(1 for s in steps if s.production and s.production.signature.known),
+        with_publisher=sum(1 for s in steps if s.production and s.production.published.known),
         ends_unproduced=sum(1 for s in steps if s.ended and not s.production),
         ends_at_depth=sum(1 for s in steps if s.ended and s.production),
         depth_limit=depth,

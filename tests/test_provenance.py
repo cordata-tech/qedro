@@ -34,6 +34,10 @@ def event(
     when="2026-03-01T10:00:00Z",
     run="r1",
     event_type="COMPLETE",
+    published_by=None,
+    release=None,
+    version=None,
+    table=None,
 ):
     """One event, with as much or as little provenance evidence as wanted."""
     job_facets = {}
@@ -47,11 +51,19 @@ def event(
             "path": f"models/{job}.sql",
         }
     run_facets = {}
+    provenance_facet: dict = {"_producer": "https://example.test"}
     if signed is not None:
-        run_facets["cordata_provenance"] = {
-            "_producer": "https://example.test",
-            "descriptor_git_commit_signed": signed,
-        }
+        provenance_facet["descriptor_git_commit_signed"] = signed
+    if published_by is not None:
+        provenance_facet["source_published_by"] = published_by
+    if release is not None:
+        provenance_facet["source_published_release"] = release
+    if version is not None:
+        provenance_facet["source_schema_version"] = version
+    if table is not None:
+        provenance_facet["source_table"] = table
+    if len(provenance_facet) > 1:
+        run_facets["cordata_provenance"] = provenance_facet
 
     raw = {
         "eventType": event_type,
@@ -419,3 +431,94 @@ class TestEverySignatureSpellingIsRead:
             out = chain([self.signed_by(name)], "wh/scores")
             signature = out.steps[0].production.signature
             assert (signature.signed, signature.reported_by) == (True, name), name
+
+
+class TestTheApplicationBehindWhatWasRead:
+    """cordata-tech/qedro#25.
+
+    The chain otherwise stops at the pipeline — this run, this commit, signed or
+    not. A published number usually depends on data somebody else's application
+    wrote, and `source_published_by` is the first evidence of that hop that
+    arrives without asking anybody.
+
+    **It does not withhold the mark.** The signature does, because the chain
+    claims authorisation and cannot show it. A missing publisher says nothing
+    about authorisation; it says the chain reaches one hop less far, which is
+    coverage and is counted in the scope statement instead.
+    """
+
+    def test_the_publisher_and_release_are_read(self):
+        out = chain(
+            [
+                event(
+                    writes=["scores"],
+                    reads=["raw"],
+                    published_by="catalog-loader",
+                    release="2026.07.3",
+                )
+            ],
+            "wh/scores",
+        )
+        published = out.steps[0].production.published
+        assert published.by == "catalog-loader"
+        assert published.release == "2026.07.3"
+        assert published.known
+
+    def test_what_was_published_is_read_from_the_same_facet(self):
+        # `published by catalog-loader release R` invites `published what?`, and
+        # the answer is one more lookup in a facet already open.
+        out = chain(
+            [
+                event(
+                    writes=["scores"],
+                    published_by="catalog-loader",
+                    version=7,
+                    table="fraud_raw.transactions",
+                )
+            ],
+            "wh/scores",
+        )
+        published = out.steps[0].production.published
+        # A version arrives as a number from at least one emitter. Refusing to
+        # read it because it is not a string would report *nobody said* about
+        # something somebody said.
+        assert published.version == "7"
+        assert published.table == "fraud_raw.transactions"
+        assert "version 7 of fraud_raw.transactions" in published.describe()
+
+    def test_an_absent_publisher_is_unknown_and_never_unpublished(self):
+        out = chain([event(writes=["scores"])], "wh/scores")
+        published = out.steps[0].production.published
+        assert not published.known
+        assert published.describe() == "publisher unknown — nothing reported it"
+        # The word a later simplification would reach for, and the one that
+        # would invent a finding the catalog never reported.
+        assert "unpublished" not in published.describe()
+
+    def test_a_facet_with_a_signature_and_no_publisher_reports_only_the_signature(self):
+        out = chain([event(writes=["scores"], signed=True)], "wh/scores")
+        production = out.steps[0].production
+        assert production.signature.signed is True
+        assert not production.published.known
+
+    def test_a_release_nobody_reported_is_said_rather_than_left_blank(self):
+        out = chain([event(writes=["scores"], published_by="catalog-loader")], "wh/scores")
+        assert "at an unreported release" in out.steps[0].production.published.describe()
+
+    def test_it_does_not_withhold_the_mark(self):
+        # Everything the chain claims is evidenced; only the publisher is silent.
+        out = chain([event(writes=["scores"], signed=True, commit="abc123def456")], "wh/scores")
+        assert not out.steps[0].production.published.known
+        assert out.complete, out.completeness.reasons
+        assert not any("publish" in r for r in out.completeness.reasons)
+
+    def test_it_is_counted_in_the_scope_statement_instead(self):
+        events = [
+            event(job="a", writes=["final"], reads=["mid"], published_by="catalog-loader"),
+            event(job="b", writes=["mid"]),
+        ]
+        out = chain(events, "wh/final")
+        assert out.scope.with_publisher == 1
+        assert out.scope.steps == 2
+        [line] = [v for label, v in out.scope.lines() if label == "evidence"]
+        assert "1 name the application that published what they read" in line

@@ -839,6 +839,9 @@ PROVENANCE_COLUMNS: tuple[tuple[str, int], ...] = (
     ("Branch", 14),
     ("Path", 34),
     ("Signature", 34),
+    # One hop further out than the commit: the application release behind
+    # the data the run read, rather than behind the pipeline itself.
+    ("Source published by", 40),
     ("Chain ends", 44),
 )
 
@@ -874,7 +877,8 @@ def _chain(sheet: Any, record: ProvenanceRecord) -> None:
     sheet["A2"].font = STRONG
     sheet["A3"] = (
         f"{record.scope.with_commit} of {record.scope.steps} steps name a commit, "
-        f"{record.scope.with_signature} report a signature"
+        f"{record.scope.with_signature} report a signature, "
+        f"{record.scope.with_publisher} name the application that published what they read"
     )
     sheet["A4"] = _provenance_verdict(record)
     sheet["A4"].font = STRONG
@@ -900,6 +904,7 @@ def _chain(sheet: Any, record: ProvenanceRecord) -> None:
             p.code.branch if p else "",
             p.code.path if p else "",
             p.signature.describe() if p else "",
+            p.published.describe() if p else "",
             step.ended,
         )
         for index, value in enumerate(values, start=1):

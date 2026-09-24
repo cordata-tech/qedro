@@ -779,6 +779,11 @@ def _step_text(step, indent: str) -> list[str]:
         where = " ".join(x for x in (p.code.branch, p.code.path) if x)
         out.append(f"{indent}              {where}")
     out.append(f"{indent}signature     {p.signature.describe()}")
+    # One hop further out than the commit: the application release behind the
+    # data this run read, rather than behind the pipeline. Printed even when
+    # unknown, because a line that appears only when populated teaches a reader
+    # that its absence means there was nothing to report. See #25.
+    out.append(f"{indent}source        {p.published.describe()}")
     if step.also_produced_by:
         out.append(
             f"{indent}also          {words.count(step.also_produced_by, 'other run')} "
@@ -793,18 +798,19 @@ def _step_text(step, indent: str) -> list[str]:
 def _(record: provenance_module.Record) -> str:
     out = [f"# Provenance of `{record.dataset}`", ""]
     out += [
-        "| Depth | Dataset | Produced by | Commit | Signature |",
-        "|---|---|---|---|---|",
+        "| Depth | Dataset | Produced by | Commit | Signature | Source published by |",
+        "|---|---|---|---|---|---|",
     ]
     for step in record.steps:
         if step.production:
             p = step.production
             out.append(
                 f"| {step.depth} | `{step.dataset}` | `{p.job}` "
-                f"| {p.code.short or '—'} | {p.signature.describe()} |"
+                f"| {p.code.short or '—'} | {p.signature.describe()} "
+                f"| {p.published.describe()} |"
             )
         else:
-            out.append(f"| {step.depth} | `{step.dataset}` | — | — | _{step.ended}_ |")
+            out.append(f"| {step.depth} | `{step.dataset}` | — | — | — | _{step.ended}_ |")
 
     out += _scope_markdown(record.scope)
     out += _verdict_markdown(record, "Every step ran under a signed commit.", withheld="chain")
@@ -842,6 +848,18 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
                     "signed": s.production.signature.signed,
                     "signature_reported_by": s.production.signature.reported_by,
                     "authorised": s.production.authorised,
+                    # One hop further out: the application release behind what
+                    # this run read. `null` throughout when nothing reported it,
+                    # for the same reason `signed` is — a consumer reading an
+                    # empty string as *unpublished* would invent a finding.
+                    "source_published": None
+                    if not s.production.published.known
+                    else {
+                        "by": s.production.published.by,
+                        "release": s.production.published.release or None,
+                        "version": s.production.published.version or None,
+                        "table": s.production.published.table or None,
+                    },
                 },
             }
             for s in record.steps
@@ -854,6 +872,7 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
             "steps": record.scope.steps,
             "with_commit": record.scope.with_commit,
             "with_signature": record.scope.with_signature,
+            "with_publisher": record.scope.with_publisher,
             "ends_unproduced": record.scope.ends_unproduced,
             "ends_at_depth": record.scope.ends_at_depth,
             "depth_limit": record.scope.depth_limit,
