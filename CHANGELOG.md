@@ -6,7 +6,20 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.5.0 — 2026-09-24
+
+A fourth projection, and the existing chain reaching one hop further out.
+
+`qedro erasure` (#4) answers the part of Art. 17 that lineage is actually for. Finding
+where a subject's data lives is a catalog's job and deleting it is an orchestrator's;
+proving the deletion reached everything derived from it, and naming the places the
+proof does not reach, is what the downstream closure of a dataset is. `provenance`
+(#25) now names the application release behind the data a run read, rather than
+stopping at the commit behind the pipeline.
+
+Neither invents a facet. The erasure instant comes from the standard
+`lifecycleStateChange`, and where nothing emitted one the record says the instant was
+typed rather than proved.
 
 - **`qedro erasure`** — what descends from a dataset somebody erased, and whether the
   erasure reached it (#4). Walks the lineage graph forwards from the erased dataset and
