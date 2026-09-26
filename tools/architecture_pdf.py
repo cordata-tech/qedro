@@ -38,10 +38,10 @@ TOOLS = ("mmdc", "pandoc", "typst")
 #: Rendered at 3x so diagram labels stay legible when scaled to page width.
 SCALE = "3"
 
-#: Taller than this and a diagram cannot share a page with the text around it,
-#: so Typst moves it and leaves a near-empty page behind. Wide diagrams take the
-#: page width instead.
-MAX_HEIGHT = "125mm"
+#: A diagram too tall to scale to the page width gets the page height instead,
+#: which in practice gives it a page of its own. Nearly the full text height,
+#: because a tall diagram constrained to less is legible to nobody.
+MAX_HEIGHT = "185mm"
 
 #: Pandoc sets an alignment per table column, which Typst renders centred;
 #: left-aligned cells are far easier to read in the module and milestone tables.
@@ -112,15 +112,33 @@ def _render_diagrams(markdown: str, work: Path) -> str:
             check=True,
             stdout=subprocess.DEVNULL,
         )
-        size = f"height={MAX_HEIGHT}" if _is_tall(match.group(1)) else "width=100%"
+        size = f"height={MAX_HEIGHT}" if _is_tall(image) else "width=100%"
         return f"![]({image.name}){{{size}}}"
 
     return re.sub(r"```mermaid\n(.*?)```", replace, markdown, flags=re.DOTALL)
 
 
-def _is_tall(diagram: str) -> bool:
-    """A top-to-bottom flowchart with nested subgraphs runs off the page at full width."""
-    return diagram.lstrip().startswith("flowchart TB") and diagram.count("subgraph") >= 2
+#: Widest aspect ratio (height ÷ width) that still fits the text column without
+#: running off the page. Beyond it, Typst has nowhere to put the image and
+#: silently leaves a near-empty page behind — which is how a rendered diagram
+#: disappears while the build still exits zero.
+TALLEST = 1.6
+
+
+def _is_tall(image: Path) -> bool:
+    """Whether the rendered image is too tall to scale to the page width.
+
+    Measured from the PNG rather than guessed from the diagram source. The rule
+    here used to be *a top-to-bottom flowchart with two or more subgraphs*, which
+    was true of the diagrams that existed when it was written and stopped being
+    true when a `mermaid-cli` upgrade changed the layout: the overview diagram
+    has no subgraph at all, went from fitting to 1:2.2, and vanished from the
+    PDF while the build reported success.
+    """
+    header = image.read_bytes()[16:24]
+    width = int.from_bytes(header[:4], "big")
+    height = int.from_bytes(header[4:], "big")
+    return bool(width) and height / width > TALLEST
 
 
 if __name__ == "__main__":
