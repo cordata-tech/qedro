@@ -107,7 +107,7 @@ the pin, which is the one thing the test exists to catch.
 - **Apache-2.0.** Everything open, including the parts that would be a commercial tier
   elsewhere. `pipeline-runtime` is MIT and that inconsistency is deliberate — the
   patent grant is what DACH enterprise legal review looks for.
-- **Public since 2026-09-18, and on PyPI as `qedro` 0.2.0.** It was private until the
+- **Public since 2026-09-18, and on PyPI as `qedro` 0.5.0.** It was private until the
   checkpoint at the end of v0.2: run against real work first, then open. 0.1.0 was
   tagged on 2026-08-22 and never published, and that wait paid — the real dbt, Airflow
   and Spark captures produced #8, #9, #12, #22 and #23 before anything shipped. The
