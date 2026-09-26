@@ -78,7 +78,7 @@ relied on downstream, not diagnostics.
 |---|---|---|
 | [`pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime) | *What should this pipeline do, and did it?* | AWS-native by design. LF-tags are correct there |
 | `catalog-mcp` (planned, platform#26) | *What is the policy on this dataset, right now?* | AWS-native by design |
-| [`art30-emit`](https://github.com/cordata-tech/art30-emit) (private, #27) | *How does code nobody instruments say why it processes?* | **must not be** — it implements the published facet |
+| [`art30-emit`](https://github.com/cordata-tech/art30-emit) (public, on PyPI, #27) | *How does code nobody instruments say why it processes?* | **must not be** — it implements the published facet |
 | **this** | *What happened, and can I prove it to an auditor?* | **must not be** |
 
 `art30-emit` is a separate repository because **Qedro is read-only by construction**
