@@ -111,10 +111,26 @@ resolved against the loaded vocabulary. The adapters below are ways a classifica
 could arrive from a catalog instead; they are adapters onto one vocabulary, never the
 shape of the model.
 
+**The trigger for building the first one, written down rather than left to feel: an
+organisation whose classification lives in a catalog and *not* in the events.** #13 set
+out expecting to need one and did not — the standard `tags` dataset facet carried
+categories, subjects, residency and retention — so the demand that would justify a
+catalog adapter has not appeared yet. The interface is extracted at the **second**
+adapter, not the first: one member is not a set, and a shape fitted to whichever
+catalog arrives first is how *source-neutral* quietly becomes *LakeFormation-shaped*.
+
+**A catalog value is an assertion, not evidence, and the record has to say so.** A
+catalog answers *what is the policy on this dataset right now*; an Art. 30 record
+answers *what happened, and can I prove it*. A classification read today is not
+evidence about a run in March, so it would arrive below `FACET` in the provenance
+order and be marked as asserted wherever it printed — the same treatment the mapping
+file gets. Wiring a current-state lookup in as though it were evidence is the mistake
+this row exists to prevent.
+
 | | State |
 |---|---|
 | A loaded vocabulary document (YAML / JSON / TOML) | **works** — `src/qedro/vocabularies/dsgvo.yaml`, `tests/test_vocabulary.py`. The shipped document carries `purpose`, `legal_basis`, and, for v0.3, `data_category`, `special_category` (closed on the Art. 9(1) list), `subject_type`, `residency` and `retention` |
-| LakeFormation LF-tags | **candidate** |
+| LakeFormation LF-tags | **candidate** — most likely to arrive through `catalog-mcp` (platform#26), which is LF-tag-native by design. That binding is correct there and must not reach this side |
 | GCP Data Catalog policy tags | **candidate** |
 | Purview classifications | **candidate** |
 | OpenMetadata glossary terms | **candidate** |
