@@ -6,7 +6,13 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.6.0 — 2026-09-30
+
+Nothing here changes what a projection produces. This release is for somebody trying
+qedro for the first time: the package now carries its own demo, and there is a guide
+for running it against your own lineage. The version counts releases and the v0.6
+milestone counts planned work, so 0.6.0 does not include the store that milestone
+describes; that is still gated on #15.
 
 - **`qedro demo`** writes the demo company into an empty directory and prints the
   commands that run each projection against it, so an installed package is enough to
@@ -14,6 +20,17 @@ before `1.0`.
   command runs, which keeps the wheel at a few kilobytes more rather than 1.5 MB. It
   refuses a directory that already has anything in it, including the default `./demo`.
   Every command it prints is run by the test suite.
+- **`docs/pilot.md`** covers a first run against your own events: what you need, where
+  qedro can read your events from, how to keep a raw copy with a composite OpenLineage
+  transport when your backend cannot give them back, and what standard emitters leave
+  out. `docs/compatibility.md` now records what each managed catalog can return — Amazon
+  DataZone the posted event, Google Dataplex not the custom facets, DataHub and
+  OpenMetadata only their own model.
+- **Two known problems**, found while writing the guide and not fixed in this release. A
+  file whose name does not end in `.json`, `.ndjson` or `.jsonl` is skipped without
+  being counted (#28), which is what an appending OpenLineage file transport writes by
+  default. And `qedro erasure` takes a routine Spark overwrite in the window as the
+  instant of the erasure (#29); the output shows both instants when they differ.
 
 ## 0.5.0 — 2026-09-24
 
