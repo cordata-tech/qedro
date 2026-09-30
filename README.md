@@ -51,6 +51,10 @@ is the difference between a record somebody asserts and a record that stands on 
 evidence. The same files are committed in [`demo/`](demo/), and
 [`demo/README.md`](demo/README.md) walks through them.
 
+To run it on your own lineage, [`docs/pilot.md`](docs/pilot.md) covers what you need,
+how to keep a copy of your events when the place they go today cannot give them back,
+and what the first hour produces.
+
 ## The Art. 30 record
 
 `qedro ropa` produces one activity per job, with the purpose and lawful basis that
@@ -699,6 +703,7 @@ is compiled against a fixed set of sensitivity levels.
 | [`demo/README.md`](demo/README.md) | the three tiers, walked through against a real estate |
 | [`docs/art30-facet.md`](docs/art30-facet.md) | the Art. 30 facet, for anyone who wants to emit it |
 | [`docs/compatibility.md`](docs/compatibility.md) | what this runs against, and what it does not |
+| [`docs/pilot.md`](docs/pilot.md) | a first run against your own lineage, and keeping a copy of your events to run it on |
 | [`docs/evidence/`](docs/evidence/) | captured runs that published writing quotes, and how each was produced |
 | [`CHANGELOG.md`](CHANGELOG.md) | what changed, in the words of somebody deciding whether to upgrade |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | scope, and the four commitments that must not erode |
