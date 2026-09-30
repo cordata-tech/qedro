@@ -1,0 +1,45 @@
+# Declared activities for the demo company: processing that emits no lineage.
+#
+# Kept apart from qedro.yaml on purpose. It is maintained by whoever knows what
+# the organisation actually does outside its pipelines, not by whoever maps
+# pipelines, and passing it is a choice. Both views read it:
+#
+#   qedro ropa demo/lineage-declared --config demo/qedro.yaml \
+#     --activities demo/activities.yaml
+#   qedro ropa demo/lineage-declared --config demo/qedro.yaml \
+#     --activities demo/activities.yaml --view deployer
+#
+# Every value below is an assertion. Nothing in the events shows these uses
+# happened or what they read, so both views mark them as declared and neither
+# claims to be a proof while they are present. The Art. 30 record lists both
+# entries; the deployer view lists only the one that names a `model`.
+
+activities:
+  support-reply-drafts:
+    purpose: customer-support
+    legal_basis: contract
+    domain: crm
+    model: the support desk vendor's built-in assistant; version not visible to ACME
+    inputs:
+      - customer emails
+      - support ticket history
+    note: >-
+      Support staff draft replies by pasting ticket text into the vendor's UI.
+      Nothing in the data platform emits lineage for this.
+
+  payroll-run:
+    purpose: payroll
+    legal_basis: legal-obligation
+    domain: hr
+    inputs:
+      - employee master data
+      - working time records
+    recipients:
+      - the payroll provider
+      - the pension scheme
+      - the tax office, as the law requires
+    security_measures:
+      - the vendor's SaaS, access limited to the HR team
+    note: >-
+      Monthly payroll in the HR vendor's SaaS. It processes personal data and
+      belongs in the Art. 30 record, and it uses no AI model.

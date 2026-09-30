@@ -18,9 +18,8 @@ from pathlib import Path
 
 import pytest
 from openpyxl import load_workbook
-from tools import seed
 
-from qedro import TOMBSTONE
+from qedro import TOMBSTONE, demo
 from qedro.__main__ import main
 
 DEMO = Path("demo")
@@ -98,11 +97,10 @@ class TestTheEstateIsThere:
     def test_it_is_generated_rather_than_edited(self):
         # The same guard CI runs. A demo edited by hand drifts from the
         # generator and the next regeneration silently reverts the edit.
-        for directory, files in seed.estates().items():
-            for name, body in files.items():
-                assert (DEMO / directory / name).read_text(encoding="utf-8") == body, (
-                    f"demo/{directory}/{name} is out of date — run `python tools/seed.py`"
-                )
+        for name, body in demo.files().items():
+            assert (DEMO / name).read_text(encoding="utf-8") == body, (
+                f"demo/{name} is out of date — run `python tools/seed.py`"
+            )
 
 
 class TestSourceNeutrality:

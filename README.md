@@ -8,8 +8,9 @@
 **Turns emitted evidence into the artefacts an auditor asks for.**
 
 Point it at OpenLineage events you already emit. Get back a GDPR Art. 30 record of
-processing activities, an assertion history, and the provenance chain from a published
-number to the signed commit that authorised it.
+processing activities, an assertion history, the provenance chain from a published
+number to the signed commit that authorised it, and the datasets an erasure had to
+reach, with whether it did.
 
 The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
 known in German as the *DSGVO*. Its Article 30 requires an organisation that processes
@@ -32,18 +33,23 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 
 ## Try it
 
-[`demo/`](demo/) holds a committed synthetic estate — three weeks of dbt, Airflow
-and Spark lineage from a company that does not exist, with no AWS anywhere in it.
+`qedro demo` writes three weeks of dbt, Airflow and Spark lineage from a company that
+does not exist, with no AWS anywhere in it, and prints the commands that run each
+projection against it. It needs nothing but the package, and refuses a directory that
+already has anything in it.
 
 ```console
+$ pipx install qedro
+$ qedro demo
 $ qedro ropa demo/lineage --config demo/qedro.yaml            # asserted, no mark
 $ qedro ropa demo/lineage-declared --config demo/qedro.yaml   # evidenced      ∎
 ```
 
-Same jobs, same runs, same three weeks. The only difference between the two
-estates is whether the pipelines declare their purpose and lawful basis — and it
-is the difference between a record somebody asserts and a record that stands on
-its own evidence. [`demo/README.md`](demo/README.md) walks through it.
+The two directories hold the same jobs and the same runs over the same three weeks,
+and differ only in whether the pipelines declare their purpose and lawful basis. That
+is the difference between a record somebody asserts and a record that stands on its own
+evidence. The same files are committed in [`demo/`](demo/), and
+[`demo/README.md`](demo/README.md) walks through them.
 
 ## The Art. 30 record
 

@@ -5,7 +5,7 @@ import json
 import pytest
 from openpyxl import load_workbook
 
-from qedro import TOMBSTONE, render
+from qedro import TOMBSTONE, demo, render
 from qedro.__main__ import main
 
 from .lineage_api import Backend, event
@@ -803,3 +803,52 @@ class TestTheErasureCommand:
         payload = json.loads(capsys.readouterr().out)
         assert payload["qedro"]["projection"] == "erasure"
         assert payload["tombstone"]["evidenced"] is False
+
+
+class TestTheDemoCommand:
+    """`qedro demo` exists so that `pip install qedro` is enough to see it work.
+
+    The wheel ships no events — they are generated — so these tests run against
+    what the command writes rather than against the repository's `demo/`.
+    """
+
+    @staticmethod
+    def printed(out):
+        """The commands `qedro demo` tells somebody to type, as argument lists."""
+        return [line.split()[1:] for line in out.splitlines() if line.startswith("    qedro ")]
+
+    def test_it_writes_what_the_repository_has(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert main(["demo"]) == 0
+        for name, body in demo.files().items():
+            assert (tmp_path / "demo" / name).read_text(encoding="utf-8") == body
+
+    def test_every_command_it_prints_runs_and_says_what_it_promised(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # The printed commands are the first thing a prospective user runs. One
+        # that fails, or a label promising a mark the run then withholds, would
+        # be the first thing they learn about the tool.
+        monkeypatch.chdir(tmp_path)
+        main(["demo", "acme"])
+        commands = self.printed(capsys.readouterr().out)
+        assert [c[0] for c in commands] == [
+            "ropa", "ropa", "quality", "provenance", "erasure", "ropa", "diff",
+        ]  # fmt: skip
+        for command in commands:
+            assert main(command) == 0, command
+            out = capsys.readouterr().out
+            if command[:2] == ["ropa", "acme/lineage"]:
+                assert TOMBSTONE not in out
+            if command[:2] == ["ropa", "acme/lineage-declared"] and "--out" not in command:
+                assert TOMBSTONE in out
+
+    def test_a_directory_with_anything_in_it_is_refused(self, tmp_path, capsys):
+        (tmp_path / "mine.txt").write_text("somebody's own file", encoding="utf-8")
+        assert main(["demo", str(tmp_path)]) == 2
+        assert "not empty" in capsys.readouterr().err
+        assert [p.name for p in tmp_path.iterdir()] == ["mine.txt"]
+
+    def test_an_empty_directory_is_used(self, tmp_path):
+        assert main(["demo", str(tmp_path)]) == 0
+        assert (tmp_path / "lineage-declared").is_dir()

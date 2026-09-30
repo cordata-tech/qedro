@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import sys
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,7 @@ from . import (
     __version__,
     compare,
     declared,
+    demo,
     deployer,
     erasure,
     provenance,
@@ -364,6 +366,43 @@ def _diff(before: str, after: str, *, fmt: str | None, out: str | None) -> int:
     return 0
 
 
+def _demo(target: str) -> int:
+    """Write the demo company and say what to run against it.
+
+    The commands are printed rather than run: the point is that somebody types
+    them, sees each output, and then types the same thing against their own
+    lineage.
+    """
+    written = demo.write(Path(target))
+    at = shlex.quote(target.rstrip("/"))
+    # Both directories hold the same runs, so one of them is the count.
+    events = sum(body.count("\n") for name, body in written.items() if name.startswith("lineage/"))
+    print(
+        f"  wrote {demo.CONTROLLER}, a company that does not exist, to {at}/\n"
+        f"  {len(demo.PIPELINES)} pipelines over {demo.DAYS} days, {events:,} events, twice: "
+        "the two directories differ only in whether each job declares its purpose\n"
+        "\n"
+        "  lineage alone, with purposes from the mapping file: no mark\n"
+        f"    qedro ropa {at}/lineage --config {at}/qedro.yaml\n"
+        "  the same pipelines, declaring their purpose: the record earns the mark\n"
+        f"    qedro ropa {at}/lineage-declared --config {at}/qedro.yaml\n"
+        "  which data-quality checks ran, and on which days they failed\n"
+        f"    qedro quality {at}/lineage --config {at}/qedro.yaml\n"
+        "  from a published table back to the commits that built it\n"
+        f"    qedro provenance {at}/lineage --dataset billing_curated.dunning_cases\n"
+        "  everything derived from an erased table, and whether the erasure reached it\n"
+        f"    qedro erasure {at}/lineage-declared --dataset crm_raw.contacts "
+        f"--config {at}/qedro.yaml\n"
+        "  a register kept by hand, checked against the record\n"
+        f"    qedro ropa {at}/lineage-declared --config {at}/qedro.yaml --out record.json\n"
+        f"    qedro diff {at}/register.yaml record.json\n"
+        "\n"
+        "  Then run the same commands against your own lineage: a directory of "
+        "OpenLineage events, or the URL of a Marquez-compatible API."
+    )
+    return 0
+
+
 def _emit(record, *, fmt: str, out: str | None, symbol: bool) -> int:
     """Render and deliver, the same way for every projection."""
     renderer = render.FORMATS[fmt]
@@ -619,6 +658,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     diff_cmd.add_argument("--out", help="write to this file instead of standard output")
 
+    demo_cmd = sub.add_parser(
+        "demo",
+        help="write a fictional company's lineage and documents, to run the projections against",
+        description=(
+            "Writes three weeks of OpenLineage from a company that does not exist, with "
+            "the configuration, declared activities and register that go with it, and "
+            "prints the commands that show each projection. Nothing is read or sent "
+            "anywhere. Refuses a directory that already has anything in it."
+        ),
+    )
+    demo_cmd.add_argument(
+        "directory", nargs="?", default="demo", help="where to write it (default ./demo)"
+    )
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     # The env var is for CI logs and containers, where nobody is around to
@@ -666,6 +719,8 @@ def main(argv: list[str] | None = None) -> int:
                 fmt=args.fmt,
                 out=args.out,
             )
+        if args.command == "demo":
+            return _demo(args.directory)
         if args.command == "diff":
             return _diff(args.before, args.after, fmt=args.fmt, out=args.out)
         if args.command == "ropa":

@@ -131,10 +131,12 @@ the pin, which is the one thing the test exists to catch.
   format, so a projection added later inherits the scope statement and the mark
   rather than reimplementing them — `tests/test_render.py` parametrises over
   format *and* projection for exactly that reason.
-- **`demo/` is generated.** `tools/seed.py` writes both estates and CI runs it with
-  `--check`; editing an event by hand looks like it worked until the next
-  regeneration reverts it. The two estates must stay identical apart from the
-  `processing` facet — that equivalence is the whole demonstration, and
+- **`demo/` is generated.** The generator and the three YAML documents live in
+  `src/qedro/demo/`, because `qedro demo` writes them from an installed wheel;
+  `tools/seed.py` copies all of it into `demo/` and CI runs it with `--check`. Edit
+  the YAML in `src/qedro/demo/`, never in `demo/` — an edit there looks like it
+  worked until the next regeneration reverts it. The two sets of lineage must stay
+  identical apart from the `processing` facet — that equivalence is the whole demonstration, and
   `tests/test_demo.py` asserts it.
 - Python floor is 3.12. `datetime.fromisoformat` handles `Z` natively there; do not
   add normalising workarounds for older versions.

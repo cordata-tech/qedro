@@ -6,6 +6,15 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro demo`** writes the demo company into an empty directory and prints the
+  commands that run each projection against it, so an installed package is enough to
+  try the tool without cloning the repository. The lineage is generated when the
+  command runs, which keeps the wheel at a few kilobytes more rather than 1.5 MB. It
+  refuses a directory that already has anything in it, including the default `./demo`.
+  Every command it prints is run by the test suite.
+
 ## 0.5.0 — 2026-09-24
 
 A fourth projection, and the existing chain reaching one hop further out.

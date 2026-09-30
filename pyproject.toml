@@ -70,7 +70,7 @@ where = ["src"]
 # The shipped starter ontology. It is data the tool loads at runtime, so it has
 # to be installed beside the code rather than only existing in the repository.
 [tool.setuptools.package-data]
-qedro = ["vocabularies/*.yaml"]
+qedro = ["vocabularies/*.yaml", "demo/*.yaml"]
 
 [tool.ruff]
 line-length = 100
