@@ -6,7 +6,13 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.7.0 — 2026-10-11
+
+Two fixes for problems found while writing the pilot guide, both of which a first run
+on real lineage would hit. Output changes in two places worth knowing before upgrading:
+every projection's scope statement can carry a new `passed over` row and its JSON a
+`passed_over` list, and an erasure record built from several Spark overwrites without
+`--since` no longer earns the mark.
 
 - **A file with no extension is read when it starts with JSON** (#28). That is what an
   appending OpenLineage file transport writes, in the Python client to exactly the

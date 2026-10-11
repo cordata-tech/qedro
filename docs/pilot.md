@@ -62,9 +62,9 @@ transport:
 With `append: false` every event becomes its own file, named
 `events-<time>.json`, which qedro reads as it is. With `append: true` the client
 writes every event to one file at exactly the path given, with no extension added.
-qedro reads a file with no extension when it starts with JSON, which this one does;
-0.6.0 skipped it without saying so (#28), so with that version give the path an
-`.ndjson` ending. Both forms were run with openlineage-python 1.53.0 and read back by
+qedro reads a file with no extension when it starts with JSON, which this one does.
+Versions before 0.7.0 skipped it without saying so (#28); with one of those, give the
+path an `.ndjson` ending. Both forms were run with openlineage-python 1.53.0 and read back by
 qedro.
 
 `log_file_path` can also be a bucket — `s3://…`, `gs://…`, `az://…` — once
@@ -167,9 +167,9 @@ and each output names them rather than filling them in:
   and the output says it was typed rather than proved. Spark reports every overwrite
   that way, so pass `--since` with the date the erasure was requested there too: qedro
   then takes the first completed drop, truncate or overwrite after it, preferring a
-  drop or truncate. 0.6.0 took the latest in the window instead, which on a table
-  Spark overwrites every night is last night's run rather than the erasure (#29), so
-  with that version check the tombstone line against the date you expect.
+  drop or truncate. Versions before 0.7.0 took the latest in the window instead, which
+  on a table Spark overwrites every night is last night's run rather than the erasure
+  (#29); with one of those, check the tombstone line against the date you expect.
 
 ## Telling us how it went
 
