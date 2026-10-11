@@ -27,7 +27,7 @@ output looks like before your own events are involved.
 | Your events go to | What to do |
 |---|---|
 | Marquez | Pass its base URL wherever these commands take a directory: `qedro events http://marquez:5000` |
-| Files on a disk | Pass the directory. Files must end in `.json`, `.ndjson` or `.jsonl`; other files are skipped, and the skip is not reported yet |
+| Files on a disk | Pass the directory. qedro reads files ending in `.json`, `.ndjson` or `.jsonl`, and files with no extension that start with JSON. Any other file is not read, and the summary names it |
 | An S3, GCS or Azure bucket | Copy the prefix to a directory first — `aws s3 sync`, `gcloud storage rsync -r`, `azcopy sync` — and pass that. A reader for buckets is planned but not built |
 | A Kafka topic | Keep a copy as below. A Kafka reader is a candidate, not built |
 | Google Dataplex, DataHub, OpenMetadata, Microsoft Purview | Keep a copy as below. These turn events into their own model and cannot give them back as they were sent; Dataplex also drops custom facets and keeps 30 days |
@@ -61,9 +61,11 @@ transport:
 
 With `append: false` every event becomes its own file, named
 `events-<time>.json`, which qedro reads as it is. With `append: true` the client
-writes every event to one file at exactly the path given, so give that path an
-`.ndjson` ending or qedro will skip it. This configuration was run with
-openlineage-python 1.53.0 and read back by qedro.
+writes every event to one file at exactly the path given, with no extension added.
+qedro reads a file with no extension when it starts with JSON, which this one does;
+0.6.0 skipped it without saying so (#28), so with that version give the path an
+`.ndjson` ending. Both forms were run with openlineage-python 1.53.0 and read back by
+qedro.
 
 `log_file_path` can also be a bucket — `s3://…`, `gs://…`, `az://…` — once
 `openlineage-python[fsspec]` and the matching filesystem package (`s3fs`, `gcsfs`,
@@ -80,8 +82,8 @@ every worker.
 **Spark and Flink** use the Java client, which is configured differently:
 
 - Its `file` transport writes NDJSON to a local path only. On a cluster that is the
-  driver's disk, which is rarely where you want it; if it suits, set a `location` ending
-  in `.ndjson`.
+  driver's disk, which is rarely where you want it. qedro reads it under any name with
+  no extension, or ending in `.ndjson`.
 - For a bucket, the Java client has separate `s3` and `gcs` transports, shipped as the
   `io.openlineage:transports-s3` and `transports-gcs` artefacts rather than inside the
   Spark integration. Each writes one `.json` object per event, named after the event's

@@ -307,11 +307,11 @@ def _scope(sheet: Any, record: Record) -> None:
     sheet["A1"] = "Scope of this record"
     sheet["A1"].font = TITLE
 
-    # From `scope.lines()`, as the other projections' sheets already were. This
+    # From `scope.statement()`, as the other projections' sheets already were. This
     # sheet listed its rows itself, which is how the declared count from #6 never
     # reached the workbook while every other format printed it.
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
-    rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
+    rows += [(label[0].upper() + label[1:], value) for label, value in scope.statement()]
     rows.append(("Vocabulary", record.vocabulary))
     if scope.domains_source():
         rows.append(("Domains", scope.domains_source()))
@@ -440,7 +440,7 @@ def _erasure_scope(sheet: Any, record: Any) -> None:
     sheet["A1"].font = TITLE
 
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
-    rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
+    rows += [(label[0].upper() + label[1:], value) for label, value in scope.statement()]
 
     row = 3
     for label, value in rows:
@@ -626,7 +626,7 @@ def _comparison_scope(sheet: Any, comparison: Any) -> None:
     sheet["A1"].font = TITLE
 
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
-    rows += [(label[0].upper() + label[1:], value) for label, value in scope.lines()]
+    rows += [(label[0].upper() + label[1:], value) for label, value in scope.statement()]
 
     row = 3
     for label, value in rows:
@@ -797,7 +797,7 @@ def _quality_scope(sheet: Any, record: QualityRecord) -> None:
     sheet["A1"].font = TITLE
 
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
-    rows += list(scope.lines())
+    rows += list(scope.statement())
     if scope.domains_source():
         rows.append(("Domains", scope.domains_source()))
     if scope.domains_silent:
@@ -943,7 +943,7 @@ def _provenance_scope(sheet: Any, record: ProvenanceRecord) -> None:
     sheet["A1"].font = TITLE
 
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
-    rows += list(scope.lines())
+    rows += list(scope.statement())
 
     row = 3
     for label, value in rows:
@@ -1132,7 +1132,7 @@ def _deployer_scope(sheet: Any, record: DeployerRecord) -> None:
         ("Source", scope.source or "unknown"),
         ("Window", scope.window()),
     ]
-    rows += list(scope.lines())
+    rows += list(scope.statement())
 
     row = 3
     for label, value in rows:

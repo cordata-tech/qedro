@@ -16,6 +16,7 @@ these get dropped.
 
 from __future__ import annotations
 
+import dataclasses
 import json as json_lib
 from io import BytesIO
 
@@ -405,6 +406,22 @@ class TestEveryProjectionKeepsTheProperties:
         """
         built = PROJECTIONS[projection]()
         assert render.FORMATS["json"](built) == render.FORMATS["json"](built)
+
+    @pytest.mark.parametrize(("projection", "fmt"), CASES)
+    def test_files_the_read_passed_over_are_named(self, projection, fmt):
+        # #28. Through `Scope.statement()`, which every renderer calls, so a
+        # projection added later inherits the row rather than reimplementing it.
+        built = PROJECTIONS[projection]()
+        built = dataclasses.replace(
+            built, scope=dataclasses.replace(built.scope, passed_over=("notes/README.md",))
+        )
+        if fmt == "json":
+            scope = json_lib.loads(render.FORMATS[fmt](built))["scope"]
+            assert scope["passed_over"] == ["notes/README.md"]
+        else:
+            assert "1 file not read" in readable(built, fmt)
+            assert "notes/README.md" in readable(built, fmt)
+        assert built.complete == PROJECTIONS[projection]().complete
 
     @pytest.mark.parametrize(("projection", "fmt"), DOMAIN_CASES)
     def test_a_silent_domain_is_named(self, projection, fmt):

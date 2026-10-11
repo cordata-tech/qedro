@@ -486,6 +486,7 @@ def _scope(
     times = [s.production.when for s in steps if s.production and s.production.when is not None]
     return Scope(
         source=report.origin if report else "",
+        passed_over=report.passed_over if report else (),
         since=since if since is not None else (min(times) if times else None),
         until=until if until is not None else (max(times) if times else None),
         events=report.events if report else 0,

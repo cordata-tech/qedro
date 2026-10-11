@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import words
 from .errors import ConfigError
 from .events import Event, parse_event
 
@@ -90,6 +91,13 @@ class ReadReport:
     #: exist`.
     unreadable: tuple[str, ...] = ()
     truncated: bool = False
+    #: Files in the directory that were not read because nothing about them
+    #: says they hold events, as paths relative to the directory. Counted so
+    #: the summary can say so, and kept out of `clean`: a README or a
+    #: compressed archive beside the events is what a directory looks like,
+    #: and withholding the mark for it would teach people to ignore the reason.
+    #: See cordata-tech/qedro#28.
+    passed_over: tuple[str, ...] = ()
 
     @property
     def clean(self) -> bool:
@@ -110,6 +118,25 @@ class ReadReport:
                 "so the window is not fully covered"
             )
         return out
+
+
+def passed_over_text(paths: tuple[str, ...]) -> str:
+    """Files a directory read passed over, as one phrase, or "" when none were.
+
+    One copy for the `qedro events` summary and every projection's scope
+    statement, which say the same thing about the same read.
+    """
+    if not paths:
+        return ""
+    n = len(paths)
+    shown = ", ".join(paths[:3])
+    more = f" and {n - 3} more" if n > 3 else ""
+    neither = words.plural(
+        n,
+        "its name nor its start says it holds",
+        "their names nor their starts say they hold",
+    )
+    return f"{words.count(n, 'file')} not read, because neither {neither} events: {shown}{more}"
 
 
 def utc(value: datetime) -> datetime:
@@ -176,6 +203,38 @@ def _records(path: Path) -> Iterator[Any]:
     yield json.loads(text)
 
 
+def _holds_events(path: Path) -> bool:
+    """Whether a file is one to read, from its name or, failing that, its start.
+
+    A recognised suffix decides it. A file with no suffix at all is read when
+    its first non-blank byte opens JSON, because that is what an appending
+    OpenLineage file transport writes: the Python client's to exactly the path
+    configured and the Java client's to its `location`, neither adding an
+    extension. Anything else — `.md`, `.gz`, `.log` — is passed over and
+    counted, since sniffing a README that opens with `[` would read it as a
+    broken array and withhold the mark over a file nobody meant as events.
+    """
+    if path.suffix in SUFFIXES:
+        return True
+    if path.suffix:
+        return False
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(512).lstrip()
+    except OSError:
+        return False
+    return head[:1] in (b"{", b"[")
+
+
+def _hidden(path: Path, root: Path) -> bool:
+    """A dotfile, or anything inside a dot-directory such as `.git`.
+
+    Neither sniffed nor counted as passed over, which would otherwise be
+    thousands of `.git` objects or one `.DS_Store` reported on every run.
+    """
+    return any(part.startswith(".") for part in path.relative_to(root).parts)
+
+
 def read_dir(path: str | Path, *, recursive: bool = True) -> tuple[list[Event], ReadReport]:
     """Read every event under ``path``.
 
@@ -196,18 +255,30 @@ def read_dir(path: str | Path, *, recursive: bool = True) -> tuple[list[Event], 
         # yields nothing — so this used to report a clean zero and exit 0, with
         # a reason that blamed the estate for what was really a path the reader
         # would not read. Found by running it against a real dbt export.
-        if root.suffix not in SUFFIXES:
+        if not _holds_events(root):
             return events, ReadReport(
                 origin=str(root),
-                unreadable=(f"{root} (not one of {', '.join(SUFFIXES)})",),
+                unreadable=(
+                    (
+                        f"{root} (not one of {', '.join(SUFFIXES)}, "
+                        "nor a file with no extension that starts with JSON)"
+                    ),
+                ),
             )
         files = [root]
     else:
-        files = sorted(
-            p
-            for p in (root.rglob("*") if recursive else root.glob("*"))
-            if p.is_file() and p.suffix in SUFFIXES
-        )
+        files, passed_over = [], []
+        for p in sorted(root.rglob("*") if recursive else root.glob("*")):
+            # A recognised suffix is read wherever it sits, as it always was.
+            # Hidden paths are otherwise skipped before sniffing, so a `.git`
+            # directory costs a walk and not an open per object.
+            if not p.is_file() or (p.suffix not in SUFFIXES and _hidden(p, root)):
+                continue
+            if _holds_events(p):
+                files.append(p)
+            else:
+                passed_over.append(p.relative_to(root).as_posix())
+        report.passed_over = tuple(passed_over)
 
     for f in files:
         report.files += 1

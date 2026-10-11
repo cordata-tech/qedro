@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from qedro.errors import ConfigError
-from qedro.sources import lineage_url, read, read_api, read_dir
+from qedro.sources import lineage_url, passed_over_text, read, read_api, read_dir
 
 from .lineage_api import Backend, event
 
@@ -151,6 +151,94 @@ class TestWhatTheReportIsFor:
     def test_a_clean_read_has_nothing_to_report(self):
         _, report = read_dir(FIXTURES)
         assert report.reasons() == []
+
+
+class TestFilesTheReaderPassesOver:
+    """cordata-tech/qedro#28: a file the reader does not read is counted.
+
+    It used to be passed over without trace, so a directory read as smaller
+    than it was printed a summary describing the files it did read as if they
+    were all there were. The case that occurs is an appending OpenLineage file
+    transport, which writes to exactly the path configured with no extension.
+    """
+
+    @staticmethod
+    def _event(job="j"):
+        return {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-08-21T10:00:00Z",
+            "run": {"runId": "r"},
+            "job": {"namespace": "ns", "name": job},
+        }
+
+    def test_an_appended_event_log_with_no_extension_is_read(self, tmp_path):
+        # The Python client's `file` transport with `append: true`, one event
+        # per line with sorted keys, at `log_file_path: …/events`.
+        lines = [json.dumps(self._event(f"j{i}"), sort_keys=True) for i in range(3)]
+        (tmp_path / "events").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        events, report = read_dir(tmp_path)
+        assert len(events) == 3
+        assert report.files == 1 and report.passed_over == () and report.clean
+
+    def test_one_event_with_no_extension_is_read(self, tmp_path):
+        (tmp_path / "events").write_text(json.dumps(self._event()), encoding="utf-8")
+        _, report = read_dir(tmp_path)
+        assert report.events == 1 and report.clean
+
+    def test_pointing_at_an_extensionless_event_log_reads_it(self, tmp_path):
+        log = tmp_path / "events"
+        log.write_text(json.dumps(self._event()) + "\n", encoding="utf-8")
+        events, report = read_dir(log)
+        assert len(events) == 1 and report.clean
+
+    def test_other_files_are_counted_and_named_without_withholding(self, tmp_path):
+        (tmp_path / "a.ndjson").write_text(json.dumps(self._event()), encoding="utf-8")
+        (tmp_path / "README.md").write_text("# exported lineage", encoding="utf-8")
+        (tmp_path / "2026").mkdir()
+        (tmp_path / "2026" / "archive.gz").write_bytes(b"\x1f\x8b\x08\x00")
+        _, report = read_dir(tmp_path)
+        assert report.files == 1 and report.events == 1
+        assert report.passed_over == ("2026/archive.gz", "README.md")
+        # A README beside the events is what a directory looks like.
+        assert report.clean and report.reasons() == []
+
+    def test_a_readme_opening_with_a_bracket_is_not_sniffed_as_json(self, tmp_path):
+        # Only a file with no extension is sniffed. A badge line opens with
+        # `[`, and reading it as a broken array would withhold the mark over a
+        # file nobody meant as events.
+        (tmp_path / "README.md").write_text("[![CI](badge.svg)](ci)\n", encoding="utf-8")
+        _, report = read_dir(tmp_path)
+        assert report.passed_over == ("README.md",) and report.clean
+
+    def test_an_extensionless_file_that_is_not_json_is_passed_over(self, tmp_path):
+        (tmp_path / "LICENSE").write_text("Apache License\n", encoding="utf-8")
+        _, report = read_dir(tmp_path)
+        assert report.files == 0 and report.passed_over == ("LICENSE",)
+
+    def test_hidden_files_and_directories_are_not_counted(self, tmp_path):
+        (tmp_path / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1")
+        (tmp_path / ".git" / "objects").mkdir(parents=True)
+        (tmp_path / ".git" / "objects" / "ab12").write_bytes(b"x\x01")
+        (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+        _, report = read_dir(tmp_path)
+        assert report.passed_over == ()
+
+    def test_a_recognised_suffix_in_a_hidden_directory_is_still_read(self, tmp_path):
+        # As it always was: only the count and the sniffing skip hidden paths.
+        (tmp_path / ".archive").mkdir()
+        (tmp_path / ".archive" / "a.json").write_text(json.dumps(self._event()), encoding="utf-8")
+        _, report = read_dir(tmp_path)
+        assert report.events == 1
+
+    def test_the_phrase_names_the_first_three(self):
+        assert passed_over_text(()) == ""
+        assert passed_over_text(("README.md",)) == (
+            "1 file not read, because neither its name nor its start says it holds "
+            "events: README.md"
+        )
+        many = passed_over_text(("a.md", "b.md", "c.md", "d.md", "e.md"))
+        assert many.startswith("5 files not read, because neither their names")
+        assert many.endswith("a.md, b.md, c.md and 2 more")
 
 
 # --------------------------------------------------------------------------

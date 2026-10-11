@@ -37,7 +37,7 @@ from . import (
 from . import config as config_module
 from .errors import ConfigError, QedroError, UsageError
 from .mark import Completeness
-from .sources import read
+from .sources import passed_over_text, read
 
 
 def _instant(value: str) -> datetime:
@@ -92,16 +92,21 @@ def _events(target: str, *, symbol: bool, since: datetime | None, until: datetim
         # with an empty result.
         for reason in report.reasons():
             print(f"  {reason}", file=sys.stderr)
+        if passed := passed_over_text(report.passed_over):
+            print(f"  {passed}", file=sys.stderr)
         return 1
 
     by_type = Counter(e.event_type for e in events)
     jobs = {e.job.key for e in events}
     datasets = {d.key for e in events for d in e.datasets}
 
-    # One of the two is always zero — a directory has files and an API has
-    # pages, and naming the wrong one reads as a bug in the tool.
+    # A directory has files and an API has pages, and naming the wrong one
+    # reads as a bug in the tool. Decided by the source rather than by which
+    # count is non-zero, which said `0 pages` of a directory it read nothing in.
     fetched = (
-        words.count(report.files, "file") if report.files else words.count(report.pages, "page")
+        words.count(report.pages, "page")
+        if report.origin.startswith(("http://", "https://"))
+        else words.count(report.files, "file")
     )
     summary = " · ".join(
         [
@@ -116,6 +121,11 @@ def _events(target: str, *, symbol: bool, since: datetime | None, until: datetim
 
     if by_type:
         print("  " + ", ".join(f"{t.lower()} {n}" for t, n in sorted(by_type.items())))
+    # Not a reason: the mark stands. But a directory read as smaller than it is
+    # has to say so, or the summary describes the files it read as if they
+    # were everything it was pointed at (#28).
+    if passed := passed_over_text(report.passed_over):
+        print(f"  {passed}")
 
     # Reasons are printed, not only counted. A reader who cannot see why the
     # mark is missing has been told nothing useful.

@@ -217,7 +217,7 @@ def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record"
     """Shared by every projection. The labels come from the scope itself."""
     out = [f"  {title}", f"    source        {scope.source or 'unknown'}"]
     out.append(f"    window        {scope.window()}")
-    rows = list(scope.lines())
+    rows = list(scope.statement())
     if scope.domains_source():
         rows.append(("domains", scope.domains_source()))
     if scope.domains_silent:
@@ -349,7 +349,7 @@ def _scope_markdown(scope: Scope, *, title: str = "Scope of this record") -> lis
         f"- **Source** — {scope.source or 'unknown'}",
         f"- **Window** — {scope.window()}",
     ]
-    out += [f"- **{label[0].upper()}{label[1:]}** — {value}" for label, value in scope.lines()]
+    out += [f"- **{label[0].upper()}{label[1:]}** — {value}" for label, value in scope.statement()]
     if scope.domains_source():
         out.append(f"- **Domains** — {scope.domains_source()}")
     if scope.domains_silent:
@@ -393,7 +393,7 @@ def json(record: object, *, indent: int = 2) -> str:
     Provenance is a field per value rather than a summary, so a consumer can
     make the evidenced/asserted distinction without re-deriving it.
 
-    Deliberately *not* generated from `scope.lines()`: those labels are prose
+    Deliberately *not* generated from `scope.statement()`: those labels are prose
     for a reader, and a machine consumer needs the numbers separately rather
     than a sentence to parse back apart.
     """
@@ -449,6 +449,7 @@ def _(record: Record, *, indent: int = 2) -> str:
                 "from_mapping": record.scope.from_mapping,
                 "undeclared": record.scope.undeclared,
             },
+            "passed_over": list(record.scope.passed_over),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -730,6 +731,7 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
             "domains_guessed": list(record.scope.domains_guessed),
             "domains_mapped": list(record.scope.domains_mapped),
             "domains_silent": list(record.scope.domains_silent),
+            "passed_over": list(record.scope.passed_over),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -876,6 +878,7 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
             "ends_unproduced": record.scope.ends_unproduced,
             "ends_at_depth": record.scope.ends_at_depth,
             "depth_limit": record.scope.depth_limit,
+            "passed_over": list(record.scope.passed_over),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1012,6 +1015,7 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             "incomplete": record.scope.incomplete,
             "truncated": record.scope.truncated,
             "depth_limit": record.scope.depth_limit,
+            "passed_over": list(record.scope.passed_over),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1273,6 +1277,7 @@ def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
             "use_cases": record.scope.use_cases,
             "declared": record.scope.declared,
             "runs": record.scope.runs,
+            "passed_over": list(record.scope.passed_over),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,

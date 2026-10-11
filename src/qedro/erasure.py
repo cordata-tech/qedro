@@ -372,6 +372,7 @@ def _scope(
     # report every domain in the config as silent on every run.
     return Scope(
         source=report.origin if report else "",
+        passed_over=report.passed_over if report else (),
         since=since,
         until=until,
         events=report.events if report else 0,

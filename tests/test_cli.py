@@ -36,6 +36,42 @@ def test_a_degraded_read_withholds_the_mark_and_says_why(tmp_path, capsys):
     assert "not usable OpenLineage events" in cap.err
 
 
+class TestADirectoryWithMoreThanEvents:
+    """#28, end to end: what an appending file transport leaves behind."""
+
+    @staticmethod
+    def directory(tmp_path):
+        good = {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-03-01T10:00:00Z",
+            "run": {"runId": "r"},
+            "job": {"namespace": "acme.fraud", "name": "j"},
+        }
+        # `log_file_path: …/events` with `append: true`: no extension.
+        (tmp_path / "events").write_text(json.dumps(good, sort_keys=True) + "\n")
+        (tmp_path / "README.md").write_text("# lineage export\n")
+        return tmp_path
+
+    def test_the_log_is_read_and_the_readme_is_named(self, tmp_path, capsys):
+        assert main(["events", str(self.directory(tmp_path))]) == 0
+        out = capsys.readouterr().out
+        assert "1 event" in out and "1 file" in out and TOMBSTONE in out
+        assert "1 file not read" in out and "README.md" in out
+
+    def test_a_directory_with_nothing_readable_counts_files_not_pages(self, tmp_path, capsys):
+        # 0.6.0 said `0 pages` here: the noun followed whichever count was not
+        # zero, and against a directory that read nothing both were.
+        (tmp_path / "README.md").write_text("# lineage export\n")
+        assert main(["events", str(tmp_path)]) == 0
+        out = capsys.readouterr().out
+        assert "0 files" in out and "page" not in out
+
+    def test_a_projection_states_it_in_the_scope(self, tmp_path, capsys):
+        assert main(["ropa", str(self.directory(tmp_path))]) == 0
+        out = " ".join(capsys.readouterr().out.split())
+        assert "passed over 1 file not read" in out and "README.md" in out
+
+
 def test_a_directory_that_yields_nothing_usable_fails(tmp_path, capsys):
     assert main(["events", str(tmp_path / "nope")]) == 1
     assert "does not exist" in capsys.readouterr().err

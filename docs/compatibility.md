@@ -27,6 +27,7 @@ Tracked in [#5](https://github.com/cordata-tech/qedro/issues/5).
 | | State | Notes |
 |---|---|---|
 | Directory of `.json` / `.ndjson` / `.jsonl` | **works** | `tests/test_sources.py`, `tests/test_demo.py`. Nested directories are walked |
+| A file with no extension that starts with JSON | **works** | `tests/test_sources.py::TestFilesTheReaderPassesOver`. What an appending OpenLineage file transport writes, in the Python client and the Java one. Any other file in the directory is not read, and is named in the summary and the scope statement without withholding the mark (#28) |
 | Marquez-compatible HTTP API | **works** | `tests/test_cli.py::TestRopaAgainstAnApi` — the source-neutrality acceptance test |
 | S3 / GCS / Azure Blob prefix | **candidate** | The real "cloud support" axis for a read-only tool: a bucket of exported events. One `read()` dispatch each, plus an optional dependency per cloud. Until then, copy the prefix to a directory and read that. The OpenLineage Python client's `file` transport writes to a bucket itself through fsspec, and its `composite` transport sends each event there as well as to an existing backend ([client configuration](https://openlineage.io/docs/client/python/configuration)), which makes a bucket the route for every catalog below that cannot give the events back |
 | Kafka topic | **candidate** | OpenLineage events frequently live on a topic and never on a disk |

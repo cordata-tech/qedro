@@ -6,6 +6,19 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **A file with no extension is read when it starts with JSON** (#28). That is what an
+  appending OpenLineage file transport writes, in the Python client to exactly the
+  configured path and in the Java client to its `location`, and 0.6.0 read a directory
+  holding one as empty without saying why. Every other file the reader does not read is
+  now counted and named: on the `qedro events` summary, and as a `passed over` line in
+  every projection's scope statement, with a `passed_over` list in the JSON. It does not
+  withhold the mark, since a README beside the events is what a directory looks like.
+  Hidden files and anything under a dot-directory are neither sniffed nor counted.
+- **`qedro events` said `0 pages` of a directory it read nothing in.** The noun now
+  follows the source, so a directory is counted in files whatever the count.
+
 ## 0.6.0 — 2026-09-30
 
 Nothing here changes what a projection produces. This release is for somebody trying

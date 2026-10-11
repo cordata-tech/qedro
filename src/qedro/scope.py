@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from . import words
+from .sources import passed_over_text
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,10 @@ class Scope:
     #: mapped to it and another guessed into it. See cordata-tech/qedro#9.
     domains_guessed: tuple[str, ...] = ()
     domains_mapped: tuple[str, ...] = ()
+    #: Files in the source directory that were not read, from
+    #: `ReadReport.passed_over`. Stated rather than withholding the mark — see
+    #: cordata-tech/qedro#28.
+    passed_over: tuple[str, ...] = ()
 
     #: The standing sentence, overridden per projection. Deliberately factual
     #: about what was not examined rather than advisory about what that means
@@ -117,3 +122,15 @@ class Scope:
         summaries.
         """
         return ()
+
+    def statement(self) -> tuple[tuple[str, str], ...]:
+        """`lines()` followed by what every projection states about the read.
+
+        What renderers call. Subclasses override `lines()` and never this, so a
+        row added here reaches every projection in every format without each
+        override having to remember it.
+        """
+        common = []
+        if self.passed_over:
+            common.append(("passed over", passed_over_text(self.passed_over)))
+        return (*self.lines(), *common)
