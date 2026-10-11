@@ -284,7 +284,9 @@ class TestTheAddress:
     def test_a_naive_bound_is_sent_as_utc(self):
         # Naive on purpose: `--since 2026-01-01` is what people type, and the
         # client has to decide what it means rather than refuse to compare.
-        url = lineage_url("https://m", limit=1, offset=0, since=datetime(2026, 1, 1))
+        url = lineage_url(
+            "https://m", limit=1, offset=0, since=datetime.fromisoformat("2026-01-01")
+        )
         assert parse_qs(urlsplit(url).query)["after"] == ["2026-01-01T00:00:00+00:00"]
 
     def test_only_http_addresses_are_read(self):

@@ -613,9 +613,10 @@ def main(argv: list[str] | None = None) -> int:
     erasure_cmd.add_argument(
         "--since",
         type=_instant,
-        help="when the erasure happened, and the start of the window. An emitted "
-        "lifecycleStateChange in the window supersedes it and is evidence rather than "
-        "an assertion",
+        help="when the erasure was requested, and the start of the window. The first "
+        "completed run after it that emitted a lifecycleStateChange drop, truncate or "
+        "overwrite supersedes it, as evidence rather than an assertion, with a drop or "
+        "truncate preferred over an overwrite",
     )
     erasure_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
     erasure_cmd.add_argument(

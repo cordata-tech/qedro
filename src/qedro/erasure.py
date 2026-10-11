@@ -53,6 +53,13 @@ DEPTH = 5
 #: mistaking one for the other would report a proof that never happened.
 ERASURES = frozenset({"DROP", "TRUNCATE", "OVERWRITE"})
 
+#: The two that remove everything. An `OVERWRITE` replaces the contents, and
+#: Spark reports one on every overwriting write, so it says the table was
+#: rewritten rather than that anything was erased. It can still anchor the
+#: tombstone, but a drop or truncate is preferred over it, and several of them
+#: with nothing to choose between withhold the mark. See cordata-tech/qedro#29.
+REMOVALS = frozenset({"DROP", "TRUNCATE"})
+
 #: Where the standard facet lives on a dataset. A dataset facet rather than an
 #: output facet: *this table was dropped* is true of the table, not only of one
 #: run's use of it.
@@ -78,17 +85,59 @@ class Tombstone:
     #: evidence silently overriding what the operator asked for, are each worse
     #: than saying the two disagree.
     asserted_at: datetime | None = None
+    #: Completed runs that dropped, truncated or overwrote the dataset and could
+    #: have been the erasure: all of them in the window, or those from `--since`
+    #: on. More than one is reported, since which was taken is then a choice.
+    candidates: int = 0
+    #: The lifecycle states among those candidates, for saying what they did.
+    candidate_states: frozenset[str] = frozenset()
+    #: Whether `--since` picked the candidate, as the first at or after it.
+    #: Otherwise the latest was taken, which on a table overwritten nightly is
+    #: last night's run rather than the erasure.
+    chosen_by_since: bool = False
 
     @property
     def evidenced(self) -> bool:
         return self.provenance is Provenance.FACET
 
+    @property
+    def ambiguous(self) -> bool:
+        """Several overwrites, and nothing to say which one was the erasure."""
+        return (
+            self.evidenced
+            and self.state not in REMOVALS
+            and self.candidates > 1
+            and not self.chosen_by_since
+        )
+
     def describe(self) -> str:
         if self.at is None:
             return "no erasure instant"
-        if self.evidenced:
+        if self.evidenced and self.state in REMOVALS:
             return f"{self.at.isoformat()} — emitted {self.state.lower()}"
+        if self.evidenced:
+            # Not called the erasure: the event says the table was replaced.
+            return f"{self.at.isoformat()} — emitted overwrite, not a drop or truncate"
         return f"{self.at.isoformat()} — from --since, not emitted"
+
+    def choice(self) -> str:
+        """Which candidate was taken and why, or "" when there was only one."""
+        if self.candidates < 2:
+            return ""
+        verbs = {"DROP": "dropped", "TRUNCATE": "truncated", "OVERWRITE": "overwrote"}
+        did = [verbs[s] for s in ("DROP", "TRUNCATE", "OVERWRITE") if s in self.candidate_states]
+        done = did[0] if len(did) == 1 else f"{', '.join(did[:-1])} or {did[-1]}"
+        taken = (
+            "the first after --since was taken"
+            if self.chosen_by_since
+            else "the latest was taken, as no --since says when the erasure was requested"
+        )
+        preferred = (
+            ", a drop or truncate in preference to an overwrite"
+            if self.state in REMOVALS and "OVERWRITE" in self.candidate_states
+            else ""
+        )
+        return f"{self.candidates} completed runs {done} it; {taken}{preferred}"
 
 
 @dataclass(frozen=True)
@@ -142,6 +191,8 @@ class Scope(scope_module.Scope):
             ("tombstone", self.tombstone.describe()),
             ("in view", f"{count(self.descendants, 'descendant')}, {self.events} events"),
         ]
+        if self.tombstone.choice():
+            out.append(("candidates", self.tombstone.choice()))
         if self.tombstone.asserted_at is not None:
             out.append(
                 (
@@ -212,25 +263,54 @@ def _lifecycle(dataset: Any) -> str:
 def find_tombstone(events: Iterable[Event], dataset: str, *, since: datetime | None) -> Tombstone:
     """When the dataset was erased, from the events if anybody said so.
 
-    An emitted `lifecycleStateChange` of `DROP`, `TRUNCATE` or `OVERWRITE` naming
-    the dataset as an output is evidence of the instant. The latest one wins: an
-    estate that truncates nightly has many, and the erasure being proved is the
-    most recent.
-    """
-    found: list[tuple[datetime, str]] = []
-    for event in events:
-        for output in event.outputs:
-            if output.key != dataset or event.event_time is None:
-                continue
-            # Naive is UTC, the one assumption `sources` already makes.
-            # Refusing to compare would be worse, and inventing a second
-            # rule here would be worse still.
-            state = _lifecycle(output)
-            if state in ERASURES:
-                found.append((utc(event.event_time), state))
+    A candidate is a **run** whose events name the dataset as an output with a
+    `lifecycleStateChange` of `DROP`, `TRUNCATE` or `OVERWRITE`, and which
+    reported completion; its instant is the completion. Counted per run because
+    Spark carries the facet on every event of one write, and only completed runs
+    because a drop that failed erased nothing.
 
-    if found:
-        at, state = max(found, key=lambda pair: pair[0])
+    Which candidate is the erasure (cordata-tech/qedro#29):
+
+    - With `--since`, the first at or after it: the operator has said when the
+      erasure was requested, and the first removal after that is the one that
+      could have carried it out. Without it, the latest, as before.
+    - A drop or truncate is preferred over an overwrite. Spark reports an
+      overwrite on every overwriting write, so on a table rewritten nightly the
+      latest overwrite is last night's run rather than the erasure.
+    """
+    runs: dict[str, dict[str, Any]] = {}
+    for event in events:
+        if event.event_time is None:
+            continue
+        # Naive is UTC, the one assumption `sources` already makes. Refusing to
+        # compare would be worse, and inventing a second rule here worse still.
+        when = utc(event.event_time)
+        run = runs.setdefault(
+            event.run.run_id or f"{event.job.key}@{when.isoformat()}",
+            {"states": set(), "completed": None},
+        )
+        if event.event_type == "COMPLETE":
+            run["completed"] = when
+        for output in event.outputs:
+            if output.key == dataset and (state := _lifecycle(output)) in ERASURES:
+                run["states"].add(state)
+
+    # A run reporting more than one state is taken at its strongest.
+    strongest = ("DROP", "TRUNCATE", "OVERWRITE")
+    candidates = [
+        (run["completed"], next(s for s in strongest if s in run["states"]))
+        for run in runs.values()
+        if run["states"] and run["completed"] is not None
+    ]
+    if since is not None:
+        candidates = [c for c in candidates if c[0] >= utc(since)]
+
+    if candidates:
+        removals = [c for c in candidates if c[1] in REMOVALS]
+        pool = removals or candidates
+        at, state = (
+            min(pool, key=lambda c: c[0]) if since is not None else max(pool, key=lambda c: c[0])
+        )
         # `since` is kept rather than dropped, so the record can say the two
         # disagree instead of quietly preferring one.
         superseded = utc(since) if since is not None and utc(since) != at else None
@@ -240,6 +320,9 @@ def find_tombstone(events: Iterable[Event], dataset: str, *, since: datetime | N
             provenance=Provenance.FACET,
             state=state,
             asserted_at=superseded,
+            candidates=len(candidates),
+            candidate_states=frozenset(s for _, s in candidates),
+            chosen_by_since=since is not None,
         )
 
     if since is not None:
@@ -397,7 +480,7 @@ def _completeness(
 ) -> Completeness:
     """When an erasure record may claim to stand on its own evidence.
 
-    Four ways it cannot, and each names something a reader would have to go and
+    Five ways it cannot, and each names something a reader would have to go and
     do. The list of places the proof does not reach is the output this
     projection exists for, so it is never quietly empty.
     """
@@ -411,6 +494,14 @@ def _completeness(
         return completeness.degraded(
             f"no erasure instant for {dataset} — nothing emitted a lifecycle event for it "
             "and no --since was given, so there is nothing to measure a rewrite against"
+        )
+
+    if tombstone.ambiguous:
+        completeness = completeness.degraded(
+            f"{tombstone.candidates} runs overwrote {dataset} in the window and nothing says "
+            "which one carried out the erasure, so the latest was taken — on a table "
+            "rewritten on a schedule that is the last scheduled run; pass --since with "
+            "the date the erasure was requested"
         )
 
     if not tombstone.evidenced:

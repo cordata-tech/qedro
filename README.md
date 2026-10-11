@@ -512,7 +512,7 @@ materialised view, the monthly rollup, the vector index that already ingested th
 $ qedro erasure demo/lineage-declared --dataset crm_raw.contacts
 Erasure of warehouse/crm_raw.contacts
 
-    tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite
+    tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite, not a drop or truncate
 
     warehouse/crm_curated.customers
       state         rewritten 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
@@ -538,6 +538,14 @@ and whose `ALTER`, `CREATE` and `RENAME` values are not. An erasure job that emi
 gives an instant somebody proved. `--since` gives the same instant typed by hand, works
 against any lineage at all, and withholds the mark, because every rewrite below is then
 measured against a date rather than an event.
+
+**An overwrite is weaker evidence than a drop or a truncate.** Spark reports
+`OVERWRITE` on every overwriting write, so on a table rewritten nightly most of those
+events are routine. qedro counts the completed runs that dropped, truncated or
+overwrote the dataset, prefers a drop or truncate where there is one, and with
+`--since` takes the first after it — the first run that could have carried out the
+request. Without `--since` it takes the latest, and withholds the mark when that is one
+of several overwrites, since nothing then says which run was the erasure.
 
 **It reports datasets, not rows.** It can show that a dataset descends from the erased
 one and that a job rewrote it afterwards. It cannot show that a particular data

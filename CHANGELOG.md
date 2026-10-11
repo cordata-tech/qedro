@@ -16,6 +16,16 @@ before `1.0`.
   every projection's scope statement, with a `passed_over` list in the JSON. It does not
   withhold the mark, since a README beside the events is what a directory looks like.
   Hidden files and anything under a dot-directory are neither sniffed nor counted.
+- **`qedro erasure` no longer takes a routine Spark overwrite as the erasure** (#29).
+  Spark reports `lifecycleStateChange: OVERWRITE` on every overwriting write, and 0.6.0
+  took the latest such event in the window as the instant of the erasure, which on a
+  table overwritten nightly is last night's run. Candidates are now completed runs
+  rather than events; a drop or truncate is preferred over an overwrite; with `--since`
+  the first candidate after it is taken rather than the latest; and several overwrites
+  with no `--since` withhold the mark with a reason saying to pass one. More than one
+  candidate is stated in the scope, and the JSON tombstone gains `candidates` and
+  `chosen_by_since`. An overwrite is now described as one — `emitted overwrite, not a
+  drop or truncate` — rather than as the erasure.
 - **`qedro events` said `0 pages` of a directory it read nothing in.** The noun now
   follows the source, so a directory is counted in files whatever the count.
 

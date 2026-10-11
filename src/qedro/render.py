@@ -985,6 +985,10 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             "lifecycle_state": record.tombstone.state,
             "evidenced": record.tombstone.evidenced,
             "asserted_at": _when(record.tombstone.asserted_at),
+            # How many completed runs could have been the erasure, and whether
+            # `--since` picked among them or the latest was taken (#29).
+            "candidates": record.tombstone.candidates,
+            "chosen_by_since": record.tombstone.chosen_by_since,
         },
         "descendants": [
             {

@@ -165,10 +165,11 @@ and each output names them rather than filling them in:
 - **Erasure usually needs `--since`.** Only the Spark capture carried
   `lifecycleStateChange`, so for dbt and Airflow the moment of erasure is typed by you,
   and the output says it was typed rather than proved. Spark reports every overwrite
-  that way, and qedro takes the latest `DROP`, `TRUNCATE` or `OVERWRITE` in the window
-  as the erasure. On a table Spark overwrites every night, that is last night's run
-  rather than the erasure you mean; the output shows both instants when they differ,
-  so check which one it used.
+  that way, so pass `--since` with the date the erasure was requested there too: qedro
+  then takes the first completed drop, truncate or overwrite after it, preferring a
+  drop or truncate. 0.6.0 took the latest in the window instead, which on a table
+  Spark overwrites every night is last night's run rather than the erasure (#29), so
+  with that version check the tombstone line against the date you expect.
 
 ## Telling us how it went
 
