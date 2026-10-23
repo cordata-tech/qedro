@@ -30,7 +30,7 @@ from qedro.sources import (
 
 from .lineage_api import Backend, event
 
-FIXTURES = Path(__file__).parent / "fixtures" / "events"
+FIXTURES = Path(__file__).parent / "fixtures" / "pipeline-runtime-0.2.4"
 
 
 class TestRealLineage:
@@ -38,7 +38,7 @@ class TestRealLineage:
 
     def test_reads_the_fixture(self):
         _, report = read_dir(FIXTURES)
-        assert report.events == 4
+        assert report.events == 6
         assert report.clean
         assert report.skipped_records == 0
 

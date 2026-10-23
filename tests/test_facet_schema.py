@@ -25,7 +25,7 @@ from pipeline_runtime.descriptor import Processing
 SCHEMA = json.loads(generator.SCHEMA_PATH.read_text(encoding="utf-8"))
 FIELDS = SCHEMA["allOf"][1]
 
-FIXTURES = Path(__file__).parent / "fixtures" / "events"
+FIXTURES = Path(__file__).parent / "fixtures" / "pipeline-runtime-0.2.4"
 
 
 class TestItIsGeneratedAndNotWritten:

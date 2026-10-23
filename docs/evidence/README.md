@@ -20,7 +20,7 @@ The transcript `cordata-tech/platform#48` quotes for refusal (b): an AI register
 
 ## `fraud-events.captured.ndjson` and `fraud-event.trimmed.json`
 
-Captured on 2026-09-17 from [`pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime) at commit `15b6110`, running the fraud example as that repository's README describes:
+Captured on 2026-09-17 from [`pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime) **0.1.0**, at commit `15b6110` — the events' `producer` says so — running the fraud example as that repository's README describes:
 
 ```console
 $ ./.venv/bin/python -m tools.seed
@@ -41,3 +41,5 @@ The second event is the OTHER event for the `.validate` job. It carries the data
 `fraud-event.trimmed.json` is derived from the capture by a script that asserts the three values against the captured event rather than against the descriptor. It keeps the event's identity (type, time, producer, job, run id, inputs and outputs) and removes everything else, including the envelope keys `_producer` and `_schemaURL`. Anything not in the trimmed copy is in the capture.
 
 These files are a record of one run and are not regenerated. A later run produces a different run id and event time.
+
+**They stay at 0.1.0 on purpose** (#31). A 0.2.4 run carries the same three values on the COMPLETE event, but its `.validate` event now carries `purpose` and `legal_basis` too ([pipeline-runtime#9](https://github.com/cordata-tech/pipeline-runtime/issues/9)), so the sentence above about the second event — which `cordata-tech/platform#48`'s published pillar also makes — is true of this capture and not of a new one. Replacing the capture would make a published caption false without anyone editing it. The tests read a 0.2.4 capture instead, in `tests/fixtures/pipeline-runtime-0.2.4`. If the pillar is revised, re-capture then and change both together.

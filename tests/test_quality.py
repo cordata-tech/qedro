@@ -364,7 +364,7 @@ def test_assertions_are_read_from_the_pipeline_runtime_capture():
 
     from qedro.sources import read_dir
 
-    events, report = read_dir(Path("tests/fixtures/events"))
+    events, report = read_dir(Path("tests/fixtures/pipeline-runtime-0.2.4"))
     out = build(events, config=config.parse(CONTROLLER), report=report)
     assert out.scope.checks > 0
     assert out.datasets

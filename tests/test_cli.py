@@ -10,14 +10,14 @@ from qedro.__main__ import main
 
 from .lineage_api import Backend, event
 
-FIXTURES = "tests/fixtures/events"
+FIXTURES = "tests/fixtures/pipeline-runtime-0.2.4"
 
 
 def test_clean_read_earns_the_tombstone(capsys):
     assert main(["events", FIXTURES]) == 0
     out = capsys.readouterr().out
     assert "∎" in out
-    assert "4 events" in out
+    assert "6 events" in out
 
 
 def test_ascii_fallback_when_the_terminal_has_no_glyph(capsys):
@@ -116,8 +116,8 @@ def test_an_empty_window_does_not_earn_the_mark(capsys):
 
 
 def test_a_window_narrows_the_read(capsys):
-    assert main(["events", FIXTURES, "--since", "2026-08-13", "--until", "2026-08-14"]) == 0
-    assert "4 events" in capsys.readouterr().out
+    assert main(["events", FIXTURES, "--since", "2026-10-23", "--until", "2026-10-24"]) == 0
+    assert "6 events" in capsys.readouterr().out
 
 
 def test_an_unparseable_date_is_rejected_with_a_usable_message(capsys):

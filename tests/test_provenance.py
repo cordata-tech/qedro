@@ -447,6 +447,25 @@ class TestTheApplicationBehindWhatWasRead:
     coverage and is counted in the scope statement instead.
     """
 
+    def test_read_from_the_pipeline_runtime_capture(self):
+        # #31. Until pipeline-runtime 0.2.0 no release emitted these fields, so
+        # every test here was synthetic. The 0.2.4 capture carries them on
+        # each producing run, with the table and schema version they describe.
+        from pathlib import Path
+
+        from qedro import config, provenance
+        from qedro.sources import read_dir
+
+        events, _ = read_dir(Path("tests/fixtures/pipeline-runtime-0.2.4"))
+        out = provenance.build(
+            events,
+            dataset="cordata://fraud/fraud_curated.transactions_scored",
+            config=config.parse("controller: ACME GmbH\n"),
+        )
+        published = out.steps[0].production.published
+        assert (published.by, published.release) == ("card-ledger", "v4.11.0")
+        assert (published.table, published.version) == ("fraud_raw.transactions", "7")
+
     def test_the_publisher_and_release_are_read(self):
         out = chain(
             [

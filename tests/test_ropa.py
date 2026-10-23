@@ -651,11 +651,26 @@ class TestReadOnlyActivitiesAreNamed:
 
 
 def test_the_processing_facet_is_read_from_the_pipeline_runtime_capture():
-    # The facet row in docs/compatibility.md; the emitter itself is the only one
-    # that sends `processing`. Its `.validate` sub-jobs do not carry it, so not
-    # every activity is evidenced, and this asserts only that some are.
-    out = real("events")
-    assert any(a.evidenced for a in out.activities)
+    # The facet row in docs/compatibility.md. Since pipeline-runtime 0.2.4 the
+    # `.validate` sub-jobs carry `processing` too (pipeline-runtime#9), so every
+    # activity is evidenced; this is the test that would notice that regress
+    # from the reading side. The 0.1.0 capture it replaced had none on them.
+    out = real("pipeline-runtime-0.2.4")
+    assert len(out.activities) == 6
+    assert all(a.evidenced for a in out.activities)
+    validate = [a for a in out.activities if a.name.endswith(".validate")]
+    assert len(validate) == 3
+
+
+def test_the_tags_facet_is_read_from_the_pipeline_runtime_capture():
+    # #31: the second emitter whose capture carries classification off the wire,
+    # after art30-emit. pipeline-runtime tags what a job writes; `sensitivity`
+    # and `domain` are its own keys and no Art. 30 item, so they stay out.
+    out = real("pipeline-runtime-0.2.4")
+    scored = next(a for a in out.activities if a.key == "cordata.fraud/transactions-scored-daily")
+    found = {(c.key, c.value) for c in scored.classification}
+    assert found == {("subject_type", "customer"), ("residency", "eu")}
+    assert all(c.writes and not c.unrecognised for c in scored.classification)
 
 
 class TestTheArt30EmitCapture:
