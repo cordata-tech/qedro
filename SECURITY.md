@@ -29,8 +29,20 @@ from `QEDRO_API_TOKEN` and nowhere else — never a command-line flag, where it
 would land in shell history and in the output of `ps`. Nothing is written to
 disk except the artefact you asked for, at the path you named.
 
+**Buckets use your environment's credentials, so give them a read-only role.**
+Reading an `s3://`, `gs://` or `az://` prefix goes through the cloud's own
+credential chain — an AWS profile or instance role, Google's application default
+credentials, Azure's — which qedro neither stores nor takes as a flag. Those
+credentials are yours and may allow writing. The code cannot use that: the bucket
+reader holds a wrapper exposing listing and reading only, and
+`tests/test_sources.py::TestReadingABucket::test_it_can_only_list_and_read` hands it
+a filesystem that fails on any other call. A role limited to listing and reading
+(`s3:ListBucket` and `s3:GetObject`, `roles/storage.objectViewer`, *Storage Blob Data
+Reader*) makes the same true of the credentials.
+
 **Nothing is sent anywhere.** No telemetry, no update check, no analytics. The
-only network traffic is reading from the source address you passed.
+only network traffic is reading from the source address you passed, and for a
+bucket whatever the cloud's credential chain does to obtain credentials.
 
 **User documents are parsed, never executed.** `qedro.yaml` and vocabulary
 documents go through `yaml.safe_load` or `tomllib`, so nothing in a config file
@@ -54,6 +66,10 @@ contents warrant.
 Two at runtime — `pyyaml` and `openpyxl` — chosen partly for how little each
 brings with it. Both are widely used and neither executes anything from a
 document it parses.
+
+Reading a bucket adds more, and only when you ask for it: the `s3`, `gcs` and
+`azure` extras install `fsspec` with `s3fs`, `gcsfs` or `adlfs`, which bring each
+cloud's client libraries. A plain `pip install qedro` installs none of them.
 
 ## Not a compliance verdict
 

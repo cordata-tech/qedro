@@ -26,10 +26,10 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import words
@@ -171,14 +171,15 @@ def in_window(event: Event, since: datetime | None, until: datetime | None) -> b
 # --------------------------------------------------------------------------
 
 
-def _records(path: Path) -> Iterator[Any]:
-    """Yield JSON records from one file, whatever shape it is in.
+def _records(text: str, suffix: str) -> Iterator[Any]:
+    """Yield JSON records from one file's text, whatever shape it is in.
 
     Three shapes turn up in practice and none is worth making the user
     identify: newline-delimited events, a single event, and an array of them.
-    Sniffing is cheaper than a flag, and a flag would be got wrong.
+    Sniffing is cheaper than a flag, and a flag would be got wrong. Takes the
+    text rather than a path, so a file on disk and an object in a bucket are
+    parsed by the same code.
     """
-    text = path.read_text(encoding="utf-8")
     stripped = text.lstrip()
     if not stripped:
         return
@@ -189,7 +190,7 @@ def _records(path: Path) -> Iterator[Any]:
             yield from parsed
         return
 
-    if path.suffix in (".ndjson", ".jsonl") or "\n" in stripped.strip():
+    if suffix in (".ndjson", ".jsonl") or "\n" in stripped.strip():
         for line in text.splitlines():
             line = line.strip()
             if not line:
@@ -203,7 +204,11 @@ def _records(path: Path) -> Iterator[Any]:
     yield json.loads(text)
 
 
-def _holds_events(path: Path) -> bool:
+#: How much of a file with no extension is read to decide whether it holds events.
+HEAD = 512
+
+
+def _holds_events(suffix: str, head: Callable[[], bytes]) -> bool:
     """Whether a file is one to read, from its name or, failing that, its start.
 
     A recognised suffix decides it. A file with no suffix at all is read when
@@ -213,26 +218,63 @@ def _holds_events(path: Path) -> bool:
     extension. Anything else — `.md`, `.gz`, `.log` — is passed over and
     counted, since sniffing a README that opens with `[` would read it as a
     broken array and withhold the mark over a file nobody meant as events.
+
+    `head` returns the first :data:`HEAD` bytes and is called only when the
+    name does not decide it, so neither a directory nor a bucket opens every
+    file to choose. Shared by both readers: one rule, so the same files give
+    the same answer wherever they are kept.
     """
-    if path.suffix in SUFFIXES:
+    if suffix in SUFFIXES:
         return True
-    if path.suffix:
+    if suffix:
         return False
     try:
-        with path.open("rb") as handle:
-            head = handle.read(512).lstrip()
+        start = head().lstrip()
     except OSError:
         return False
-    return head[:1] in (b"{", b"[")
+    return start[:1] in (b"{", b"[")
 
 
-def _hidden(path: Path, root: Path) -> bool:
+def _hidden(relative: PurePosixPath) -> bool:
     """A dotfile, or anything inside a dot-directory such as `.git`.
 
     Neither sniffed nor counted as passed over, which would otherwise be
     thousands of `.git` objects or one `.DS_Store` reported on every run.
     """
-    return any(part.startswith(".") for part in path.relative_to(root).parts)
+    return any(part.startswith(".") for part in relative.parts)
+
+
+def _select(relative: PurePosixPath, head: Callable[[], bytes]) -> bool | None:
+    """Read it (True), name it as passed over (False), or leave it out (None).
+
+    A recognised suffix is read wherever it sits, as it always was. Hidden
+    paths are otherwise skipped before sniffing, so a `.git` directory costs a
+    walk and not an open per object.
+    """
+    if relative.suffix not in SUFFIXES and _hidden(relative):
+        return None
+    return _holds_events(relative.suffix, head)
+
+
+def _take(name: str, suffix: str, text: str, report: ReadReport, events: list[Event]) -> None:
+    """Parse one file's text into *events*, counting into *report* what it cannot use."""
+    report.files += 1
+    try:
+        records = list(_records(text, suffix))
+    except json.JSONDecodeError as exc:
+        report.unreadable += (f"{name} ({type(exc).__name__})",)
+        return
+    for record in records:
+        event = parse_event(record) if record is not None else None
+        if event is None:
+            report.skipped_records += 1
+            continue
+        events.append(event)
+
+
+def _head(path: Path) -> bytes:
+    with path.open("rb") as handle:
+        return handle.read(HEAD)
 
 
 def read_dir(path: str | Path, *, recursive: bool = True) -> tuple[list[Event], ReadReport]:
@@ -255,7 +297,7 @@ def read_dir(path: str | Path, *, recursive: bool = True) -> tuple[list[Event], 
         # yields nothing — so this used to report a clean zero and exit 0, with
         # a reason that blamed the estate for what was really a path the reader
         # would not read. Found by running it against a real dbt export.
-        if not _holds_events(root):
+        if not _holds_events(root.suffix, lambda: _head(root)):
             return events, ReadReport(
                 origin=str(root),
                 unreadable=(
@@ -269,30 +311,24 @@ def read_dir(path: str | Path, *, recursive: bool = True) -> tuple[list[Event], 
     else:
         files, passed_over = [], []
         for p in sorted(root.rglob("*") if recursive else root.glob("*")):
-            # A recognised suffix is read wherever it sits, as it always was.
-            # Hidden paths are otherwise skipped before sniffing, so a `.git`
-            # directory costs a walk and not an open per object.
-            if not p.is_file() or (p.suffix not in SUFFIXES and _hidden(p, root)):
+            if not p.is_file():
                 continue
-            if _holds_events(p):
+            relative = PurePosixPath(p.relative_to(root).as_posix())
+            chosen = _select(relative, lambda p=p: _head(p))
+            if chosen:
                 files.append(p)
-            else:
-                passed_over.append(p.relative_to(root).as_posix())
+            elif chosen is False:
+                passed_over.append(relative.as_posix())
         report.passed_over = tuple(passed_over)
 
     for f in files:
-        report.files += 1
         try:
-            records = list(_records(f))
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+            text = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as exc:
+            report.files += 1
             report.unreadable += (f"{f.name} ({type(exc).__name__})",)
             continue
-        for record in records:
-            event = parse_event(record) if record is not None else None
-            if event is None:
-                report.skipped_records += 1
-                continue
-            events.append(event)
+        _take(f.name, f.suffix, text, report, events)
 
     report.events = len(events)
     return events, report
@@ -467,6 +503,150 @@ def read_api(
 
 
 # --------------------------------------------------------------------------
+# An object-store prefix
+# --------------------------------------------------------------------------
+
+#: The address schemes read as a bucket, and the extra that installs each one's
+#: backend. Where a composite OpenLineage transport puts the raw copy for every
+#: catalog that cannot give events back, and the reason this reader exists —
+#: see cordata-tech/qedro#30 and `docs/pilot.md`.
+BUCKETS = {
+    "s3": "s3",
+    "gs": "gcs",
+    "gcs": "gcs",
+    "az": "azure",
+    "abfs": "azure",
+    "abfss": "azure",
+}
+
+
+class _ReadOnly:
+    """The three calls this module makes on a filesystem, and no others.
+
+    fsspec filesystems can write, delete and move. This wrapper is the only
+    thing the bucket reader holds, so no code here can reach those methods —
+    the same property the HTTP source has by being unable to build anything but
+    a GET, and asserted the same way, by a test that hands it a filesystem
+    failing on any other call. The credentials the backend found in the
+    environment may well allow writing; nothing here can use them to.
+    """
+
+    def __init__(self, filesystem: Any) -> None:
+        self._fs = filesystem
+
+    def list(self, prefix: str) -> list[str]:
+        return sorted(self._fs.find(prefix))
+
+    def head(self, key: str) -> bytes:
+        return self._fs.cat_file(key, start=0, end=HEAD)
+
+    def read(self, keys: list[str]) -> dict[str, Any]:
+        """Every object at once, so an async backend fetches them concurrently.
+
+        The Java client's S3 and GCS transports write one object per event, so a
+        pilot's window can be thousands of small objects, and one request at a
+        time would make the first run the slow one. A failure comes back as the
+        exception in place of the bytes rather than stopping the others.
+        """
+        return self._fs.cat(keys, on_error="return") if keys else {}
+
+
+def _filesystem(address: str) -> tuple[Any, str]:
+    """The backend for *address*, or a sentence saying which extra installs it."""
+    scheme = address.split("://", 1)[0].lower()
+    missing = ConfigError(
+        f"reading {scheme}:// needs an optional dependency — "
+        f"pip install 'qedro[{BUCKETS.get(scheme, scheme)}]'"
+    )
+    # Either import can be the missing one: fsspec itself, or the backend it
+    # loads for this scheme, which fsspec reports as an ImportError of its own.
+    try:
+        from fsspec.core import url_to_fs
+
+        return url_to_fs(address)
+    except ImportError:
+        raise missing from None
+
+
+def read_bucket(address: str, *, filesystem: Any = None) -> tuple[list[Event], ReadReport]:
+    """Read every event under an `s3://`, `gs://` or `az://` prefix.
+
+    The same selection and the same parsing as :func:`read_dir`, so a prefix
+    copied to disk and the same prefix read in place give the same events and
+    the same report; `tests/test_sources.py` reads one set of files both ways
+    to hold that. Credentials come from the environment through the backend's
+    own chain — an AWS profile or role, Google's application default
+    credentials, Azure's — and never from a flag.
+
+    *filesystem* is for tests, which use fsspec's in-memory one rather than a
+    cloud; the address's path is then read from it as given.
+    """
+    report = ReadReport(origin=address)
+    events: list[Event] = []
+
+    try:
+        if filesystem is None:
+            filesystem, prefix = _filesystem(address)
+        else:
+            prefix = address.split("://", 1)[-1].rstrip("/")
+        store = _ReadOnly(filesystem)
+        keys = store.list(prefix)
+    except ConfigError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — every backend raises its own types
+        # The edge of the network, where each backend raises its own types — a
+        # missing bucket, a role that cannot list, no credentials at all. All of
+        # them are a read that did not happen, which the report carries and the
+        # mark is withheld for, exactly as for an unreachable Marquez.
+        report.unreadable += (f"{address} ({type(exc).__name__})",)
+        return events, report
+
+    if not keys:
+        # Unlike an empty directory, an empty prefix does not exist in an object
+        # store, so this is almost always a mistyped address. Reporting it as a
+        # clean read of nothing would blame the lineage for a typo.
+        report.unreadable += (f"{address} (no objects under this prefix)",)
+        return events, report
+
+    chosen, passed_over = [], []
+    for key in keys:
+        # A single object addressed directly lists as itself, and is named by
+        # its own name rather than by an empty path relative to itself.
+        # Backends differ on a leading slash — the in-memory one adds it, s3fs
+        # does not — so both sides are compared without one.
+        if key.strip("/") == prefix.strip("/"):
+            relative = PurePosixPath(PurePosixPath(key).name)
+        else:
+            relative = PurePosixPath(key.lstrip("/")).relative_to(prefix.strip("/"))
+        selected = _select(relative, lambda key=key: store.head(key))
+        if selected:
+            chosen.append((key, relative))
+        elif selected is False:
+            passed_over.append(relative.as_posix())
+    report.passed_over = tuple(passed_over)
+
+    fetched = store.read([key for key, _ in chosen])
+    for key, relative in chosen:
+        body = fetched.get(key, FileNotFoundError(key))
+        if not isinstance(body, bytes):
+            # An exception in place of the bytes: one object that failed, of
+            # whatever type the backend raises, and the others still read.
+            report.files += 1
+            report.unreadable += (f"{relative.name} ({type(body).__name__})",)
+            continue
+        try:
+            text = body.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            report.files += 1
+            report.unreadable += (f"{relative.name} ({type(exc).__name__})",)
+            continue
+        _take(relative.name, relative.suffix, text, report, events)
+
+    report.events = len(events)
+    return events, report
+
+
+# --------------------------------------------------------------------------
 # One entry point
 # --------------------------------------------------------------------------
 
@@ -488,13 +668,26 @@ def read(
     path can contain a colon, and sniffing anything looser would eventually
     read a directory as a URL.
 
-    Anything else carrying a ``scheme://`` is refused rather than tried as a
-    path. Nobody means a directory by ``s3://bucket``, and *"s3:/bucket does not
-    exist"* sends them looking for a typo instead of at the sentence that says
-    which addresses this reads.
+    A scheme in :data:`BUCKETS` is read as an object-store prefix. Anything
+    else carrying a ``scheme://`` is refused rather than tried as a path: nobody
+    means a directory by ``ftp://host``, and *"ftp:/host does not exist"* sends
+    them looking for a typo instead of at the sentence that says which
+    addresses this reads.
     """
-    if _SCHEME.match(source) and not source.startswith(("http://", "https://")):
-        raise ConfigError(f"{source!r}: only a directory or an http:// address can be read")
+    scheme = source.split("://", 1)[0].lower() if _SCHEME.match(source) else ""
+    if scheme in BUCKETS:
+        events, report = read_bucket(source)
+        if since is None and until is None:
+            return events, report
+        events = [e for e in events if in_window(e, since, until)]
+        report.events = len(events)
+        return events, report
+
+    if scheme and scheme not in ("http", "https"):
+        schemes = ", ".join(f"{s}://" for s in BUCKETS)
+        raise ConfigError(
+            f"{source!r}: only a directory, an http:// address, or a bucket ({schemes}) can be read"
+        )
 
     if source.startswith(("http://", "https://")):
         return read_api(

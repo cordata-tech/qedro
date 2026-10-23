@@ -36,9 +36,25 @@ classifiers = [
 dependencies = ["pyyaml>=6", "openpyxl>=3.1"]
 
 [project.optional-dependencies]
+# Reading events straight from a bucket (#30), one extra per cloud so that
+# nobody installs a cloud SDK they do not use: `pip install 'qedro[s3]'`. All
+# three go through fsspec, the library the OpenLineage Python client writes
+# through, so there is one read path rather than three. Not in the base
+# install, which stays at the two dependencies above; a bucket address without
+# its extra is refused with the command that installs it.
+s3 = ["fsspec>=2024.6.0", "s3fs>=2024.6.0"]
+gcs = ["fsspec>=2024.6.0", "gcsfs>=2024.6.0"]
+azure = ["fsspec>=2024.6.0", "adlfs>=2024.4.1"]
 dev = [
+    # The bucket reader's tests run against fsspec's in-memory filesystem, so
+    # they need fsspec and none of the cloud backends.
+    "fsspec>=2024.6.0",
     "pytest>=8",
-    "ruff>=0.6",
+    # Pinned exactly, unlike everything else here. A ruff release changes which
+    # rules fire, and with a floor CI installs whatever is newest: 0.17.0 turned
+    # an existing `noqa` into an error and failed `main` with no change in this
+    # repository. Bump it on purpose, with the fixes in the same commit.
+    "ruff==0.17.2",
     "mypy>=1.11",
     # `tools/facet_schema.py` generates the Art. 30 facet schema from
     # `pipeline_runtime.descriptor.Processing`, and a test fails when the two

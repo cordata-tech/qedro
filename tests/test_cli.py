@@ -127,9 +127,47 @@ def test_an_unparseable_date_is_rejected_with_a_usable_message(capsys):
 
 
 def test_an_address_that_is_not_a_directory_or_http_says_so(capsys):
-    # `s3:/bucket does not exist` would send someone looking for a typo.
-    assert main(["events", "s3://bucket/lineage"]) == 2
-    assert "only a directory or an http:// address" in capsys.readouterr().err
+    # `ftp:/host does not exist` would send someone looking for a typo.
+    assert main(["events", "ftp://host/lineage"]) == 2
+    err = capsys.readouterr().err
+    assert "only a directory, an http:// address, or a bucket" in err and "s3://" in err
+
+
+def test_a_bucket_reads_end_to_end(tmp_path, capsys, monkeypatch):
+    # #30, through the CLI: the address an operator types, with fsspec's
+    # in-memory filesystem standing in for S3.
+    import fsspec
+    import fsspec.core
+
+    memory = fsspec.filesystem("memory")
+    root = f"/{tmp_path.name}/ol"
+    good = {
+        "eventType": "COMPLETE",
+        "eventTime": "2026-03-01T10:00:00Z",
+        "run": {"runId": "r"},
+        "job": {"namespace": "acme.fraud", "name": "j"},
+    }
+    memory.pipe(f"{root}/1792836000000.json", json.dumps(good).encode())
+    monkeypatch.setattr(fsspec.core, "url_to_fs", lambda address: (memory, root))
+    try:
+        assert main(["events", "s3://acme-lineage/ol/"]) == 0
+        out = capsys.readouterr().out
+        assert "1 event · 1 job · 0 datasets · 1 file" in out and TOMBSTONE in out
+    finally:
+        memory.rm(f"/{tmp_path.name}", recursive=True)
+
+
+def test_a_bucket_without_its_extra_names_the_command(capsys, monkeypatch):
+    # #30. fsspec reports a missing backend as an ImportError of its own; the
+    # base install has neither, and the answer is one pip command.
+    import fsspec.core
+
+    def missing(address):
+        raise ImportError("Install s3fs to access S3")
+
+    monkeypatch.setattr(fsspec.core, "url_to_fs", missing)
+    assert main(["events", "s3://bucket/lineage/"]) == 2
+    assert "pip install 'qedro[s3]'" in capsys.readouterr().err
 
 
 class TestAgainstAnApi:

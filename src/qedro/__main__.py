@@ -39,6 +39,12 @@ from .errors import ConfigError, QedroError, UsageError
 from .mark import Completeness
 from .sources import passed_over_text, read
 
+#: What every command that reads events accepts, said once.
+SOURCE_HELP = (
+    "a directory of OpenLineage events (.json, .ndjson, .jsonl), an s3://, gs:// or az:// "
+    "prefix holding them, or the base URL of a Marquez-compatible API"
+)
+
 
 def _instant(value: str) -> datetime:
     """A `--since` / `--until` argument.
@@ -461,8 +467,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     events.add_argument(
         "source",
-        help="a directory of .json, .ndjson or .jsonl events, "
-        "or the base URL of a Marquez-compatible API",
+        help=SOURCE_HELP,
     )
     events.add_argument("--since", type=_instant, help="ignore events before this date")
     events.add_argument("--until", type=_instant, help="ignore events after this date")
@@ -474,8 +479,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ropa_cmd.add_argument(
         "source",
-        help="a directory of .json, .ndjson or .jsonl events, "
-        "or the base URL of a Marquez-compatible API",
+        help=SOURCE_HELP,
     )
     ropa_cmd.add_argument("--since", type=_instant, help="ignore events before this date")
     ropa_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
@@ -517,8 +521,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     quality_cmd.add_argument(
         "source",
-        help="a directory of .json, .ndjson or .jsonl events, "
-        "or the base URL of a Marquez-compatible API",
+        help=SOURCE_HELP,
     )
     quality_cmd.add_argument("--since", type=_instant, help="ignore events before this date")
     quality_cmd.add_argument("--until", type=_instant, help="ignore events after this date")
@@ -555,8 +558,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     provenance_cmd.add_argument(
         "source",
-        help="a directory of .json, .ndjson or .jsonl events, "
-        "or the base URL of a Marquez-compatible API",
+        help=SOURCE_HELP,
     )
     provenance_cmd.add_argument(
         "--dataset",
@@ -602,8 +604,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     erasure_cmd.add_argument(
         "source",
-        help="a directory of .json, .ndjson or .jsonl events, "
-        "or the base URL of a Marquez-compatible API",
+        help=SOURCE_HELP,
     )
     erasure_cmd.add_argument(
         "--dataset",

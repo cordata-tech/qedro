@@ -13,8 +13,8 @@ output looks like before your own events are involved.
 
 ## What you need
 
-- **OpenLineage events**, either as files in a directory or behind a Marquez-compatible
-  HTTP API. The emitter does not matter: dbt, Airflow, Spark and Flink are tested against
+- **OpenLineage events**, as files in a directory, objects under an S3, GCS or Azure
+  prefix, or behind a Marquez-compatible HTTP API. The emitter does not matter: dbt, Airflow, Spark and Flink are tested against
   real captures ([compatibility.md](compatibility.md) lists versions), and neither a
   cloud provider nor a particular warehouse is involved.
 - **Two weeks of events or more.** The projections describe what ran in a window, so a
@@ -28,7 +28,7 @@ output looks like before your own events are involved.
 |---|---|
 | Marquez | Pass its base URL wherever these commands take a directory: `qedro events http://marquez:5000` |
 | Files on a disk | Pass the directory. qedro reads files ending in `.json`, `.ndjson` or `.jsonl`, and files with no extension that start with JSON. Any other file is not read, and the summary names it |
-| An S3, GCS or Azure bucket | Copy the prefix to a directory first — `aws s3 sync`, `gcloud storage rsync -r`, `azcopy sync` — and pass that. A reader for buckets is planned but not built |
+| An S3, GCS or Azure bucket | Install the extra for that cloud — `pipx install 'qedro[s3]'`, `'qedro[gcs]'` or `'qedro[azure]'` — and pass the prefix: `qedro events s3://bucket/openlineage/`. It is read with the same rules as a directory, using the credentials your environment already has. With 0.7.0 or earlier, copy the prefix to a directory first (`aws s3 sync`, `gcloud storage rsync -r`, `azcopy sync`) and pass that |
 | A Kafka topic | Keep a copy as below. A Kafka reader is a candidate, not built |
 | Google Dataplex, DataHub, OpenMetadata, Microsoft Purview | Keep a copy as below. These turn events into their own model and cannot give them back as they were sent; Dataplex also drops custom facets and keeps 30 days |
 | Amazon DataZone / SageMaker Unified Studio | Keep a copy as below. DataZone can return the events it received, and a reader for it is a candidate once it is known whether custom facets survive |
@@ -71,7 +71,15 @@ qedro.
 `openlineage-python[fsspec]` and the matching filesystem package (`s3fs`, `gcsfs`,
 `adlfs`) are installed wherever the client runs. The client's documentation warns
 that object stores may turn appending into overwriting, so keep `append: false`
-there. The bucket form has not been run here.
+there. qedro then reads the prefix where it is. The client writing to a bucket has not
+been run here.
+
+**Give qedro a role that can list and read and nothing more**: `s3:ListBucket` and
+`s3:GetObject` on the prefix, `roles/storage.objectViewer` on Google Cloud, or
+*Storage Blob Data Reader* on Azure. qedro has no code that writes to a bucket, and a
+test holds it to listing and reading, but the credentials it uses are whatever your
+environment provides, and a narrow role keeps that true of the credentials as well as
+of the code.
 
 For Airflow, point the provider at the same file with `[openlineage] config_path`, or
 set `[openlineage] transport` to the same structure as JSON. The Airflow documentation

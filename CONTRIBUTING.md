@@ -157,8 +157,8 @@ command that produced it is a good first contribution, and it is what lets a row
 `works`.
 
 **Sources and catalog adapters are pulled by somebody who runs the thing**, because
-each brings a credential and a dependency. If you have events in a bucket or on a
-topic, or classification in a catalog that no emitter is tagging datasets from, say so
+each brings a credential and a dependency. If you have events on a topic, or
+classification in a catalog that no emitter is tagging datasets from, say so
 on #5 — that is the trigger, and the design decisions waiting for it are written there.
 
 ## Releases

@@ -569,6 +569,14 @@ events, JSON arrays and single objects without being told which, walks nested
 directories, and never stops on a bad record — malformed events are counted and
 reported rather than thrown.
 
+Or point it at a bucket. An `s3://`, `gs://` or `az://` prefix is read with the same
+rules as a directory, using the credentials your environment already has, once the
+extra for that cloud is installed — `pipx install 'qedro[s3]'`:
+
+```console
+$ qedro events s3://acme-lineage/openlineage/
+```
+
 Or point it at a Marquez-compatible API and it reads the same events over HTTP:
 
 ```console
@@ -694,7 +702,8 @@ anywhere in the picture, the neutrality is decorative — so that is an actual t
 (`tests/test_cli.py::TestRopaAgainstAnApi`), not an aspiration.
 
 **Flexible by construction, everywhere it is cheap to be.** Multi-cloud, multi-pipeline,
-multi-format. Sources are a directory or any Marquez-compatible API; config and
+multi-format. Sources are a directory, an S3, GCS or Azure prefix, or any
+Marquez-compatible API; config and
 vocabulary documents are YAML, JSON or TOML; facets stay raw dictionaries so an emitter
 nobody anticipated still arrives intact. Each of these was chosen at the point where
 picking one option would have cost nothing today and a rewrite later.

@@ -19,7 +19,14 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from qedro.errors import ConfigError
-from qedro.sources import lineage_url, passed_over_text, read, read_api, read_dir
+from qedro.sources import (
+    lineage_url,
+    passed_over_text,
+    read,
+    read_api,
+    read_bucket,
+    read_dir,
+)
 
 from .lineage_api import Backend, event
 
@@ -468,6 +475,169 @@ class TestOneEntryPoint:
         (odd / "a.ndjson").write_text(json.dumps(event()))
         _, report = read(str(odd))
         assert report.files == 1
+
+
+class TestReadingABucket:
+    """cordata-tech/qedro#30: an `s3://`, `gs://` or `az://` prefix.
+
+    Against fsspec's in-memory filesystem rather than a cloud — the reader is
+    the same code whichever backend fsspec hands it, and what differs between
+    s3fs, gcsfs and adlfs is theirs to test. A real bucket was read once and the
+    result recorded on #30.
+    """
+
+    @pytest.fixture
+    def bucket(self, tmp_path):
+        import fsspec
+
+        memory = fsspec.filesystem("memory")
+        root = f"/{tmp_path.name}/lineage"
+
+        def put(name, body):
+            memory.pipe(f"{root}/{name}", body if isinstance(body, bytes) else body.encode())
+
+        yield memory, root, put
+        if memory.exists(f"/{tmp_path.name}"):
+            memory.rm(f"/{tmp_path.name}", recursive=True)
+
+    @staticmethod
+    def _event(job="j", run="r", state="COMPLETE"):
+        return {
+            "eventType": state,
+            "eventTime": "2026-08-21T10:00:00Z",
+            "run": {"runId": run},
+            "job": {"namespace": "ns", "name": job},
+        }
+
+    def read(self, memory, root):
+        return read_bucket(f"memory://{root}/", filesystem=memory)
+
+    def test_one_object_per_event_as_the_java_transports_write(self, bucket):
+        # `{fileNamePrefix}{epochMillis}.json`, one event in each.
+        memory, root, put = bucket
+        for i, millis in enumerate((1792836000000, 1792836000417, 1792836001020)):
+            put(f"ol/{millis}.json", json.dumps(self._event(f"j{i}")))
+        events, report = self.read(memory, root)
+        assert [e.job.name for e in events] == ["j0", "j1", "j2"]
+        assert report.files == 3 and report.clean
+        assert report.origin == f"memory://{root}/"
+
+    def test_an_appended_object_with_no_extension_is_read(self, bucket):
+        memory, root, put = bucket
+        lines = [json.dumps(self._event(f"j{i}"), sort_keys=True) for i in range(2)]
+        put("events", "\n".join(lines) + "\n")
+        events, report = self.read(memory, root)
+        assert len(events) == 2 and report.clean
+
+    def test_the_same_files_read_from_disk_and_from_a_bucket_agree(self, bucket, tmp_path):
+        # The rule that makes this one reader rather than two: a prefix copied
+        # down with `aws s3 sync` and the same prefix read in place give the
+        # same events and the same report.
+        memory, root, put = bucket
+        disk = tmp_path / "copy"
+        files = {
+            "2026/10/a.ndjson": "\n".join(json.dumps(self._event(f"a{i}")) for i in range(3)),
+            "2026/10/b.json": json.dumps([self._event("b1"), {"not": "an event"}]),
+            "events": json.dumps(self._event("appended")) + "\n",
+            "broken.json": "{ not json",
+            "README.md": "[![badge](x)](y)\n",
+            ".hidden/notes.txt": "nobody's events",
+        }
+        for name, body in files.items():
+            put(name, body)
+            (disk / name).parent.mkdir(parents=True, exist_ok=True)
+            (disk / name).write_text(body, encoding="utf-8")
+
+        from_bucket, bucket_report = self.read(memory, root)
+        from_disk, disk_report = read_dir(disk)
+
+        assert [e.job.name for e in from_bucket] == [e.job.name for e in from_disk]
+        for field in ("files", "events", "skipped_records", "unreadable", "passed_over"):
+            assert getattr(bucket_report, field) == getattr(disk_report, field), field
+        assert bucket_report.passed_over == ("README.md",)
+
+    def test_it_can_only_list_and_read(self, bucket):
+        # The bucket reader's equivalent of the HTTP source issuing only GET:
+        # handed a filesystem that fails on any call but these, it still reads.
+        memory, root, put = bucket
+        put("a.json", json.dumps(self._event()))
+        put("events", json.dumps(self._event("b")))
+        allowed = {"find", "cat_file", "cat"}
+        called = []
+
+        class Guarded:
+            def __getattr__(self, name):
+                called.append(name)
+                assert name in allowed, f"the bucket reader reached for {name!r}"
+                return getattr(memory, name)
+
+        events, report = read_bucket(f"memory://{root}/", filesystem=Guarded())
+        assert len(events) == 2 and report.clean
+        assert set(called) <= allowed
+
+    def test_a_listing_that_fails_is_reported_rather_than_raised(self, bucket):
+        _, root, _ = bucket
+
+        class Denied:
+            def find(self, prefix):
+                raise PermissionError("AccessDenied")
+
+        events, report = read_bucket(f"s3://{root}/", filesystem=Denied())
+        assert events == []
+        assert report.unreadable == (f"s3://{root}/ (PermissionError)",)
+        assert not report.clean
+
+    def test_an_empty_prefix_is_a_reason_not_a_clean_zero(self, bucket):
+        # An empty prefix does not exist in an object store, so it is nearly
+        # always a typo, and a clean read of nothing would blame the lineage.
+        memory, root, _ = bucket
+        _, report = self.read(memory, root + "-typo")
+        assert "no objects under this prefix" in report.unreadable[0]
+
+    def test_one_object_that_fails_does_not_stop_the_others(self, bucket):
+        memory, root, put = bucket
+        put("a.json", json.dumps(self._event("a")))
+        put("b.json", json.dumps(self._event("b")))
+
+        class Flaky:
+            def find(self, prefix):
+                return memory.find(prefix)
+
+            def cat(self, keys, on_error):
+                out = memory.cat(keys, on_error=on_error)
+                out[f"{root}/b.json"] = TimeoutError("read timed out")
+                return out
+
+        events, report = read_bucket(f"memory://{root}/", filesystem=Flaky())
+        assert [e.job.name for e in events] == ["a"]
+        assert report.unreadable == ("b.json (TimeoutError)",)
+
+    def test_a_single_object_addressed_directly_is_read(self, bucket):
+        memory, root, put = bucket
+        put("events.ndjson", json.dumps(self._event()))
+        events, report = read_bucket(f"memory://{root}/events.ndjson", filesystem=memory)
+        assert len(events) == 1 and report.files == 1 and report.clean
+
+    def test_read_sends_a_bucket_address_to_the_bucket_reader_and_applies_the_window(
+        self, bucket, monkeypatch
+    ):
+        from qedro import sources
+
+        memory, root, put = bucket
+        early, late = self._event("early"), self._event("late")
+        late["eventTime"] = "2026-09-01T10:00:00Z"
+        put("a.ndjson", json.dumps(early) + "\n" + json.dumps(late))
+        seen = []
+        original = sources.read_bucket
+
+        def through_memory(address):
+            seen.append(address)
+            return original(address, filesystem=memory)
+
+        monkeypatch.setattr(sources, "read_bucket", through_memory)
+        events, report = read(f"gs://{root.lstrip('/')}/", since=datetime(2026, 8, 25, tzinfo=UTC))
+        assert seen == [f"gs://{root.lstrip('/')}/"]
+        assert [e.job.name for e in events] == ["late"] and report.events == 1
 
 
 class TestPointingAtAFile:

@@ -6,6 +6,20 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **Events can be read straight from a bucket** (#30): `qedro events s3://bucket/prefix/`,
+  and the same for `gs://` and `az://`, in every command that reads events. Install the
+  extra for the cloud — `qedro[s3]`, `qedro[gcs]` or `qedro[azure]` — and the base
+  install is unchanged. Objects are chosen and parsed by the same code as a directory,
+  so a prefix copied to disk and the same prefix read in place give the same events and
+  the same report. Credentials come from the environment's own chain; the reader can
+  only list and read, and `SECURITY.md` says what role to give it. A missing bucket, a
+  denied listing or an empty prefix is reported and withholds the mark rather than
+  reading as a clean zero.
+- **The dev extra pins ruff exactly**, after a ruff release failed `main` with no change
+  here.
+
 ## 0.7.0 — 2026-10-11
 
 Two fixes for problems found while writing the pilot guide, both of which a first run
