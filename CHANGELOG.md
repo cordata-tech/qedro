@@ -6,7 +6,12 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.8.0 — 2026-10-23
+
+A third kind of source, so that a pilot whose raw events land in a bucket can point
+qedro at the bucket rather than copying it down first. Nothing a projection produces
+changes. Read against a real S3 bucket before release, with the transcript on #30;
+GCS and Azure use the same reader and have not been run against a real cloud.
 
 - **Events can be read straight from a bucket** (#30): `qedro events s3://bucket/prefix/`,
   and the same for `gs://` and `az://`, in every command that reads events. Install the
@@ -17,6 +22,9 @@ before `1.0`.
   only list and read, and `SECURITY.md` says what role to give it. A missing bucket, a
   denied listing or an empty prefix is reported and withholds the mark rather than
   reading as a clean zero.
+- **On S3, set `AWS_REGION`** or grant `s3:GetBucketLocation`. Measured on #30: without
+  either, a role that may list and read is refused, because the library asks the bucket
+  where it is first, and the reason qedro gives now says so.
 - **The dev extra pins ruff exactly**, after a ruff release failed `main` with no change
   here.
 
