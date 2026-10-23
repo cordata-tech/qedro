@@ -584,8 +584,23 @@ class TestReadingABucket:
 
         events, report = read_bucket(f"s3://{root}/", filesystem=Denied())
         assert events == []
-        assert report.unreadable == (f"s3://{root}/ (PermissionError)",)
         assert not report.clean
+        # Measured against real S3 on #30: with no region set, a role that may
+        # list and read is still refused, because s3fs asks for the bucket's
+        # location first. The reason says which permission that is.
+        [reason] = report.unreadable
+        assert reason.startswith(f"s3://{root}/ (PermissionError — ")
+        assert "s3:GetBucketLocation unless AWS_REGION is set" in reason
+
+    def test_other_failures_are_named_by_their_type(self, bucket):
+        _, root, _ = bucket
+
+        class Missing:
+            def find(self, prefix):
+                raise FileNotFoundError(prefix)
+
+        _, report = read_bucket(f"gs://{root}/", filesystem=Missing())
+        assert report.unreadable == (f"gs://{root}/ (FileNotFoundError)",)
 
     def test_an_empty_prefix_is_a_reason_not_a_clean_zero(self, bucket):
         # An empty prefix does not exist in an object store, so it is nearly

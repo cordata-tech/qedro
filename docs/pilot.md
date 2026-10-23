@@ -71,15 +71,22 @@ qedro.
 `openlineage-python[fsspec]` and the matching filesystem package (`s3fs`, `gcsfs`,
 `adlfs`) are installed wherever the client runs. The client's documentation warns
 that object stores may turn appending into overwriting, so keep `append: false`
-there. qedro then reads the prefix where it is. The client writing to a bucket has not
-been run here.
+there. qedro then reads the prefix where it is. Both halves were run against a real S3
+bucket on #30 — openlineage-python 1.53.0 writing with `append: false`, and qedro
+reading what it wrote.
+
+**On S3, set the region the bucket is in** — `AWS_REGION=eu-central-1`, or
+`AWS_DEFAULT_REGION` — wherever the client and qedro run. Without it, the underlying
+library first asks the bucket where it is, which needs `s3:GetBucketLocation`; with a
+role that lacks it, both the client's write and qedro's read were refused, and qedro
+says so in its reason.
 
 **Give qedro a role that can list and read and nothing more**: `s3:ListBucket` and
-`s3:GetObject` on the prefix, `roles/storage.objectViewer` on Google Cloud, or
-*Storage Blob Data Reader* on Azure. qedro has no code that writes to a bucket, and a
-test holds it to listing and reading, but the credentials it uses are whatever your
-environment provides, and a narrow role keeps that true of the credentials as well as
-of the code.
+`s3:GetObject` on the prefix (plus `s3:GetBucketLocation` if you would rather not set a
+region), `roles/storage.objectViewer` on Google Cloud, or *Storage Blob Data Reader* on
+Azure. qedro has no code that writes to a bucket, and a test holds it to listing and
+reading, but the credentials it uses are whatever your environment provides, and a
+narrow role keeps that true of the credentials as well as of the code.
 
 For Airflow, point the provider at the same file with `[openlineage] config_path`, or
 set `[openlineage] transport` to the same structure as JSON. The Airflow documentation

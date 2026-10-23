@@ -38,7 +38,9 @@ reader holds a wrapper exposing listing and reading only, and
 `tests/test_sources.py::TestReadingABucket::test_it_can_only_list_and_read` hands it
 a filesystem that fails on any other call. A role limited to listing and reading
 (`s3:ListBucket` and `s3:GetObject`, `roles/storage.objectViewer`, *Storage Blob Data
-Reader*) makes the same true of the credentials.
+Reader*) makes the same true of the credentials. On S3, set `AWS_REGION` as well, or
+add `s3:GetBucketLocation`, which is also read-only: without a region the library asks
+the bucket where it is before reading it.
 
 **Nothing is sent anywhere.** No telemetry, no update check, no analytics. The
 only network traffic is reading from the source address you passed, and for a

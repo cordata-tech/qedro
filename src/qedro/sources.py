@@ -598,7 +598,17 @@ def read_bucket(address: str, *, filesystem: Any = None) -> tuple[list[Event], R
         # missing bucket, a role that cannot list, no credentials at all. All of
         # them are a read that did not happen, which the report carries and the
         # mark is withheld for, exactly as for an unreachable Marquez.
-        report.unreadable += (f"{address} ({type(exc).__name__})",)
+        reason = type(exc).__name__
+        if isinstance(exc, PermissionError) and address.lower().startswith("s3://"):
+            # Measured on #30: a role with s3:ListBucket and s3:GetObject is
+            # refused when no region is set, because s3fs first asks the bucket
+            # where it is. A bare "PermissionError" sends the reader to the
+            # object permissions, which were fine.
+            reason += (
+                " — the role needs s3:ListBucket on the bucket, and s3:GetBucketLocation "
+                "unless AWS_REGION is set"
+            )
+        report.unreadable += (f"{address} ({reason})",)
         return events, report
 
     if not keys:
