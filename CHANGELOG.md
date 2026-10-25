@@ -6,7 +6,12 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.10.0 — 2026-10-25
+
+One change to what the Art. 30 record says, and it is visible: an activity can now
+show a category of data another job declared on a dataset it read, marked with the job
+that declared it. As with 0.6.0, the number counts releases and not milestones, so
+nothing from the v0.10 milestone is in it.
 
 - **A dataset's own classification reaches every job that touches it** (#32). The
   standard `tags` facet describes the dataset, so when one job tags what it writes and
