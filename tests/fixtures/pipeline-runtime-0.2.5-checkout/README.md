@@ -23,10 +23,15 @@ $ for p in fraud/pipelines/transactions_scored policy/pipelines/claims_ingest \
 $ cp /tmp/prgit/lineage.ndjson tests/fixtures/pipeline-runtime-0.2.5-checkout/pipeline-runtime.ndjson
 ```
 
-`pipeline-runtime demo` does not work from an editable checkout — it looks for the
-example descriptors inside the installed package, and in the source tree they are at
-the repository root — so the three pipelines are run one by one, as that repository's
-README describes. Six events, unedited.
+At 0.2.5, `pipeline-runtime demo` did not work from an editable checkout — it looked
+for the example descriptors inside the installed package, and in the source tree they
+are at the repository root — so the three pipelines were run one by one, as that
+repository's README describes. Six events, unedited.
+
+That was fixed in pipeline-runtime 0.2.7 (pipeline-runtime#14), so a refresh can be one
+command from a clone's editable install, `pipeline-runtime demo DIR`. 0.2.6 and 0.2.7
+change what an installed copy emits, not what a checkout does, so this capture is still
+what a checkout run produces, and nothing requires refreshing it.
 
 **`signed: true` depends on the machine that captured it.** pipeline-runtime asks git
 whether the descriptor's commit is signed, and git answers from its own signature
