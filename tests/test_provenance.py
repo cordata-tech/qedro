@@ -38,6 +38,7 @@ def event(
     release=None,
     version=None,
     table=None,
+    descriptor_commit=None,
 ):
     """One event, with as much or as little provenance evidence as wanted."""
     job_facets = {}
@@ -62,6 +63,8 @@ def event(
         provenance_facet["source_schema_version"] = version
     if table is not None:
         provenance_facet["source_table"] = table
+    if descriptor_commit is not None:
+        provenance_facet["descriptor_git_commit"] = descriptor_commit
     if len(provenance_facet) > 1:
         run_facets["cordata_provenance"] = provenance_facet
 
@@ -201,7 +204,7 @@ class TestUnknownIsNotUnsigned:
     def test_no_code_location_at_all_is_its_own_reason(self):
         out = chain([event(writes=["scores"], commit=None, signed=True)], "wh/scores")
         assert not out.steps[0].production.code
-        assert any("emitted no code location" in r for r in out.completeness.reasons)
+        assert any("named no commit" in r for r in out.completeness.reasons)
 
 
 class TestTheMark:
@@ -399,6 +402,88 @@ def test_no_existing_key_changed():
         assert all(d.key == d.legacy_key for d in datasets), source
 
 
+class TestTheCommitAndItsVerdict:
+    """cordata-tech/qedro#33: where the commit comes from, and when a verdict counts.
+
+    `pipeline-runtime` reports its commit in `cordata_provenance` rather than
+    the standard `sourceCodeLocation`, so the chain said *no code location*
+    about a commit the event carried. And run from a wheel it sent `signed:
+    false` with no commit, which read as *ran under a commit that was reported
+    as not signed* about no commit at all. The rule now matches the one
+    pipeline-runtime's schema states since 0.2.5: a verdict only with a commit.
+    """
+
+    def test_the_commit_is_read_from_the_emitters_own_facet(self):
+        out = chain(
+            [event(writes=["scores"], commit=None, descriptor_commit="f00dfacecafe", signed=True)],
+            "wh/scores",
+        )
+        production = out.steps[0].production
+        assert production.code.commit == "f00dfacecafe"
+        assert production.code.commit_from == "cordata_provenance"
+        assert "(commit reported by cordata_provenance)" in production.code.describe()
+        # With a commit to be about, the verdict counts and the chain stands.
+        assert production.signature.signed is True
+        assert out.complete
+
+    def test_the_standard_facet_is_preferred_when_both_name_one(self):
+        out = chain(
+            [event(writes=["scores"], commit="abc123def456", descriptor_commit="f00dfacecafe")],
+            "wh/scores",
+        )
+        code = out.steps[0].production.code
+        assert (code.commit, code.commit_from) == ("abc123def456", "")
+
+    def test_a_verdict_with_no_commit_is_set_aside_and_said_to_be(self):
+        out = chain([event(writes=["scores"], commit=None, signed=False)], "wh/scores")
+        signature = out.steps[0].production.signature
+        assert not signature.known
+        assert signature.without_commit == "cordata_provenance"
+        assert "gave a verdict but named no commit" in signature.describe()
+        reasons = " ".join(out.completeness.reasons)
+        assert "reported a signature verdict without naming a commit" in reasons
+        # The sentence this issue was about, and the generic unknown one, which
+        # would now be untrue because something did report a verdict.
+        assert "ran under a commit" not in reasons
+        assert "no signature either way" not in reasons
+        assert not out.complete
+
+    def test_neither_a_commit_nor_a_verdict_is_plain_unknown(self):
+        out = chain([event(writes=["scores"], commit=None)], "wh/scores")
+        assert out.steps[0].production.signature.describe() == (
+            "signature unknown — nothing reported it"
+        )
+
+    @staticmethod
+    def real(fixture):
+        from pathlib import Path
+
+        from qedro import config, provenance
+        from qedro.sources import read_dir
+
+        events, _ = read_dir(Path("tests/fixtures") / fixture)
+        return provenance.build(
+            events,
+            dataset="cordata://fraud/fraud_curated.transactions_scored",
+            config=config.parse("controller: ACME GmbH\n"),
+        )
+
+    def test_a_pipeline_runtime_run_from_a_checkout_names_its_commit(self):
+        out = self.real("pipeline-runtime-0.2.5-checkout")
+        production = out.steps[0].production
+        assert production.code.commit == "1728854481e05ebb401e732925fc3763f6199a96"
+        assert production.signature.signed is True
+        # What remains is the raw source nothing in the window produced.
+        [reason] = out.completeness.reasons
+        assert "ends at a dataset nothing in the window produced" in reason
+
+    def test_a_pipeline_runtime_run_from_a_wheel_claims_no_commit(self):
+        # 0.2.4 sent `descriptor_git_commit_signed: false` with no commit.
+        out = self.real("pipeline-runtime-0.2.4")
+        assert out.steps[0].production.signature.without_commit == "cordata_provenance"
+        assert not any("ran under a commit" in r for r in out.completeness.reasons)
+
+
 class TestEverySignatureSpellingIsRead:
     """`docs/compatibility.md` says three facet names report a signed commit.
 
@@ -416,7 +501,13 @@ class TestEverySignatureSpellingIsRead:
                     "runId": "r1",
                     "facets": {facet_name: {"descriptor_git_commit_signed": True}},
                 },
-                "job": {"namespace": "acme.fraud", "name": "scored"},
+                # A commit for the verdict to be about: since #33 a verdict
+                # with none named is set aside, and this test is about spelling.
+                "job": {
+                    "namespace": "acme.fraud",
+                    "name": "scored",
+                    "facets": {"sourceCodeLocation": {"type": "git", "version": "abc123def456"}},
+                },
                 "outputs": [{"namespace": "wh", "name": "scores"}],
             }
         )

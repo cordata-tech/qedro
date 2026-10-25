@@ -28,7 +28,7 @@ What it carries that the 0.1.0 capture it replaced did not (#31):
 
 Two things in it come from capturing from a wheel rather than a git checkout.
 `descriptor_path` is the temporary install location above, and no commit is named,
-yet `descriptor_git_commit_signed` is `false` rather than absent — see qedro#33.
+yet `descriptor_git_commit_signed` is `false` rather than absent. qedro sets that verdict aside as one about no commit (qedro#33), and pipeline-runtime 0.2.5 no longer sends it outside a checkout.
 
 Hand-written fixtures agree with whatever the parser already does. This one does not,
 which is the point of it.

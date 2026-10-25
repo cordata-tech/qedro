@@ -56,6 +56,15 @@ CODE = "sourceCodeLocation"
 SIGNATURE_FACETS = ("cordata_provenance", "gitProvenance", "provenance")
 SIGNATURE_KEYS = ("descriptor_git_commit_signed", "commit_signed", "signed")
 
+#: Where the commit is read when `sourceCodeLocation` does not name one.
+#: `pipeline-runtime` reports it here and not in the standard facet, so without
+#: this a chain run from a git checkout said *no code location* about a commit
+#: the event carried (#33). One spelling, as for the publisher: a second gets
+#: added when a second emitter exists. The standard facet is preferred, and
+#: neither is required — pipeline-runtime#13 may move it there and drop this.
+COMMIT_FACETS = ("cordata_provenance",)
+COMMIT_KEYS = ("descriptor_git_commit",)
+
 #: Where the application release behind the data a run *read* is reported. The
 #: chain otherwise stops at the pipeline: this run, this commit, signed or not.
 #: A published number usually depends on data somebody else's application wrote,
@@ -93,6 +102,10 @@ class Code:
     commit: str = ""
     branch: str = ""
     path: str = ""
+    #: Which facet named the commit, when it was not the standard one. Said in
+    #: the output, so a reader can tell a commit the code facet reported from
+    #: one an emitter's own facet did.
+    commit_from: str = ""
 
     def __bool__(self) -> bool:
         return bool(self.commit or self.repository)
@@ -106,7 +119,8 @@ class Code:
             return "no code location was emitted"
         where = self.repository or "an unnamed repository"
         at = f" at {self.short}" if self.commit else " at an unreported commit"
-        return f"{where}{at}"
+        via = f" (commit reported by {self.commit_from})" if self.commit_from else ""
+        return f"{where}{at}{via}"
 
 
 @dataclass(frozen=True)
@@ -120,6 +134,11 @@ class Signature:
 
     signed: bool | None = None
     reported_by: str = ""
+    #: A facet that sent a verdict while nothing named a commit. The verdict is
+    #: not used — *signed* or *not signed* is a claim about a commit, and with
+    #: none named it is a claim about nothing (#33) — but it is said, because
+    #: *nobody reported it* would then be untrue.
+    without_commit: str = ""
 
     @property
     def known(self) -> bool:
@@ -130,6 +149,8 @@ class Signature:
             return f"signed (reported by {self.reported_by})"
         if self.signed is False:
             return f"not signed (reported by {self.reported_by})"
+        if self.without_commit:
+            return f"signature unknown — {self.without_commit} gave a verdict but named no commit"
         return "signature unknown — nothing reported it"
 
 
@@ -396,13 +417,21 @@ def build(
 
 
 def _production(event: Event) -> Production:
+    code = _code(event)
+    signature = _signature(event)
+    if signature.known and not code.commit:
+        # The rule pipeline-runtime's schema states as `dependentRequired` since
+        # 0.2.5: a verdict only with a commit. Applied here as well, so that an
+        # emitter defaulting the flag to `false` does not produce *ran under a
+        # commit that was reported as not signed* about no commit at all.
+        signature = Signature(without_commit=signature.reported_by)
     return Production(
         job=event.job.key,
         run_id=event.run.run_id,
         event_type=event.event_type,
         when=event.event_time,
-        code=_code(event),
-        signature=_signature(event),
+        code=code,
+        signature=signature,
         reads=tuple(sorted({d.key for d in event.inputs})),
         published=_published(event),
     )
@@ -451,12 +480,21 @@ def _code(event: Event) -> Code:
                 return value.strip()
         return ""
 
+    commit, commit_from = text("version"), ""
+    if not commit:
+        for name in COMMIT_FACETS:
+            reported = _scalar(event.run_facet(name) or {}, COMMIT_KEYS)
+            if reported:
+                commit, commit_from = reported, name
+                break
+
     return Code(
         # `repoUrl` is the spec's spelling; `url` is what several emitters send.
         repository=text("repoUrl", "url"),
-        commit=text("version"),
+        commit=commit,
         branch=text("branch", "tag"),
         path=text("path"),
+        commit_from=commit_from,
     )
 
 
@@ -537,7 +575,7 @@ def _completeness(
     if missing_commit:
         n, total = len(missing_commit), len(produced)
         completeness = completeness.degraded(
-            f"{n} of {total} {plural(total, 'step', 'steps')} emitted no code location, "
+            f"{n} of {total} {plural(total, 'step', 'steps')} named no commit, "
             f"so the code that produced {plural(n, 'it', 'them')} cannot be identified"
         )
 
@@ -551,10 +589,23 @@ def _completeness(
             f"{count(len(unsigned), 'step')} ran under a commit that was reported as not signed"
         )
 
+    discarded = [
+        s
+        for s in produced
+        if s.production.signature.without_commit  # type: ignore[union-attr]
+    ]
+    if discarded:
+        n = len(discarded)
+        completeness = completeness.degraded(
+            f"{count(n, 'step')} reported a signature verdict without naming a commit, "
+            f"so the verdict is not counted — it is about no commit in particular"
+        )
+
     unknown = [
         s
         for s in produced
         if not s.production.signature.known  # type: ignore[union-attr]
+        and not s.production.signature.without_commit  # type: ignore[union-attr]
     ]
     if unknown:
         n, total = len(unknown), len(produced)

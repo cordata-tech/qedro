@@ -6,6 +6,19 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`provenance` reads the commit `pipeline-runtime` reports** (#33). The commit was
+  taken only from the standard `sourceCodeLocation` facet, which pipeline-runtime does
+  not send, so a chain run from a git checkout said *no code location* about a commit
+  the event carried. It now falls back to `cordata_provenance.descriptor_git_commit`,
+  prefers the standard facet when both are present, and says which facet named it.
+- **A signature verdict counts only with a commit.** A step that reports *signed* or
+  *not signed* while naming no commit is no longer described as running under an
+  unsigned commit: the verdict is set aside, and the output says one was given without
+  a commit. The mark is withheld either way. The withholding reason for a step with no
+  commit now reads *named no commit* rather than *emitted no code location*.
+
 ## 0.8.0 — 2026-10-23
 
 A third kind of source, so that a pilot whose raw events land in a bucket can point

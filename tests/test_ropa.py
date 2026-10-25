@@ -662,6 +662,19 @@ def test_the_processing_facet_is_read_from_the_pipeline_runtime_capture():
     assert len(validate) == 3
 
 
+def test_from_pipeline_runtime_0_2_5_only_the_raw_sources_are_unclassified():
+    # pipeline-runtime#10 tags the dataset where its `.validate` job reads it,
+    # which removes #32's case for this emitter: what the demo writes is
+    # classified wherever it is read, and what it only reads is not, because a
+    # pipeline does not classify a table it did not write.
+    out = real("pipeline-runtime-0.2.5-checkout")
+    assert out.scope.unclassified == (
+        "cordata://fraud/fraud_raw.transactions",
+        "cordata://policy/policy_raw.claims",
+    )
+    assert all(a.classified("c") for a in out.activities)
+
+
 def test_the_tags_facet_is_read_from_the_pipeline_runtime_capture():
     # #31: the second emitter whose capture carries classification off the wire,
     # after art30-emit. pipeline-runtime tags what a job writes; `sensitivity`
