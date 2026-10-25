@@ -11,6 +11,7 @@ change that withheld the mark unconditionally would pass.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import MappingProxyType
 
 from qedro import config, vocabulary
 from qedro.events import parse_event
@@ -789,6 +790,99 @@ def tagged(name="scored", reads=(), writes=(), run="r1", facet=EVIDENCED):
     )
     assert parsed is not None
     return parsed
+
+
+class TestADatasetsOwnTagsReachEveryJobThatTouchesIt:
+    """cordata-tech/qedro#32, decided as option 1.
+
+    `tags` is a dataset facet, true whoever is looking. A job that tags what it
+    writes, followed by a job that reads the same dataset untagged — what
+    pipeline-runtime 0.2.4 emitted for every `.validate` step — used to leave
+    the reader's activity unclassified and the scope line calling the dataset
+    unclassified while the writer's activity said it was classified.
+    """
+
+    CUSTOMER = MappingProxyType({"subject_type": "customer", "residency": "eu"})
+
+    def a_record(self):
+        return record(
+            [
+                tagged("score", reads=[("wh/raw.tx", {})], writes=[("wh/scored", self.CUSTOMER)]),
+                tagged("score.validate", reads=[("wh/scored", {})], run="r2"),
+            ]
+        )
+
+    def by_name(self, out):
+        return {a.name: a for a in out.activities}
+
+    def test_the_reader_carries_the_datasets_own_tags_and_names_who_declared_them(self):
+        reader = self.by_name(self.a_record())["score.validate"]
+        found = {(c.key, c.value, c.declared_by, c.reads) for c in reader.classification}
+        assert found == {
+            ("subject_type", "customer", ("acme.fraud/score",), ("wh/scored",)),
+            ("residency", "eu", ("acme.fraud/score",), ("wh/scored",)),
+        }
+        assert reader.unclassified == ()
+
+    def test_the_scope_and_the_activities_now_agree(self):
+        out = self.a_record()
+        # The raw source nobody tagged is the one unclassified dataset.
+        assert out.scope.unclassified == ("wh/raw.tx",)
+        assert all("wh/scored" not in a.unclassified for a in out.activities)
+
+    def test_the_writer_evidences_its_own_tags_and_attributes_nothing(self):
+        writer = self.by_name(self.a_record())["score"]
+        assert all(c.declared_by == () for c in writer.classification)
+
+    def test_nothing_is_carried_from_one_dataset_to_another(self):
+        # The source the writer read stays unclassified: its output's tags are
+        # a declaration about the output, never about what it was made from.
+        writer = self.by_name(self.a_record())["score"]
+        assert writer.unclassified == ("wh/raw.tx",)
+        assert all("wh/raw.tx" not in c.reads for c in writer.classification)
+
+    def test_a_value_the_reader_carries_itself_is_not_attributed(self):
+        out = record(
+            [
+                tagged("score", writes=[("wh/scored", {"subject_type": "customer"})]),
+                tagged(
+                    "audit",
+                    reads=[("wh/scored", {"subject_type": "customer"})],
+                    run="r2",
+                ),
+            ]
+        )
+        [c] = self.by_name(out)["audit"].classification
+        assert (c.value, c.declared_by) == ("customer", ())
+
+    def test_the_output_names_the_declaring_job(self):
+        import json as json_lib
+
+        from qedro import render
+
+        out = self.a_record()
+        assert "customer (declared by acme.fraud/score)" in " ".join(
+            render.FORMATS["text"](out).split()
+        )
+        payload = json_lib.loads(render.FORMATS["json"](out))
+        reader = next(a for a in payload["activities"] if a["name"] == "score.validate")
+        assert {tuple(c["declared_by"]) for c in reader["classification"]} == {
+            ("acme.fraud/score",)
+        }
+
+    def test_against_the_pipeline_runtime_0_2_4_capture(self):
+        # The capture that found #32: tags on what each job writes, none where
+        # its `.validate` step reads it.
+        out = real("pipeline-runtime-0.2.4")
+        assert out.scope.unclassified == (
+            "cordata://fraud/fraud_raw.transactions",
+            "cordata://policy/policy_raw.claims",
+        )
+        validate = [a for a in out.activities if a.name.endswith(".validate")]
+        assert len(validate) == 3
+        for activity in validate:
+            parent = activity.key.removesuffix(".validate")
+            assert {c.declared_by for c in activity.classification} == {(parent,)}
 
 
 class TestClassificationFromTheTagsFacet:

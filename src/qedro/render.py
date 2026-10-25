@@ -161,6 +161,18 @@ CLASSIFICATION_LABELS = (
 )
 
 
+def _declared_by(classification) -> str:
+    """Who declared a value this activity's own events did not carry, or "".
+
+    The value is evidence — an emitted facet on the dataset — but evidence
+    another job's event produced, and a reader checking the activity should be
+    able to tell that from one its own run reported (#32).
+    """
+    if not classification.declared_by:
+        return ""
+    return f" (declared by {', '.join(classification.declared_by)})"
+
+
 def _classification_text(activity: Activity, *, width: int) -> list[str]:
     """The classification lines for one activity, and what was not classified."""
     out: list[str] = []
@@ -169,7 +181,8 @@ def _classification_text(activity: Activity, *, width: int) -> list[str]:
         if not found:
             continue
         values = ", ".join(
-            f"{c.value}{' ⚠ not in vocabulary' if c.unrecognised else ''}" for c in found
+            f"{c.value}{' ⚠ not in vocabulary' if c.unrecognised else ''}{_declared_by(c)}"
+            for c in found
         )
         out += _detail(label, values, width=width)
     for values, label in (
@@ -331,7 +344,7 @@ def _classification_markdown(record: Record) -> list[str]:
     for a in record.activities:
         cells = [
             ", ".join(
-                f"{c.value}{' ⚠' if c.unrecognised else ''}"
+                f"{c.value}{' ⚠' if c.unrecognised else ''}{_declared_by(c)}"
                 for c in a.classification
                 if c.key == key
             )
@@ -505,6 +518,9 @@ def _activity_json(activity: Activity) -> dict[str, object]:
                 "unrecognised": c.unrecognised,
                 "reads": list(c.reads),
                 "writes": list(c.writes),
+                # Empty when this activity's own events carried the value;
+                # otherwise the jobs whose events tagged the dataset (#32).
+                "declared_by": list(c.declared_by),
             }
             for c in activity.classification
         ],

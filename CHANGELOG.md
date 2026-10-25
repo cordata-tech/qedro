@@ -6,6 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **A dataset's own classification reaches every job that touches it** (#32). The
+  standard `tags` facet describes the dataset, so when one job tags what it writes and
+  another reads the same dataset untagged, the reader's activity now carries those
+  categories too, marked `(declared by <job>)` in text, markdown and the workbook and as
+  `declared_by` in the JSON. Before, the reader showed the dataset as unclassified and
+  the scope line counted it unclassified while the writer's activity said it was
+  classified. Tags are never carried from one dataset to another: a job's output does
+  not classify its source. A record from 0.9.0 compared with one from this version
+  shows the new values on reading activities as additions.
+
 ## 0.9.0 — 2026-10-25
 
 The provenance chain read against what `pipeline-runtime` actually emits. One output

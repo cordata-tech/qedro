@@ -217,7 +217,15 @@ def _classification(activity: Activity) -> tuple[Any, ...]:
     cells: list[Any] = []
     for _, key in CLASSIFICATION_COLUMNS:
         values = [c for c in activity.classification if c.key == key]
-        cells.append("\n".join(c.value for c in values) if values else "—")
+        # A value only another job's event declared names that job (#32).
+        cells.append(
+            "\n".join(
+                c.value + (f" (declared by {', '.join(c.declared_by)})" if c.declared_by else "")
+                for c in values
+            )
+            if values
+            else "—"
+        )
     # Art. 30(1)(d) and (g), always marked: nothing emits either, so an
     # unmarked value here would read like the evidenced columns beside it.
     for asserted in (activity.recipients, activity.security_measures):

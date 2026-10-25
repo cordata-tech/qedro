@@ -132,6 +132,12 @@ class Classification:
     unrecognised: bool = False
     reads: tuple[str, ...] = ()
     writes: tuple[str, ...] = ()
+    #: Jobs whose events declared this value on a dataset this activity touched,
+    #: when none of this activity's own events carried it. Empty when the
+    #: activity's own events say it. Named in the output, so a value that is in
+    #: the record because another job tagged the dataset reads as exactly that
+    #: (#32).
+    declared_by: tuple[str, ...] = ()
 
     @property
     def item(self) -> str:
@@ -406,8 +412,9 @@ def build(
         grouped.setdefault(event.job.key, []).append(event)
 
     parents = _parents(grouped)
+    tagged = _tags_in_view(events)
     activities = tuple(
-        _activity(job_events, config=config, vocabulary=vocabulary)
+        _activity(job_events, config=config, vocabulary=vocabulary, tagged=tagged)
         for key, job_events in sorted(grouped.items())
         if key not in parents
     )
@@ -440,7 +447,13 @@ def build(
     )
 
 
-def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary) -> Activity:
+def _activity(
+    events: Sequence[Event],
+    *,
+    config: Config,
+    vocabulary: Vocabulary,
+    tagged: Mapping[str, Mapping[tuple[str, str], frozenset[str]]] | None = None,
+) -> Activity:
     first = events[0]
     rule = config.rule_for(first.job.namespace, first.job.name)
 
@@ -463,7 +476,9 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
     inputs = {d.key for e in events for d in e.inputs}
     outputs = {d.key for e in events for d in e.outputs}
 
-    classification, unclassified = _classification(events, vocabulary)
+    classification, unclassified = _classification(
+        events, vocabulary, tagged=tagged or {}, job=first.job.key
+    )
 
     return Activity(
         namespace=first.job.namespace,
@@ -485,8 +500,29 @@ def _activity(events: Sequence[Event], *, config: Config, vocabulary: Vocabulary
     )
 
 
+def _tags_in_view(events: Iterable[Event]) -> dict[str, dict[tuple[str, str], frozenset[str]]]:
+    """Every Art. 30 tag each dataset carries anywhere in the window, and which jobs said so.
+
+    Built once per record, so that an activity can be told what its datasets
+    carry in events other than its own (#32).
+    """
+    out: dict[str, dict[tuple[str, str], set[str]]] = {}
+    for event in events:
+        for dataset in (*event.inputs, *event.outputs):
+            for tag in dataset.tags():
+                if tag.key in ART30_TAG_KEYS:
+                    out.setdefault(dataset.key, {}).setdefault((tag.key, tag.value), set()).add(
+                        event.job.key
+                    )
+    return {key: {kv: frozenset(jobs) for kv, jobs in tags.items()} for key, tags in out.items()}
+
+
 def _classification(
-    events: Sequence[Event], vocabulary: Vocabulary
+    events: Sequence[Event],
+    vocabulary: Vocabulary,
+    *,
+    tagged: Mapping[str, Mapping[tuple[str, str], frozenset[str]]],
+    job: str,
 ) -> tuple[tuple[Classification, ...], tuple[str, ...]]:
     """What the datasets an activity touched say about the data, from the facet.
 
@@ -496,28 +532,56 @@ def _classification(
     leaves the record without an answer — and saying otherwise would turn a
     `sensitivity` tag into a claim about categories of personal data.
 
-    A classification is never carried from one dataset to another. What an
-    activity wrote is the controller's declaration about its own output; the
+    **A dataset's own tags reach every activity that touched it in the window**
+    (#32). `tags` is a dataset facet, true whoever is looking, and an activity
+    that reads a customer table processes customer data whether or not its own
+    event repeated the tag. Without this, a job's `.validate` step reading the
+    output it had just tagged reported that output as unclassified, and the
+    scope line called five datasets unclassified while the activity lines said
+    three were classified. A value that reaches an activity only from another
+    job's event names that job, in `declared_by`.
+
+    **A classification is never carried from one dataset to another.** What an
+    activity wrote is the controller's declaration about its own output; a
     source it read belongs to somebody else, and asserting a category for it
-    would invent evidence nobody produced. See cordata-tech/pipeline-runtime#3.
+    from its output would invent evidence nobody produced. See
+    cordata-tech/pipeline-runtime#3. Only tags some event put on the dataset
+    itself are used.
     """
     found: dict[tuple[str, str], dict[str, set[str]]] = {}
-    touched: dict[str, bool] = {}
+    own: set[tuple[str, str]] = set()
+    own_on: dict[str, set[tuple[str, str]]] = {}
+    sides_of: dict[str, set[str]] = {}
 
     for event in events:
         for dataset, side in [(d, "reads") for d in event.inputs] + [
             (d, "writes") for d in event.outputs
         ]:
-            touched.setdefault(dataset.key, False)
+            sides_of.setdefault(dataset.key, set()).add(side)
+            on_this = own_on.setdefault(dataset.key, set())
             for tag in dataset.tags():
                 if tag.key not in ART30_TAG_KEYS:
                     continue
-                touched[dataset.key] = True
                 # The column a `field`-level tag names stays out of the record:
                 # column names are disclosive on their own, which is why
                 # SECURITY.md says the input is more sensitive than the output.
+                on_this.add((tag.key, tag.value))
+                own.add((tag.key, tag.value))
                 sides = found.setdefault((tag.key, tag.value), {"reads": set(), "writes": set()})
                 sides[side].add(dataset.key)
+
+    # What the same datasets carry in other jobs' events.
+    declared_by: dict[tuple[str, str], set[str]] = {}
+    for key, sides_here in sides_of.items():
+        for kv, jobs in tagged.get(key, {}).items():
+            others = jobs - {job}
+            if kv in own_on[key] or not others:
+                continue
+            own_on[key].add(kv)
+            entry = found.setdefault(kv, {"reads": set(), "writes": set()})
+            for side in sides_here:
+                entry[side].add(key)
+            declared_by.setdefault(kv, set()).update(others)
 
     classification = tuple(
         Classification(
@@ -527,10 +591,13 @@ def _classification(
             unrecognised=vocabulary.unrecognised(key, value),
             reads=tuple(sorted(sides["reads"])),
             writes=tuple(sorted(sides["writes"])),
+            # Only when this activity's own events never said it: a value the
+            # activity evidences itself is not attributed elsewhere.
+            declared_by=() if (key, value) in own else tuple(sorted(declared_by[(key, value)])),
         )
         for (key, value), sides in sorted(found.items())
     )
-    unclassified = tuple(sorted(key for key, classified in touched.items() if not classified))
+    unclassified = tuple(sorted(key for key, tags in own_on.items() if not tags))
     return classification, unclassified
 
 
