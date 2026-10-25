@@ -6,7 +6,14 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.9.0 — 2026-10-25
+
+The provenance chain read against what `pipeline-runtime` actually emits. One output
+change to know before upgrading: a step that names no commit is now explained as
+*named no commit* rather than *emitted no code location*, and a signature verdict sent
+without a commit is reported as set aside. The tests also read two fresh
+pipeline-runtime captures, 0.2.4 from the wheel and 0.2.5 from a git checkout, in
+place of the 0.1.0 capture they had used since August (#31).
 
 - **`provenance` reads the commit `pipeline-runtime` reports** (#33). The commit was
   taken only from the standard `sourceCodeLocation` facet, which pipeline-runtime does
