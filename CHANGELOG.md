@@ -6,7 +6,10 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.10.1 — 2026-10-31
+
+A security fix, and nothing else. Upgrading changes no output unless an emitter sent a
+repository URL with credentials in it, in which case they no longer appear.
 
 - **A repository URL is printed without any credentials it carried** (#34). `provenance`
   copied `sourceCodeLocation.repoUrl` into the record as received, so a token an
