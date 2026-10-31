@@ -402,6 +402,88 @@ def test_no_existing_key_changed():
         assert all(d.key == d.legacy_key for d in datasets), source
 
 
+class TestARepositoryUrlNeverCarriesCredentials:
+    """cordata-tech/qedro#34: what a CI checkout leaves in a git remote.
+
+    An emitter that sends `git remote get-url` raw can put a token on the wire,
+    and the provenance record is an artefact handed to somebody outside.
+    """
+
+    TOKEN = "ghs_s3cr3tT0k3nThatMustNotLeak"
+
+    def test_each_shape(self):
+        from qedro.provenance import without_credentials
+
+        cases = {
+            # https with a token as user and password, and as the user alone
+            f"https://x-access-token:{self.TOKEN}@github.com/acme/platform": (
+                "https://github.com/acme/platform"
+            ),
+            f"https://{self.TOKEN}@github.com/acme/platform.git": (
+                "https://github.com/acme/platform.git"
+            ),
+            "http://ci:hunter2@git.internal:8080/acme/platform": (
+                "http://git.internal:8080/acme/platform"
+            ),
+            # another scheme keeps its user and loses its password
+            "ssh://git:hunter2@github.com/acme/platform.git": (
+                "ssh://git@github.com/acme/platform.git"
+            ),
+            # scp-style names a user and carries no secret
+            "git@github.com:acme/platform.git": "git@github.com:acme/platform.git",
+            # nothing to remove
+            REPO: REPO,
+            "": "",
+        }
+        for given, expected in cases.items():
+            assert without_credentials(given) == expected, given
+
+    def test_a_token_reaches_no_output_format(self, tmp_path):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from qedro import render
+
+        raw = {
+            "eventType": "COMPLETE",
+            "eventTime": "2026-03-01T10:00:00Z",
+            "run": {"runId": "r1"},
+            "job": {
+                "namespace": "acme.fraud",
+                "name": "scored",
+                "facets": {
+                    "sourceCodeLocation": {
+                        "type": "git",
+                        "repoUrl": f"https://x-access-token:{self.TOKEN}@github.com/acme/platform",
+                        "url": f"https://{self.TOKEN}@github.com/acme/platform/blob/main/x.sql",
+                        "version": "abc123def456",
+                    }
+                },
+            },
+            "outputs": [{"namespace": "wh", "name": "scores"}],
+        }
+        parsed = parse_event(raw)
+        assert parsed is not None
+        out = chain([parsed], "wh/scores")
+        assert out.steps[0].production.code.repository == "https://github.com/acme/platform"
+        for fmt, renderer in render.FORMATS.items():
+            rendered = renderer(out)
+            if isinstance(rendered, bytes):
+                book = load_workbook(BytesIO(rendered))
+                rendered = " ".join(
+                    str(cell.value)
+                    for sheet in book.worksheets
+                    for row in sheet.iter_rows()
+                    for cell in row
+                    if cell.value is not None
+                )
+            assert self.TOKEN not in rendered, fmt
+            # The markdown table names the commit and not the repository.
+            if fmt != "markdown":
+                assert "github.com/acme/platform" in rendered, fmt
+
+
 class TestTheCommitAndItsVerdict:
     """cordata-tech/qedro#33: where the commit comes from, and when a verdict counts.
 

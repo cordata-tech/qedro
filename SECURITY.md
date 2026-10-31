@@ -57,6 +57,15 @@ run counts — metadata about processing rather than the data being processed. T
 quality and provenance artefacts add expectation names, commit identifiers and
 repository URLs.
 
+**A repository URL is printed without any credentials it carried.** An emitter
+that sends a git remote as configured can put a token in it — a CI checkout
+commonly leaves `https://x-access-token:<token>@github.com/…` behind — so qedro
+removes the userinfo of an http or https URL, and the password of any other, where
+it reads the URL, before any record holds it. `tests/test_provenance.py::TestARepositoryUrlNeverCarriesCredentials`
+checks every output format for the token. Dataset namespaces are not rewritten:
+the OpenLineage naming rules keep credentials out of them, and qedro uses them as
+dataset identity.
+
 **But the input can be more sensitive than the output.** OpenLineage schema
 facets carry column names, and column names can be disclosive on their own: the
 demo estate has `iban` and `device_fingerprint` in it. Qedro reads those and does

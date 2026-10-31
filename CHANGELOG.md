@@ -6,6 +6,16 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **A repository URL is printed without any credentials it carried** (#34). `provenance`
+  copied `sourceCodeLocation.repoUrl` into the record as received, so a token an
+  emitter left in a git remote — `https://x-access-token:<token>@github.com/…`, as a CI
+  checkout commonly does — would reach every output format and whoever received the
+  artefact. An http or https URL now loses its userinfo, any other URL loses its
+  password, and scp-style `git@host:org/repo` is left as it is. No committed fixture
+  carried one; this protects against emitters qedro has not met.
+
 ## 0.10.0 — 2026-10-25
 
 One change to what the Art. 30 record says, and it is visible: an activity can now

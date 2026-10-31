@@ -36,6 +36,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from . import scope as scope_module
 from .config import Config, Controller
@@ -470,6 +471,33 @@ def _published(event: Event) -> Published:
     return Published()
 
 
+def without_credentials(url: str) -> str:
+    """*url* with any credentials it carries removed, and otherwise unchanged.
+
+    A git remote can hold a token in its userinfo — a CI checkout commonly
+    leaves `https://x-access-token:<token>@github.com/org/repo` configured — and
+    an emitter that sends `git remote get-url` raw puts it on the wire. Removed
+    where the URL is read, so no record, workbook or JSON document qedro writes
+    can carry it to whoever receives the artefact (#34).
+
+    An http or https URL loses its userinfo entirely, because a token is often
+    sent as the user part alone. Any other URL with a scheme keeps its user name
+    and loses its password, so `ssh://git:secret@host/repo` reads
+    `ssh://git@host/repo`. scp-style `git@host:org/repo` has no scheme, names a
+    user and carries no secret, and is returned as it is.
+    """
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    userinfo, _, host = parts.netloc.rpartition("@")
+    if parts.scheme.lower() in ("http", "https"):
+        netloc = host
+    else:
+        user = userinfo.split(":", 1)[0]
+        netloc = f"{user}@{host}" if user else host
+    return urlunsplit(parts._replace(netloc=netloc))
+
+
 def _code(event: Event) -> Code:
     facet = event.job_facet(CODE) or {}
 
@@ -490,7 +518,7 @@ def _code(event: Event) -> Code:
 
     return Code(
         # `repoUrl` is the spec's spelling; `url` is what several emitters send.
-        repository=text("repoUrl", "url"),
+        repository=without_credentials(text("repoUrl", "url")),
         commit=commit,
         branch=text("branch", "tag"),
         path=text("path"),
