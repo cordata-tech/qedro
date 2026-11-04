@@ -64,14 +64,16 @@ jobs:
       - name: The compatibility page keeps its own rule
         run: python tools/check_compatibility.py
 
-      # The transcripts in docs/evidence are quoted by published posts and by
-      # platform#48. Both went stale once before this ran here: the tests assert
+      # The transcripts in docs/evidence are quoted by published posts, by
+      # platform#48 and by platform#18. The first two went stale once before
+      # this ran here: the tests assert
       # the facts in them but not the wording, so a change to how the output
       # reads leaves each file describing a commit it no longer matches.
       - name: The captured transcripts match what the commands print
         run: |
           python tools/capture_deployer_view.py --check
           python tools/capture_register_drift.py --check
+          python tools/capture_erasure.py --check
 
       - name: The wordmark is a valid SVG and carries a text alternative
         run: |
