@@ -435,7 +435,8 @@ def _erasure_state(descendant: Any) -> str:
 
 def _erasure_verdict(record: Any) -> str:
     if record.complete:
-        return f"Every descendant was rewritten after an emitted erasure. {TOMBSTONE}"
+        earned = record.tombstone.earned()
+        return f"{earned[0].upper()}{earned[1:]}. {TOMBSTONE}"
     return "This record does not claim to be a proof — see the Scope sheet."
 
 

@@ -956,14 +956,7 @@ def _(record: erasure_module.Record, *, symbol: bool = True, width: int = 88) ->
 
     out.extend(_scope_text(record.scope, width=width, title="Scope of this record"))
     out.append("")
-    out.extend(
-        _verdict_text(
-            record,
-            "every descendant was rewritten after an emitted erasure",
-            symbol=symbol,
-            withheld="record",
-        )
-    )
+    out.extend(_verdict_text(record, record.tombstone.earned(), symbol=symbol, withheld="record"))
     return "\n".join(out) + "\n"
 
 
@@ -982,9 +975,8 @@ def _(record: erasure_module.Record) -> str:
     else:
         out.append("Nothing in the window read it — no descendants were found.")
     out += _scope_markdown(record.scope)
-    out += _verdict_markdown(
-        record, "Every descendant was rewritten after an emitted erasure.", withheld="record"
-    )
+    earned = record.tombstone.earned()
+    out += _verdict_markdown(record, f"{earned[0].upper()}{earned[1:]}.", withheld="record")
     return "\n".join(out)
 
 

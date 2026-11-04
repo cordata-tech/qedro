@@ -6,6 +6,14 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## 0.10.2 — 2026-11-04
+
+One sentence. An erasure record that earns the mark now ends *every descendant was
+rewritten after the emitted overwrite* (or *drop*, or *truncate*), naming what the
+event reported. It read *after an emitted erasure*, which contradicted the tombstone
+line above it whenever that line said *emitted overwrite, not a drop or truncate* —
+the case `docs/evidence/erasure.md` run 2b shows. The transcript is recaptured.
+
 ## 0.10.1 — 2026-10-31
 
 A security fix, and nothing else. Upgrading changes no output unless an emitter sent a

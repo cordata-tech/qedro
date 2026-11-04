@@ -212,6 +212,35 @@ class TestChoosingTheErasureAmongSeveral:
         assert not out.tombstone.ambiguous
         assert out.complete
 
+    @pytest.mark.parametrize(("state", "said"), [("OVERWRITE", "overwrite"), ("DROP", "drop")])
+    def test_the_verdict_names_what_was_emitted_in_every_format(self, state, said):
+        # The tombstone line calls an overwrite "not a drop or truncate", and the
+        # verdict below it used to call the same event "an emitted erasure".
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from qedro import render
+
+        out = record([*spark_write(5, lifecycle=state), *chain(day=10)])
+        assert out.complete
+        expected = f"rewritten after the emitted {said}"
+        for fmt, renderer in render.FORMATS.items():
+            if fmt == "json":
+                continue  # carries the verdict as fields, not as a sentence
+            rendered = renderer(out)
+            if isinstance(rendered, bytes):
+                book = load_workbook(BytesIO(rendered))
+                rendered = " ".join(
+                    str(c.value)
+                    for s in book.worksheets
+                    for r in s.iter_rows()
+                    for c in r
+                    if c.value
+                )
+            assert expected in rendered, fmt
+            assert "emitted erasure" not in rendered, fmt
+
     def test_a_single_overwrite_is_not_ambiguous(self):
         # The demo's erasure job, and any estate that overwrites only to erase.
         out = record([*spark_write(5), *chain(day=10)])

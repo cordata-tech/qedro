@@ -120,6 +120,16 @@ class Tombstone:
             return f"{self.at.isoformat()} — emitted overwrite, not a drop or truncate"
         return f"{self.at.isoformat()} — from --since, not emitted"
 
+    def earned(self) -> str:
+        """The sentence a record that earns the mark ends on.
+
+        Names what the event reported rather than calling it an erasure: the mark
+        is earned only on an emitted tombstone, and when that was an overwrite the
+        line above already says it was not a drop or truncate, so the verdict
+        calling it *an emitted erasure* contradicted it.
+        """
+        return f"every descendant was rewritten after the emitted {self.state.lower()}"
+
     def choice(self) -> str:
         """Which candidate was taken and why, or "" when there was only one."""
         if self.candidates < 2:
