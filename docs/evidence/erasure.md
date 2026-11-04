@@ -1,6 +1,6 @@
 # Transcript: `qedro erasure`, evidenced, and across routine overwrites
 
-Captured by script from qedro 0.10.1, at commit `974b238` with a clean working tree,
+Captured by script from qedro 0.10.2, at commit `f1fa0e4` with a clean working tree,
 on Python 3.12.13. The output below is what each command printed, unedited. Run the
 same commands from the repository root to reproduce it.
 
@@ -128,7 +128,7 @@ Erasure of warehouse/crm_curated.contacts_snapshot
     that read the erased source — evidence that the erasure was propagated, not proof
     that it was complete.
 
-  every descendant was rewritten after an emitted erasure   ∎
+  every descendant was rewritten after the emitted overwrite   ∎
 ```
 
 Exit status 0.
