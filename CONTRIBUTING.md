@@ -104,9 +104,11 @@ python tools/seed.py --check
 
 Python 3.12 is the floor; CI runs 3.12, 3.13 and 3.14.
 
-Two test modules import `pipeline_runtime`, which is not on PyPI — the Art. 30
-facet schema is generated from its `Processing` model and a test fails when the
-two diverge. Install it the way CI does, or skip those two:
+Two test modules import `pipeline_runtime` — the Art. 30 facet schema is
+generated from its `Processing` model and a test fails when the two diverge. It is
+on PyPI as `cordata-pipeline-runtime`, but CI installs it from the runtime's `main`
+branch on purpose, so that a change to the model breaks this build rather than
+waiting for a release. Install it the way CI does, or skip those two:
 
 ```bash
 pip install --no-deps "cordata-pipeline-runtime @ git+https://github.com/cordata-tech/pipeline-runtime@main"

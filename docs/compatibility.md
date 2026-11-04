@@ -136,7 +136,7 @@ this row exists to prevent.
 | | State |
 |---|---|
 | A loaded vocabulary document (YAML / JSON / TOML) | **works** — `src/qedro/vocabularies/dsgvo.yaml`, `tests/test_vocabulary.py`. The shipped document carries `purpose`, `legal_basis`, and, for v0.3, `data_category`, `special_category` (closed on the Art. 9(1) list), `subject_type`, `residency` and `retention` |
-| LakeFormation LF-tags | **candidate** — most likely to arrive through `catalog-mcp` (platform#26), which is LF-tag-native by design. That binding is correct there and must not reach this side |
+| LakeFormation LF-tags | **candidate** — most likely to arrive through [`cordata-catalog-mcp`](https://github.com/cordata-tech/catalog-mcp), which is LF-tag-native by design. That binding is correct there and must not reach this side |
 | GCP Data Catalog policy tags | **candidate** |
 | Purview classifications | **candidate** |
 | OpenMetadata glossary terms | **candidate** |

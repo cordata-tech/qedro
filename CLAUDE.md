@@ -20,7 +20,8 @@ Both were transferred from `cordata-tech/platform` on 2026-08-21, so their comme
 history refers to them as `#25` and `#27` and to Qedro as *Atrium* and briefly
 *Aktario*. Three closed issues stay in `platform` because they span more than this
 repo: **platform#29** (which LF-tag ontology is authoritative), **platform#30** (the
-naming search) and **platform#26** (`catalog-mcp`, which has no repo yet).
+naming search) and **platform#26** (`catalog-mcp`, since built as
+[`cordata-tech/catalog-mcp`](https://github.com/cordata-tech/catalog-mcp)).
 
 ## Four commitments that must not erode
 
@@ -77,7 +78,7 @@ relied on downstream, not diagnostics.
 | Repo | Answers | Binding |
 |---|---|---|
 | [`pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime) | *What should this pipeline do, and did it?* | AWS-native by design. LF-tags are correct there |
-| `catalog-mcp` (planned, platform#26) | *What is the policy on this dataset, right now?* | AWS-native by design |
+| [`catalog-mcp`](https://github.com/cordata-tech/catalog-mcp) (public, on PyPI as `cordata-catalog-mcp`, platform#26) | *What is the policy on this dataset, right now?* | AWS-native by design. Installs the runtime's base package and reads no OpenLineage events |
 | [`art30-emit`](https://github.com/cordata-tech/art30-emit) (public, on PyPI, #27) | *How does code nobody instruments say why it processes?* | **must not be** — it implements the published facet |
 | **this** | *What happened, and can I prove it to an auditor?* | **must not be** |
 
@@ -90,8 +91,8 @@ usual bar for proposing a facet upstream — so it emits `processing` and the st
 
 `pipeline_runtime.descriptor` is the shared governance vocabulary. The Art. 30 facet
 schema is **generated from `Processing`, never written beside it** — the published
-posts claim in public that one model has three consumers, so a fourth that derives is
-evidence for the claim and a fourth that restates is a counterexample to it.
+posts claim in public that one model has several consumers, so one that derives is
+evidence for the claim and one that restates is a counterexample to it.
 `tools/facet_schema.py` does the generating and `tests/test_facet_schema.py` fails when
 they diverge. Only the prose is written here, and a field with no prose stops the
 generator rather than shipping undocumented.
