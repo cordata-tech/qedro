@@ -20,7 +20,7 @@ The transcript `cordata-tech/platform#48` quotes for refusal (b): an AI register
 
 ## `erasure.md` and `erasure-overwrites/`
 
-The transcripts `cordata-tech/platform#18` quotes for the Art. 17 post, recaptured on 2026-11-07 from qedro 0.11.0 at `4577f39`, whose `src/` is the 0.11.0 release.
+The transcripts `cordata-tech/platform#18` quotes for the Art. 17 post, recaptured on 2026-11-07 from qedro 0.11.0 at `4577f39`, whose `src/` is the 0.11.0 release. Each of the three commands was also run with the 0.11.0 wheel installed from PyPI, the same day, and printed the same output byte for byte.
 
 It has been captured three times, and each recapture changed wording rather than any verdict. The first, on 2026-11-04 from 0.10.1 at `974b238`, ended run 2b *every descendant was rewritten after an emitted erasure*; 0.10.2 (`f1fa0e4`) made that *after the emitted overwrite*, because the tombstone line above it says the overwrite was not a drop or truncate. 0.11.0 (#35) stopped calling a descendant *rewritten*, since none of these events says whether a write replaced the contents or appended to them: each is now *written*, with a `how` line saying how was not reported, the propagation line counts *written without saying how*, and the verdicts end *written after the emitted …*. The scope statement's last sentence changed to match. Which descendants count as reached, and whether each record earns the mark, is the same in all three. `tools/capture_erasure.py` writes the file, refuses a dirty working tree, and with `--check`, which CI runs, fails when either the output or the generated input moves.
 
