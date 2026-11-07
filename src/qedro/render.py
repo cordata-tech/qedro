@@ -918,22 +918,36 @@ def _(record: provenance_module.Record) -> bytes:
 # The rule this projection lives under, in every format: **it reports datasets,
 # not rows.** The scope statement carries the sentence, and nothing below is
 # allowed to phrase a finding in a way that outruns it — a descendant is
-# *rewritten since the tombstone*, never *erased*, and the difference is the
-# whole reason the projection is safe to ship.
+# *written since the tombstone*, never *erased*, and *rebuilt* only where the
+# event said the contents were replaced (#35). The difference is the whole
+# reason the projection is safe to ship.
 
 
 def _reached_text(descendant) -> str:
     """What happened to one descendant since the erasure, in one line."""
-    if descendant.rewritten is not None:
-        runs = words.count(descendant.runs_since, "run")
-        return f"rewritten {_when(descendant.rewritten)} — {runs} since the tombstone"
+    runs = words.count(descendant.runs_since, "run")
+    if descendant.how == "rebuilt":
+        return f"rebuilt {_when(descendant.rebuilt)} — {runs} since the tombstone"
+    if descendant.how == "written":
+        return f"written {_when(descendant.written)} — {runs} since the tombstone"
+    if descendant.how == "appended":
+        return f"only appended to — {runs} since the tombstone"
     if descendant.incomplete:
         n = descendant.incomplete
         return (
             f"not known — {n} {words.plural(n, 'run', 'runs')} started after the "
             f"tombstone and never reported completion"
         )
-    return "not rewritten since the tombstone"
+    return "not written since the tombstone"
+
+
+def _how_text(descendant) -> str:
+    """What a descendant's state does not show, where that changes what it means, or ""."""
+    if descendant.how == "written":
+        return "not reported, so not shown to have replaced the contents"
+    if descendant.how == "appended":
+        return "appends only, so what it held before the erasure is still there"
+    return ""
 
 
 @text.register
@@ -950,6 +964,8 @@ def _(record: erasure_module.Record, *, symbol: bool = True, width: int = 88) ->
         out.append(f"{indent}{descendant.dataset}")
         out.append(f"{indent}  derived by    {descendant.through or 'unreported'}")
         out.append(f"{indent}  state         {_reached_text(descendant)}")
+        if how := _how_text(descendant):
+            out.append(f"{indent}  how           {how}")
         if descendant.truncated:
             out.append(f"{indent}  — the walk stopped here at the depth limit")
         out.append("")
@@ -970,7 +986,8 @@ def _(record: erasure_module.Record) -> str:
             "|---|---|---|---|",
         ]
         for d in record.descendants:
-            state = _reached_text(d) + (" _(depth limit)_" if d.truncated else "")
+            how = f" — {_how_text(d)}" if _how_text(d) else ""
+            state = _reached_text(d) + how + (" _(depth limit)_" if d.truncated else "")
             out.append(f"| {d.depth} | `{d.dataset}` | `{d.through or '—'}` | {state} |")
     else:
         out.append("Nothing in the window read it — no descendants were found.")
@@ -1003,10 +1020,13 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
                 "dataset": d.dataset,
                 "depth": d.depth,
                 "derived_by": d.through,
-                # `null`, not a date and not `false`: *nothing rewrote it* and
+                # `null`, not a date and not `false`: *nothing wrote it* and
                 # *we could not tell* are different answers, and the second is
                 # what `incomplete` is for.
-                "rewritten": _when(d.rewritten),
+                "written": _when(d.written),
+                "rebuilt": _when(d.rebuilt),
+                # `rebuilt`, `written` (how not reported), `appended`, or `null`.
+                "how": d.how or None,
                 "runs_since": d.runs_since,
                 "incomplete_runs": d.incomplete,
                 "truncated": d.truncated,
@@ -1022,8 +1042,10 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             },
             "events": record.scope.events,
             "descendants": record.scope.descendants,
-            "rewritten": record.scope.rewritten,
-            "not_rewritten": record.scope.not_rewritten,
+            "rebuilt": record.scope.rebuilt,
+            "written": record.scope.written,
+            "appended": record.scope.appended,
+            "not_written": record.scope.not_written,
             "incomplete": record.scope.incomplete,
             "truncated": record.scope.truncated,
             "depth_limit": record.scope.depth_limit,

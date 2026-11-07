@@ -36,21 +36,27 @@ def event(
     state="COMPLETE",
     run="",
     lifecycle="",
+    materialized="",
 ):
-    """One event. `lifecycle` puts the standard facet on every output."""
+    """One event. `lifecycle` puts the standard facet on every dataset it names,
+    and `materialized` puts dbt's `dbt_model` facet there, as openlineage-dbt
+    sends it on each output."""
 
     def side(keys):
         out = []
         for key in keys:
             namespace, _, table = key.partition("/")
             dataset = {"namespace": namespace, "name": table}
+            facets = {}
             if lifecycle:
-                dataset["facets"] = {
-                    "lifecycleStateChange": {
-                        "_producer": "https://example.test",
-                        "lifecycleStateChange": lifecycle,
-                    }
+                facets["lifecycleStateChange"] = {
+                    "_producer": "https://example.test",
+                    "lifecycleStateChange": lifecycle,
                 }
+            if materialized:
+                facets["dbt_model"] = {"config": {"materialized": materialized}}
+            if facets:
+                dataset["facets"] = facets
             out.append(dataset)
         return out
 
@@ -78,7 +84,7 @@ def record(events, *, since=None, depth=erasure.DEPTH, dataset=ERASED):
     )
 
 
-#: One hop down from the erased dataset, rewritten on the 10th.
+#: One hop down from the erased dataset, written on the 10th.
 def chain(day=10):
     return [
         event("curate", reads=[ERASED], writes=["wh/crm_curated.contacts"], day=day),
@@ -224,7 +230,7 @@ class TestChoosingTheErasureAmongSeveral:
 
         out = record([*spark_write(5, lifecycle=state), *chain(day=10)])
         assert out.complete
-        expected = f"rewritten after the emitted {said}"
+        expected = f"written after the emitted {said}"
         for fmt, renderer in render.FORMATS.items():
             if fmt == "json":
                 continue  # carries the verdict as fields, not as a sentence
@@ -367,25 +373,142 @@ class TestTheWalk:
         assert any("depth limit of 3" in r for r in out.completeness.reasons)
 
 
+class TestHowADescendantWasWritten:
+    """cordata-tech/qedro#35: an append is not a rebuild.
+
+    An incremental model's run after the erasure writes the dataset and leaves
+    the partitions written before it, which still hold the erased person's
+    data. Counting it as reached let the record earn the mark while its scope
+    statement said the contents had been replaced.
+    """
+
+    CURATED = "wh/crm_curated.contacts"
+    TOMBSTONE = (event("drop", writes=[ERASED], day=5, lifecycle="DROP"),)
+
+    def written(self, *writes):
+        return record([*self.TOMBSTONE, *writes])
+
+    def one(self, out):
+        [descendant] = out.descendants
+        return descendant
+
+    def curate(self, day=10, run="", **kw):
+        return event("curate", reads=[ERASED], writes=[self.CURATED], day=day, run=run, **kw)
+
+    @pytest.mark.parametrize(
+        ("kw", "how"),
+        [
+            ({"lifecycle": "OVERWRITE"}, "rebuilt"),
+            ({"lifecycle": "TRUNCATE"}, "rebuilt"),
+            ({"materialized": "table"}, "rebuilt"),
+            ({"materialized": "view"}, "rebuilt"),
+            ({"materialized": "incremental"}, "appended"),
+            ({"materialized": "snapshot"}, "appended"),
+            ({}, "written"),
+        ],
+    )
+    def test_each_signal(self, kw, how):
+        assert self.one(self.written(self.curate(**kw))).how == how
+
+    def test_a_descendant_only_appended_to_withholds_the_mark_and_is_named(self):
+        out = self.written(self.curate(materialized="incremental"))
+        descendant = self.one(out)
+        assert not descendant.reached
+        assert not out.complete
+        [reason] = out.completeness.reasons
+        assert "only appended to since the tombstone" in reason
+        assert "still there" in reason and self.CURATED in reason
+
+    def test_a_rebuild_earns_it_and_so_does_a_write_that_does_not_say_how(self):
+        # The second keeps the behaviour from before #35, under wording that no
+        # longer claims the contents were replaced.
+        assert self.written(self.curate(materialized="table")).complete
+        assert self.written(self.curate()).complete
+
+    def test_one_rebuild_among_appends_is_enough(self):
+        out = self.written(
+            self.curate(day=10, materialized="incremental"),
+            self.curate(day=11, materialized="table"),
+        )
+        assert self.one(out).how == "rebuilt" and self.one(out).rebuilt == at(11)
+
+    def test_a_write_that_does_not_say_how_might_have_been_a_rebuild(self):
+        out = self.written(self.curate(day=10, materialized="incremental"), self.curate(day=11))
+        assert self.one(out).how == "written"
+        assert self.one(out).reached
+
+    def test_how_is_read_from_any_event_of_the_run(self):
+        # openlineage-dbt sends `dbt_model` on START and COMPLETE alike, but an
+        # emitter that put it on START alone still says how the run wrote.
+        out = self.written(
+            self.curate(state="START", run="r", materialized="incremental"),
+            self.curate(run="r"),
+        )
+        assert self.one(out).how == "appended"
+
+    def test_the_output_says_how_in_every_format(self):
+        import json as json_lib
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from qedro import render
+
+        out = self.written(self.curate(materialized="incremental"))
+        for fmt, renderer in render.FORMATS.items():
+            rendered = renderer(out)
+            if fmt == "json":
+                [d] = json_lib.loads(rendered)["descendants"]
+                assert (d["how"], d["reached"]) == ("appended", False)
+                continue
+            if isinstance(rendered, bytes):
+                book = load_workbook(BytesIO(rendered))
+                rendered = " ".join(
+                    str(c.value)
+                    for s in book.worksheets
+                    for r in s.iter_rows()
+                    for c in r
+                    if c.value
+                )
+            assert "only appended to" in " ".join(rendered.split()), fmt
+
+    def test_against_the_dbt_capture(self):
+        # openlineage-dbt 1.53.0 reports `materialized: table` for both models
+        # built from `raw_customers`, so both are rebuilt, not merely written.
+        from pathlib import Path
+
+        from qedro.sources import read_dir
+
+        events, _ = read_dir(Path("tests/fixtures/dbt-1.53"))
+        source = next(d.key for e in events for d in e.outputs if d.key.endswith("raw_customers"))
+        out = erasure.build(
+            events,
+            dataset=source,
+            config=config.parse(CONTROLLER),
+            since=datetime(2026, 9, 8, 10, 52, 43, 595000, tzinfo=UTC),
+        )
+        assert [d.how for d in out.descendants] == ["rebuilt", "rebuilt"]
+
+
 class TestWhetherTheErasureReached:
     def test_a_completed_run_after_the_tombstone_is_a_rewrite(self):
         out = record(chain(day=10), since=at(5))
         [descendant] = out.descendants
         assert descendant.reached
-        assert descendant.rewritten == at(10)
+        assert descendant.written == at(10)
         assert descendant.runs_since == 1
 
     def test_a_run_before_the_tombstone_is_not(self):
         out = record(chain(day=3), since=at(5))
         [descendant] = out.descendants
         assert not descendant.reached
-        assert descendant.rewritten is None
+        assert descendant.written is None
 
     def test_a_descendant_nothing_rewrote_is_named_and_withholds_the_mark(self):
         out = record(chain(day=3), since=at(5))
         assert not out.complete
         assert [d.dataset for d in out.unreached] == ["wh/crm_curated.contacts"]
-        [reason] = [r for r in out.completeness.reasons if "not been rewritten" in r]
+        [reason] = [r for r in out.completeness.reasons if "not been written" in r]
         # Named, not counted: this list is the output, not a statistic.
         assert "wh/crm_curated.contacts" in reason
 
@@ -430,7 +553,7 @@ class TestWhetherTheErasureReached:
             event("curate", reads=[ERASED], writes=["wh/crm_curated.contacts"], day=14, run="r2"),
         ]
         [descendant] = record(events, since=at(5)).descendants
-        assert descendant.rewritten == at(14)
+        assert descendant.written == at(14)
         assert descendant.runs_since == 2
 
 
@@ -489,7 +612,9 @@ class TestTheScopeStatement:
     def test_propagation_is_counted_both_ways(self):
         events = [*chain(day=10), event("stale", reads=[ERASED], writes=["wh/old"], day=3)]
         rows = dict(record(events, since=at(5)).scope.lines())
-        assert rows["propagation"] == "1 of 2 rewritten since the tombstone, 1 not"
+        assert rows["propagation"] == (
+            "of 2 descendants: 1 written without saying how, 1 not written since the tombstone"
+        )
 
 
 class TestTheDemoEstate:
@@ -536,8 +661,8 @@ class TestTheDemoEstate:
         # rewritten in time is not one anybody has.
         out = self.built()
         assert [d.dataset for d in out.unreached] == ["warehouse/billing_curated.dunning_cases"]
-        assert out.scope.rewritten == 2
-        assert out.scope.not_rewritten == 1
+        assert out.scope.written == 2
+        assert out.scope.not_written == 1
 
     def test_so_the_record_does_not_claim_to_be_a_proof(self):
         out = self.built()

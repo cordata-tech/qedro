@@ -43,7 +43,7 @@ from .sources import ReadReport, utc
 from .words import count, plural
 
 #: How far downstream to walk before stopping and saying so. The same default as
-#: `provenance`, and for the same reason: a closure over a real estate can be
+#: `provenance`, and for the same reason: a closure over a real platform can be
 #: large, and a truncated list that does not say it was truncated is the failure
 #: this repository cares most about.
 DEPTH = 5
@@ -59,6 +59,19 @@ ERASURES = frozenset({"DROP", "TRUNCATE", "OVERWRITE"})
 #: tombstone, but a drop or truncate is preferred over it, and several of them
 #: with nothing to choose between withhold the mark. See cordata-tech/qedro#29.
 REMOVALS = frozenset({"DROP", "TRUNCATE"})
+
+#: How an output says a run replaced its contents rather than adding to them
+#: (#35). A lifecycle state of the three that remove or replace, from any
+#: emitter; or dbt's materialisation, which `openlineage-dbt` sends on each
+#: output as the `dbt_model` facet. `table` and `view` replace what was there;
+#: `incremental` and `snapshot` keep it, so a run of either adds to a dataset
+#: without touching what it held before the erasure. dbt reports no
+#: `--full-refresh` in its events, so a full refresh of an incremental model is
+#: read as an append — the direction that withholds the mark, never the one
+#: that grants it. Anything else does not say how it wrote.
+REBUILDS = frozenset({"DROP", "TRUNCATE", "OVERWRITE"})
+DBT_REBUILDS = frozenset({"table", "view"})
+DBT_APPENDS = frozenset({"incremental", "snapshot"})
 
 #: Where the standard facet lives on a dataset. A dataset facet rather than an
 #: output facet: *this table was dropped* is true of the table, not only of one
@@ -128,7 +141,7 @@ class Tombstone:
         line above already says it was not a drop or truncate, so the verdict
         calling it *an emitted erasure* contradicted it.
         """
-        return f"every descendant was rewritten after the emitted {self.state.lower()}"
+        return f"every descendant was written after the emitted {self.state.lower()}"
 
     def choice(self) -> str:
         """Which candidate was taken and why, or "" when there was only one."""
@@ -159,18 +172,46 @@ class Descendant:
     #: The job whose run derived it from upstream. Named so a reader who has to
     #: go and rewrite this dataset knows what to run.
     through: str = ""
-    #: The most recent completed run that wrote it after the tombstone.
-    rewritten: datetime | None = None
+    #: The most recent completed run that wrote it after the tombstone, of any kind.
+    written: datetime | None = None
+    #: The most recent of those whose output said it replaced the contents.
+    rebuilt: datetime | None = None
     runs_since: int = 0
+    #: Completed runs since the tombstone that said they appended, and those
+    #: that did not say how they wrote. See `REBUILDS` and #35.
+    appends: int = 0
+    unreported: int = 0
     #: Runs that started after the tombstone and never reported completion. Not
-    #: the same as not rewritten, and not the same as rewritten.
+    #: the same as not written, and not the same as written.
     incomplete: int = 0
     truncated: bool = False
 
     @property
+    def how(self) -> str:
+        """`rebuilt`, `written` (how not reported), `appended`, or "" when nothing wrote it.
+
+        The strongest evidence among the runs since the tombstone decides it: one
+        rebuild is enough, and a run that did not say how it wrote might have
+        been one, so only a descendant every run of which appended is
+        `appended`.
+        """
+        if self.rebuilt is not None:
+            return "rebuilt"
+        if self.unreported:
+            return "written"
+        if self.appends:
+            return "appended"
+        return ""
+
+    @property
     def reached(self) -> bool:
-        """Whether the erasure demonstrably propagated this far."""
-        return self.rewritten is not None
+        """Whether the erasure demonstrably propagated this far.
+
+        A rebuild, or a write that did not say how — as before #35, under wording
+        that no longer claims the contents were replaced. Not an append: what
+        the dataset held before the erasure is still in it.
+        """
+        return self.how in ("rebuilt", "written")
 
 
 @dataclass(frozen=True)
@@ -179,8 +220,10 @@ class Scope(scope_module.Scope):
 
     dataset: str = ""
     descendants: int = 0
-    rewritten: int = 0
-    not_rewritten: int = 0
+    rebuilt: int = 0
+    written: int = 0
+    appended: int = 0
+    not_written: int = 0
     incomplete: int = 0
     truncated: int = 0
     depth_limit: int = DEPTH
@@ -188,11 +231,14 @@ class Scope(scope_module.Scope):
 
     OUT_OF_VIEW = (
         "This record covers datasets, not rows. It can show that a dataset descends "
-        "from the erased one and that a job rewrote it after the erasure; it cannot "
+        "from the erased one and that a job wrote it after the erasure; it cannot "
         "show that a particular data subject's rows are gone, because no lineage event "
-        "carries that. A dataset rewritten since the erasure is one whose contents were "
-        "replaced by a job that read the erased source — evidence that the erasure was "
-        "propagated, not proof that it was complete."
+        "carries that. A write replaced a dataset's contents only where the event says "
+        "so — an overwrite, truncate or drop, or a dbt table or view — and an "
+        "appending job adds to a dataset without touching what it held before, so a "
+        "descendant only appended to since the erasure is not counted as reached. A "
+        "write that did not say how is counted, and the record says it did not say: "
+        "evidence that the erasure was propagated, not proof that it was complete."
     )
 
     def lines(self) -> tuple[tuple[str, str], ...]:
@@ -213,11 +259,18 @@ class Scope(scope_module.Scope):
                     ),
                 )
             )
-        reached = (
-            f"{self.rewritten} of {self.descendants} rewritten since the tombstone, "
-            f"{self.not_rewritten} not"
-        )
-        out.append(("propagation", reached))
+        parts = [
+            f"{n} {label}"
+            for n, label in (
+                (self.rebuilt, "rebuilt"),
+                (self.written, "written without saying how"),
+                (self.appended, "only appended to"),
+                (self.not_written, "not written"),
+            )
+            if n
+        ]
+        reached = f"of {count(self.descendants, 'descendant')}: {', '.join(parts)}"
+        out.append(("propagation", f"{reached} since the tombstone" if parts else reached))
         unresolved = []
         if self.incomplete:
             unresolved.append(
@@ -410,41 +463,71 @@ def build(
     )
 
 
+def _how_written(output: Any) -> str:
+    """`rebuilt`, `appended`, or "" when the output does not say. See `REBUILDS`."""
+    if _lifecycle(output) in REBUILDS:
+        return "rebuilt"
+    model = output.facets.get("dbt_model")
+    config = model.get("config") if isinstance(model, dict) else None
+    materialized = config.get("materialized") if isinstance(config, dict) else None
+    if materialized in DBT_REBUILDS:
+        return "rebuilt"
+    if materialized in DBT_APPENDS:
+        return "appended"
+    return ""
+
+
 def _measure(descendant: Descendant, events: Sequence[Event], tombstone: Tombstone) -> Descendant:
-    """Whether anything rewrote this dataset after the erasure.
+    """Whether anything wrote this dataset after the erasure, and how.
 
     A completed run that wrote it counts; a run that started and never reported
     completion is counted apart, because *it may have finished* is not evidence
-    and reporting it as a rewrite would be inventing the proof.
+    and reporting it as a write would be inventing the proof. How a run wrote is
+    read from any of its events, since an emitter may put the facet on START and
+    not on COMPLETE; one that says it rebuilt the dataset outranks one that says
+    it appended (#35).
     """
     if tombstone.at is None:
         return descendant
 
-    rewritten: datetime | None = None
-    runs, incomplete = set(), set()
+    completed: dict[str, datetime] = {}
+    kinds: dict[str, set[str]] = {}
+    started: set[str] = set()
     for event in events:
         if event.event_time is None:
             continue
         when = utc(event.event_time)
         if when <= tombstone.at:
             continue
-        if descendant.dataset not in {o.key for o in event.outputs}:
+        output = next((o for o in event.outputs if o.key == descendant.dataset), None)
+        if output is None:
             continue
         run = event.run.run_id or f"{event.job.key}@{when.isoformat()}"
+        kinds.setdefault(run, set()).add(_how_written(output))
         if event.event_type == "COMPLETE":
-            runs.add(run)
-            if rewritten is None or when > rewritten:
-                rewritten = when
+            completed[run] = max(when, completed.get(run, when))
         else:
-            incomplete.add(run)
+            started.add(run)
 
+    how = {
+        run: "rebuilt"
+        if "rebuilt" in kinds[run]
+        else "appended"
+        if "appended" in kinds[run]
+        else ""
+        for run in completed
+    }
+    rebuilds = [completed[run] for run in completed if how[run] == "rebuilt"]
     return Descendant(
         dataset=descendant.dataset,
         depth=descendant.depth,
         through=descendant.through,
-        rewritten=rewritten,
-        runs_since=len(runs),
-        incomplete=len(incomplete - runs),
+        written=max(completed.values(), default=None),
+        rebuilt=max(rebuilds, default=None),
+        runs_since=len(completed),
+        appends=sum(1 for run in completed if how[run] == "appended"),
+        unreported=sum(1 for run in completed if how[run] == ""),
+        incomplete=len(started - completed.keys()),
         truncated=descendant.truncated,
     )
 
@@ -471,8 +554,10 @@ def _scope(
         events=report.events if report else 0,
         dataset=dataset,
         descendants=len(descendants),
-        rewritten=sum(1 for d in descendants if d.reached),
-        not_rewritten=sum(1 for d in descendants if not d.reached),
+        rebuilt=sum(1 for d in descendants if d.how == "rebuilt"),
+        written=sum(1 for d in descendants if d.how == "written"),
+        appended=sum(1 for d in descendants if d.how == "appended"),
+        not_written=sum(1 for d in descendants if d.how == ""),
         incomplete=sum(1 for d in descendants if d.incomplete),
         truncated=sum(1 for d in descendants if d.truncated),
         depth_limit=depth,
@@ -490,7 +575,7 @@ def _completeness(
 ) -> Completeness:
     """When an erasure record may claim to stand on its own evidence.
 
-    Five ways it cannot, and each names something a reader would have to go and
+    Six ways it cannot, and each names something a reader would have to go and
     do. The list of places the proof does not reach is the output this
     projection exists for, so it is never quietly empty.
     """
@@ -503,7 +588,7 @@ def _completeness(
     if tombstone.at is None:
         return completeness.degraded(
             f"no erasure instant for {dataset} — nothing emitted a lifecycle event for it "
-            "and no --since was given, so there is nothing to measure a rewrite against"
+            "and no --since was given, so there is nothing to measure a write against"
         )
 
     if tombstone.ambiguous:
@@ -517,7 +602,7 @@ def _completeness(
     if not tombstone.evidenced:
         completeness = completeness.degraded(
             "the erasure instant came from --since rather than from an emitted lifecycle "
-            "event, so every rewrite below is measured against a date somebody typed"
+            "event, so every write below is measured against a date somebody typed"
         )
 
     if not descendants:
@@ -526,13 +611,23 @@ def _completeness(
             "not the same as the erased data having none"
         )
 
-    unreached = [d for d in descendants if not d.reached]
-    if unreached:
-        n, total = len(unreached), len(descendants)
+    total = len(descendants)
+    unwritten = [d for d in descendants if d.how == ""]
+    if unwritten:
+        n = len(unwritten)
         completeness = completeness.degraded(
             f"{n} of {total} {plural(total, 'descendant', 'descendants')} "
-            f"{plural(n, 'has', 'have')} not been rewritten since the tombstone: "
-            f"{', '.join(d.dataset for d in unreached)}"
+            f"{plural(n, 'has', 'have')} not been written since the tombstone: "
+            f"{', '.join(d.dataset for d in unwritten)}"
+        )
+
+    appended = [d for d in descendants if d.how == "appended"]
+    if appended:
+        n = len(appended)
+        completeness = completeness.degraded(
+            f"{n} of {total} {plural(total, 'descendant was', 'descendants were')} only "
+            f"appended to since the tombstone, so what {plural(n, 'it', 'they')} held "
+            f"before the erasure is still there: {', '.join(d.dataset for d in appended)}"
         )
 
     incomplete = [d for d in descendants if d.incomplete]
@@ -541,7 +636,7 @@ def _completeness(
         completeness = completeness.degraded(
             f"{n} {plural(n, 'descendant was', 'descendants were')} written by a run that "
             f"started after the tombstone and never reported completion — "
-            f"{plural(n, 'it', 'they')} may or may not have been rewritten"
+            f"{plural(n, 'it', 'they')} may or may not have been written"
         )
 
     if scope.truncated:

@@ -366,7 +366,7 @@ ERASURE_COLUMNS: tuple[tuple[str, int], ...] = (
     ("Descendant", 44),
     ("Depth", 8),
     ("Derived by", 32),
-    ("Rewritten since the erasure", 28),
+    ("Written since the erasure", 28),
     ("Runs since", 12),
     ("Unfinished runs", 16),
     ("State", 40),
@@ -411,7 +411,7 @@ def _descendants(sheet: Any, record: Any) -> None:
             d.dataset,
             d.depth,
             d.through,
-            _when(d.rewritten),
+            _when(d.written),
             d.runs_since,
             d.incomplete,
             _erasure_state(d),
@@ -426,11 +426,15 @@ def _descendants(sheet: Any, record: Any) -> None:
 
 
 def _erasure_state(descendant: Any) -> str:
-    if descendant.rewritten is not None:
-        return "rewritten since the erasure"
+    if descendant.how == "rebuilt":
+        return "rebuilt since the erasure"
+    if descendant.how == "written":
+        return "written since the erasure, not saying whether the contents were replaced"
+    if descendant.how == "appended":
+        return "only appended to since the erasure — what it held before is still there"
     if descendant.incomplete:
         return "not known — a run started after the erasure and never finished"
-    return "not rewritten since the erasure"
+    return "not written since the erasure"
 
 
 def _erasure_verdict(record: Any) -> str:

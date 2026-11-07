@@ -515,28 +515,40 @@ Erasure of warehouse/crm_raw.contacts
     tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite, not a drop or truncate
 
     warehouse/crm_curated.customers
-      state         rewritten 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
+      state         written 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
+      how           not reported, so not shown to have replaced the contents
 
       warehouse/billing_curated.invoices
-        state         rewritten 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
+        state         written 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
+        how           not reported, so not shown to have replaced the contents
 
         warehouse/billing_curated.dunning_cases
-          state         not rewritten since the tombstone
+          state         not written since the tombstone
 
   this record does not claim to be a proof:
-    ! 1 of 3 descendants has not been rewritten since the tombstone:
+    ! 1 of 3 descendants has not been written since the tombstone:
       warehouse/billing_curated.dunning_cases
 ```
 
 The weekly dunning job has not run since the erasure, so one branch of the closure is
 a place the proof does not reach. **That list is the output.** A record where
-everything had been rewritten in time would be a record nobody needs.
+everything had been written in time would be a record nobody needs.
+
+**A write is not necessarily a replacement.** An incremental model adds to a table on
+each run and leaves what it held before the erasure where it was. qedro counts a
+descendant as **rebuilt** where the event says the contents were replaced — an
+`OVERWRITE`, `TRUNCATE` or `DROP` lifecycle state, or dbt's `table` or `view`
+materialisation — and as **only appended to** where dbt says `incremental` or
+`snapshot`, which withholds the mark and names the dataset. Most emitters say neither,
+and then the descendant is counted as **written**, with a line saying how it was
+written was not reported. dbt does not report `--full-refresh`, so a full refresh of an
+incremental model reads as an append, which errs toward withholding.
 
 **The tombstone is evidence or an assertion.** OpenLineage already has the facet —
 `lifecycleStateChange`, whose `DROP`, `TRUNCATE` and `OVERWRITE` values are erasures
 and whose `ALTER`, `CREATE` and `RENAME` values are not. An erasure job that emits it
 gives an instant somebody proved. `--since` gives the same instant typed by hand, works
-against any lineage at all, and withholds the mark, because every rewrite below is then
+against any lineage at all, and withholds the mark, because every write below is then
 measured against a date rather than an event.
 
 **An overwrite is weaker evidence than a drop or a truncate.** Spark reports
@@ -548,7 +560,7 @@ request. Without `--since` it takes the latest, and withholds the mark when that
 of several overwrites, since nothing then says which run was the erasure.
 
 **It reports datasets, not rows.** It can show that a dataset descends from the erased
-one and that a job rewrote it afterwards. It cannot show that a particular data
+one and that a job wrote it afterwards. It cannot show that a particular data
 subject's rows are gone, because no lineage event carries that — and a tool that blurred
 the two would be producing the artefact this project exists to argue against. The
 sentence is in the scope statement of every run, including one that earns the mark.

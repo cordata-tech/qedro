@@ -836,7 +836,7 @@ class TestTheErasureRecordRendersInEveryFormat:
             payload = json_lib.loads(render.json(built))
             assert all(d["reached"] is False for d in payload["descendants"])
         else:
-            assert "not rewritten" in out
+            assert "not written" in out
 
     def test_the_json_uses_null_for_a_descendant_nothing_rewrote(self):
         payload = json_lib.loads(render.json(self.unreached()))
@@ -844,13 +844,13 @@ class TestTheErasureRecordRendersInEveryFormat:
         # `null` rather than a date or `false`: *nothing rewrote it* and *we
         # could not tell* are different answers, and `incomplete_runs` is the
         # second one.
-        assert unreached["rewritten"] == ""
+        assert unreached["written"] == ""
         assert unreached["reached"] is False
 
     def test_the_workbook_tints_what_the_erasure_did_not_reach_and_says_so(self):
         book = load_workbook(BytesIO(render.xlsx(self.unreached())))
         assert book.sheetnames == ["Descendants", "Scope"]
         values = [c.value for row in book["Descendants"].iter_rows() for c in row if c.value]
-        assert "not rewritten since the erasure" in values
+        assert "not written since the erasure" in values
         # No column headed *erased*: that would read as the row-level claim.
         assert not any(isinstance(v, str) and v.strip() == "Erased" for v in values)

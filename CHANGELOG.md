@@ -6,6 +6,32 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## 0.11.0 — 2026-11-07
+
+`qedro erasure` stops claiming more than the events show about how a descendant was
+written. Two things to know before upgrading: every erasure record's wording changes,
+and its JSON renames the fields named below. Which descendants count as reached changes
+only where dbt reports an `incremental` or `snapshot` model, which now withholds the
+mark. Nothing in the demo or the evidence transcript changes verdict.
+
+- **`qedro erasure` tells a rebuild from an append** (#35). A descendant was counted as
+  reached when any run wrote it after the erasure, and the scope statement then said its
+  contents had been replaced, which is false for an incremental model: its partitions
+  from before the erasure still hold the erased data. Each write is now classified from
+  what the event says. An `OVERWRITE`, `TRUNCATE` or `DROP` on the output, or dbt's
+  `table` or `view` materialisation, is a **rebuild**. dbt's `incremental` or
+  `snapshot` is an **append**, and a descendant only appended to since the erasure
+  withholds the mark with a reason naming it. A write that says neither is counted as
+  **written**, as before, with a `how` line saying it was not reported.
+- **The wording no longer claims more than the events show.** *Rewritten since the
+  tombstone* is now *written*, or *rebuilt* where the event says so; the scope
+  statement's last sentence says a write replaced the contents only where the event says
+  so; and a record that earns the mark ends *every descendant was written after the
+  emitted …*. The JSON descendant entries carry `written`, `rebuilt` and `how` in place
+  of `rewritten`, and the scope counts are `rebuilt`, `written`, `appended` and
+  `not_written` in place of `rewritten` and `not_rewritten`. The workbook's column is
+  *Written since the erasure*.
+
 ## 0.10.2 — 2026-11-04
 
 One sentence. An erasure record that earns the mark now ends *every descendant was
