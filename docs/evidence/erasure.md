@@ -1,6 +1,6 @@
 # Transcript: `qedro erasure`, evidenced, and across routine overwrites
 
-Captured by script from qedro 0.10.2, at commit `f1fa0e4` with a clean working tree,
+Captured by script from qedro 0.11.0, at commit `4577f39` with a clean working tree,
 on Python 3.12.13. The output below is what each command printed, unedited. Run the
 same commands from the repository root to reproduce it.
 
@@ -31,15 +31,17 @@ Erasure of warehouse/crm_raw.contacts
 
     warehouse/crm_curated.customers
       derived by    acme.crm/customers-curated
-      state         rewritten 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
+      state         written 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
+      how           not reported, so not shown to have replaced the contents
 
       warehouse/billing_curated.invoices
         derived by    acme.billing/invoices-nightly
-        state         rewritten 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
+        state         written 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
+        how           not reported, so not shown to have replaced the contents
 
         warehouse/billing_curated.dunning_cases
           derived by    acme.billing/dunning-weekly
-          state         not rewritten since the tombstone
+          state         not written since the tombstone
 
   Scope of this record
     source        demo/lineage-declared
@@ -47,16 +49,20 @@ Erasure of warehouse/crm_raw.contacts
     erased        warehouse/crm_raw.contacts
     tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite, not a drop or truncate
     in view       3 descendants, 218 events
-    propagation   2 of 3 rewritten since the tombstone, 1 not
+    propagation   of 3 descendants: 2 written without saying how, 1 not written since
+                  the tombstone
     This record covers datasets, not rows. It can show that a dataset descends from the
-    erased one and that a job rewrote it after the erasure; it cannot show that a
+    erased one and that a job wrote it after the erasure; it cannot show that a
     particular data subject's rows are gone, because no lineage event carries that. A
-    dataset rewritten since the erasure is one whose contents were replaced by a job
-    that read the erased source — evidence that the erasure was propagated, not proof
-    that it was complete.
+    write replaced a dataset's contents only where the event says so — an overwrite,
+    truncate or drop, or a dbt table or view — and an appending job adds to a dataset
+    without touching what it held before, so a descendant only appended to since the
+    erasure is not counted as reached. A write that did not say how is counted, and the
+    record says it did not say: evidence that the erasure was propagated, not proof that
+    it was complete.
 
   this record does not claim to be a proof:
-    ! 1 of 3 descendants has not been rewritten since the tombstone: warehouse/billing_curated.dunning_cases
+    ! 1 of 3 descendants has not been written since the tombstone: warehouse/billing_curated.dunning_cases
 ```
 
 Exit status 0.
@@ -73,7 +79,8 @@ Erasure of warehouse/crm_curated.contacts_snapshot
 
     warehouse/crm_curated.segments
       derived by    acme.crm/segments-daily
-      state         rewritten 2026-07-24T05:02:00+00:00 — 1 run since the tombstone
+      state         written 2026-07-24T05:02:00+00:00 — 1 run since the tombstone
+      how           not reported, so not shown to have replaced the contents
 
   Scope of this record
     source        docs/evidence/erasure-overwrites
@@ -83,13 +90,16 @@ Erasure of warehouse/crm_curated.contacts_snapshot
     in view       1 descendant, 25 events
     candidates    5 completed runs overwrote it; the latest was taken, as no --since
                   says when the erasure was requested
-    propagation   1 of 1 rewritten since the tombstone, 0 not
+    propagation   of 1 descendant: 1 written without saying how since the tombstone
     This record covers datasets, not rows. It can show that a dataset descends from the
-    erased one and that a job rewrote it after the erasure; it cannot show that a
+    erased one and that a job wrote it after the erasure; it cannot show that a
     particular data subject's rows are gone, because no lineage event carries that. A
-    dataset rewritten since the erasure is one whose contents were replaced by a job
-    that read the erased source — evidence that the erasure was propagated, not proof
-    that it was complete.
+    write replaced a dataset's contents only where the event says so — an overwrite,
+    truncate or drop, or a dbt table or view — and an appending job adds to a dataset
+    without touching what it held before, so a descendant only appended to since the
+    erasure is not counted as reached. A write that did not say how is counted, and the
+    record says it did not say: evidence that the erasure was propagated, not proof that
+    it was complete.
 
   this record does not claim to be a proof:
     ! 5 runs overwrote warehouse/crm_curated.contacts_snapshot in the window and nothing says which one carried out the erasure, so the latest was taken — on a table rewritten on a schedule that is the last scheduled run; pass --since with the date the erasure was requested
@@ -109,7 +119,8 @@ Erasure of warehouse/crm_curated.contacts_snapshot
 
     warehouse/crm_curated.segments
       derived by    acme.crm/segments-daily
-      state         rewritten 2026-07-24T05:02:00+00:00 — 2 runs since the tombstone
+      state         written 2026-07-24T05:02:00+00:00 — 2 runs since the tombstone
+      how           not reported, so not shown to have replaced the contents
 
   Scope of this record
     source        docs/evidence/erasure-overwrites
@@ -120,15 +131,18 @@ Erasure of warehouse/crm_curated.contacts_snapshot
     candidates    2 completed runs overwrote it; the first after --since was taken
     superseded    --since said 2026-07-22T10:00:00+00:00; the emitted event is what the
                   descendants were measured against
-    propagation   1 of 1 rewritten since the tombstone, 0 not
+    propagation   of 1 descendant: 1 written without saying how since the tombstone
     This record covers datasets, not rows. It can show that a dataset descends from the
-    erased one and that a job rewrote it after the erasure; it cannot show that a
+    erased one and that a job wrote it after the erasure; it cannot show that a
     particular data subject's rows are gone, because no lineage event carries that. A
-    dataset rewritten since the erasure is one whose contents were replaced by a job
-    that read the erased source — evidence that the erasure was propagated, not proof
-    that it was complete.
+    write replaced a dataset's contents only where the event says so — an overwrite,
+    truncate or drop, or a dbt table or view — and an appending job adds to a dataset
+    without touching what it held before, so a descendant only appended to since the
+    erasure is not counted as reached. A write that did not say how is counted, and the
+    record says it did not say: evidence that the erasure was propagated, not proof that
+    it was complete.
 
-  every descendant was rewritten after the emitted overwrite   ∎
+  every descendant was written after the emitted overwrite   ∎
 ```
 
 Exit status 0.
