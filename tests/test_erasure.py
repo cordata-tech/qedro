@@ -11,6 +11,7 @@ erasure is named, and withholds the mark.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -668,3 +669,40 @@ class TestTheDemoEstate:
         [job] = [a for a in record.activities if a.key == "acme.crm/subject-erasure"]
         assert job.purpose.value == "subject-rights-handling"
         assert job.legal_basis.value == "legal-obligation"
+
+
+class TestARealEmitterSaysItRebuilt:
+    """#38: pipeline-runtime 0.2.10 marks each output it replaces whole.
+
+    Every lifecycle value is covered above against built events. This reads the
+    facet off a real emitter's capture, the first in the tree that says a
+    descendant was rebuilt rather than only written.
+    """
+
+    def test_both_descendants_read_as_rebuilt(self):
+        from qedro.sources import read_dir
+
+        events, _ = read_dir(Path("tests/fixtures/pipeline-runtime-0.2.10"))
+        out = erasure.build(
+            events,
+            dataset="cordata://fraud/fraud_raw.transactions",
+            config=config.parse(CONTROLLER),
+            since=datetime(2026, 11, 14, tzinfo=UTC),
+        )
+        assert {d.dataset: d.how for d in out.descendants} == {
+            "cordata://fraud/fraud_curated.transactions_scored": "rebuilt",
+            "cordata://finance/finance_curated.merchant_settlement_daily": "rebuilt",
+        }
+
+    def test_the_capture_before_it_said_nothing_either_way(self):
+        # The same pipelines from 0.2.4, kept beside it: written, how not reported.
+        from qedro.sources import read_dir
+
+        events, _ = read_dir(Path("tests/fixtures/pipeline-runtime-0.2.4"))
+        out = erasure.build(
+            events,
+            dataset="cordata://fraud/fraud_raw.transactions",
+            config=config.parse(CONTROLLER),
+            since=datetime(2026, 10, 1, tzinfo=UTC),
+        )
+        assert {d.how for d in out.descendants} == {"written"}

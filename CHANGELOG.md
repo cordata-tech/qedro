@@ -8,6 +8,11 @@ before `1.0`.
 
 ## Unreleased
 
+- **A pipeline-runtime 0.2.10 capture** (#38), which marks each output it replaces whole
+  with `lifecycleStateChange: OVERWRITE`. It is the first real capture in the tree
+  that tells `qedro erasure` a descendant was rebuilt rather than only written. Nothing
+  in qedro changed to read it; the compatibility table no longer lists pipeline-runtime
+  among the emitters that say nothing about how they wrote.
 - **The erasure record and the provenance chain say what ran each step and where its
   data lives** (#39), such as `dbt · Snowflake`. Read from the events only: the
   integration from the standard `jobType` facet or the `producer` URL, the platform
