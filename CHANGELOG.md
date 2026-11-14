@@ -6,7 +6,12 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.14.0 — 2026-11-14
+
+The erasure record and the provenance chain say what ran each step and where its
+data lives, in every format. Two things to know before upgrading: the text output of
+both gains a `platform` line per descendant or step, and their JSON gains `ran_on`
+and `stored_in`. No verdict changes.
 
 - **A pipeline-runtime 0.2.10 capture** (#38), which marks each output it replaces whole
   with `lifecycleStateChange: OVERWRITE`. It is the first real capture in the tree
