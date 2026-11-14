@@ -9,9 +9,12 @@ descendant can be in:
 - `crm_curated.customers` and `ml_features.churn_inputs` are dbt models
   materialised as a table and a view, rebuilt after the erasure;
 - `marketing.audiences` is an incremental model, only appended to since;
-- `billing_curated.invoices` and `exports.partner_feed` were written after it
+- `billing_curated.invoices` and the partner feed in S3 were written after it
   by jobs that do not say how;
 - `billing_curated.dunning_cases` comes from a weekly job that last ran before.
+
+The warehouse tables name Snowflake in their `dataSource` facet and the partner
+feed lives in an S3 bucket, so every box can also say where its data is (#39).
 
 Anyone can run the README's command against it:
 
@@ -35,6 +38,8 @@ from qedro.demo import EMITTERS, FACET_SPEC, SPEC
 ROOT = Path(__file__).resolve().parent.parent
 PATH = ROOT / "docs" / "examples" / "erasure" / "lineage.ndjson"
 RUNS = uuid.uuid5(uuid.NAMESPACE_URL, "https://cordata.tech/qedro/examples/erasure")
+WAREHOUSE = "snowflake://acme-finanz.eu-central-1"
+SOURCE = "https://openlineage.io/spec/facets/1-0-1/DatasourceDatasetFacet.json#/$defs/DatasourceDatasetFacet"
 LIFECYCLE = (
     "https://openlineage.io/spec/facets/1-0-1/LifecycleStateChangeDatasetFacet.json"
     "#/$defs/LifecycleStateChangeDatasetFacet"
@@ -57,7 +62,7 @@ RUNS_IN_ORDER = (
     ("acme.ml", "churn-features", "dbt",
      ["crm_curated.customers"], ["ml_features.churn_inputs"], (23, 4, 40), "view"),
     ("acme.marketing", "partner-export", "spark",
-     ["marketing.audiences"], ["exports.partner_feed"], (23, 6, 0), ""),
+     ["marketing.audiences"], ["s3://acme-partner-exports/partner_feed"], (23, 6, 0), ""),
 )  # fmt: skip
 
 
@@ -66,14 +71,24 @@ def _facet(payload: dict, producer: str, schema: str) -> dict:
 
 
 def _dataset(name: str, producer: str, how: str = "") -> dict:
-    out: dict = {"namespace": "warehouse", "name": name}
+    facets: dict = {}
+    if "://" in name:
+        # A bucket names its platform in the namespace, as OpenLineage's
+        # naming has it: `s3://<bucket>`.
+        namespace, name = name.rsplit("/", 1)
+    else:
+        # The warehouse keeps a logical namespace, as the demo's does, and says
+        # what it is in the standard data source facet.
+        namespace = "warehouse"
+        facets["dataSource"] = _facet({"name": "warehouse", "uri": WAREHOUSE}, producer, SOURCE)
     if how.isupper():
-        out["facets"] = {
-            "lifecycleStateChange": _facet({"lifecycleStateChange": how}, producer, LIFECYCLE)
-        }
+        facets["lifecycleStateChange"] = _facet({"lifecycleStateChange": how}, producer, LIFECYCLE)
     elif how:
         # As openlineage-dbt sends it on each output.
-        out["facets"] = {"dbt_model": {"config": {"materialized": how}}}
+        facets["dbt_model"] = {"config": {"materialized": how}}
+    out: dict = {"namespace": namespace, "name": name}
+    if facets:
+        out["facets"] = facets
     return out
 
 

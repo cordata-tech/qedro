@@ -791,6 +791,7 @@ def _step_text(step, indent: str) -> list[str]:
     run = f"{p.run_id or 'unreported'} ({p.event_type.lower()}), {_when(p.when)}"
     out = [
         f"{indent}produced by   {p.job}",
+        f"{indent}platform      {_platform(p.stack)}",
         f"{indent}run           {run}",
         f"{indent}code          {p.code.describe()}",
     ]
@@ -817,19 +818,19 @@ def _step_text(step, indent: str) -> list[str]:
 def _(record: provenance_module.Record) -> str:
     out = [f"# Provenance of `{record.dataset}`", ""]
     out += [
-        "| Depth | Dataset | Produced by | Commit | Signature | Source published by |",
-        "|---|---|---|---|---|---|",
+        "| Depth | Dataset | Produced by | Platform | Commit | Signature | Source published by |",
+        "|---|---|---|---|---|---|---|",
     ]
     for step in record.steps:
         if step.production:
             p = step.production
             out.append(
-                f"| {step.depth} | `{step.dataset}` | `{p.job}` "
+                f"| {step.depth} | `{step.dataset}` | `{p.job}` | {_platform(p.stack)} "
                 f"| {p.code.short or '—'} | {p.signature.describe()} "
                 f"| {p.published.describe()} |"
             )
         else:
-            out.append(f"| {step.depth} | `{step.dataset}` | — | — | — | _{step.ended}_ |")
+            out.append(f"| {step.depth} | `{step.dataset}` | — | — | — | — | _{step.ended}_ |")
 
     out += _scope_markdown(record.scope)
     out += _verdict_markdown(record, "Every step ran under a signed commit.", withheld="chain")
@@ -855,6 +856,10 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
                     "event_type": s.production.event_type,
                     "when": _when(s.production.when),
                     "reads": list(s.production.reads),
+                    # What the events say ran the job and where its output
+                    # lives (#39); `null` where they say nothing.
+                    "ran_on": s.production.stack.ran_on or None,
+                    "stored_in": s.production.stack.stored_in or None,
                     "code": {
                         "repository": s.production.code.repository,
                         "commit": s.production.code.commit,
@@ -924,6 +929,15 @@ def _(record: provenance_module.Record) -> bytes:
 # reason the projection is safe to ship.
 
 
+def _platform(stack) -> str:
+    """What ran a step and where its data lives, or that the events did not say.
+
+    Printed either way: a line that appeared only when populated would teach a
+    reader that its absence means there was nothing to report (#25, #39).
+    """
+    return stack.describe() or "not reported"
+
+
 def _reached_text(descendant) -> str:
     """What happened to one descendant since the erasure, in one line."""
     runs = words.count(descendant.runs_since, "run")
@@ -964,6 +978,7 @@ def _(record: erasure_module.Record, *, symbol: bool = True, width: int = 88) ->
         indent = "  " + "  " * descendant.depth
         out.append(f"{indent}{descendant.dataset}")
         out.append(f"{indent}  derived by    {descendant.through or 'unreported'}")
+        out.append(f"{indent}  platform      {_platform(descendant.stack)}")
         out.append(f"{indent}  state         {_reached_text(descendant)}")
         if how := _how_text(descendant):
             out.append(f"{indent}  how           {how}")
@@ -1005,13 +1020,16 @@ def _(record: erasure_module.Record) -> str:
     out += [f"**Tombstone:** {record.tombstone.describe()}", ""]
     if record.descendants:
         out += [
-            "| Depth | Descendant | Derived by | Since the tombstone |",
-            "|---|---|---|---|",
+            "| Depth | Descendant | Derived by | Platform | Since the tombstone |",
+            "|---|---|---|---|---|",
         ]
         for d in record.descendants:
             how = f" — {_how_text(d)}" if _how_text(d) else ""
             state = _reached_text(d) + how + (" _(depth limit)_" if d.truncated else "")
-            out.append(f"| {d.depth} | `{d.dataset}` | `{d.through or '—'}` | {state} |")
+            out.append(
+                f"| {d.depth} | `{d.dataset}` | `{d.through or '—'}` "
+                f"| {_platform(d.stack)} | {state} |"
+            )
     else:
         out.append("Nothing in the window read it — no descendants were found.")
     out += _scope_markdown(record.scope)
@@ -1025,6 +1043,7 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
     payload = {
         "qedro": _document("erasure"),
         "dataset": record.dataset,
+        "stored_in": record.stored_in or None,
         "tombstone": {
             "at": _when(record.tombstone.at),
             "provenance": str(record.tombstone.provenance),
@@ -1046,6 +1065,10 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
                 # The dataset it was derived from on the walk, so a consumer can
                 # draw the same tree the PDF does (#37).
                 "derived_from": d.parent,
+                # What the events say ran the job that writes it and where it
+                # lives (#39); `null` where they say nothing.
+                "ran_on": d.stack.ran_on or None,
+                "stored_in": d.stack.stored_in or None,
                 # `null`, not a date and not `false`: *nothing wrote it* and
                 # *we could not tell* are different answers, and the second is
                 # what `incomplete` is for.

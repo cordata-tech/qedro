@@ -45,11 +45,26 @@ def test_the_text_record_nests_each_descendant_under_its_parent():
         config=config.parse("controller: ACME Finanz GmbH\n"),
         report=report,
     )
-    lines = [line.strip() for line in render.text(record).splitlines()]
-    order = [line for line in lines if line.startswith("warehouse/") and "." in line]
+    keys = {d.dataset for d in record.descendants}
+    order = [line.strip() for line in render.text(record).splitlines() if line.strip() in keys]
     assert order.index("warehouse/billing_curated.invoices") == (
         order.index("warehouse/crm_curated.customers") + 1
     )
-    assert order.index("warehouse/exports.partner_feed") == (
+    assert order.index("s3://acme-partner-exports/partner_feed") == (
         order.index("warehouse/marketing.audiences") + 1
     )
+
+
+def test_every_box_can_say_where_its_data_lives():
+    # #39: the reason the warehouse names Snowflake and the feed lives in S3.
+    events, report = read(str(example.PATH.parent))
+    record = erasure.build(
+        events,
+        dataset="warehouse/crm_raw.contacts",
+        config=config.parse("controller: ACME Finanz GmbH\n"),
+        report=report,
+    )
+    assert record.stored_in == "Snowflake"
+    by_key = {d.dataset: d.stack.describe() for d in record.descendants}
+    assert by_key["warehouse/crm_curated.customers"] == "dbt · Snowflake"
+    assert by_key["s3://acme-partner-exports/partner_feed"] == "Spark · S3"

@@ -35,6 +35,7 @@ from datetime import datetime
 from typing import Any
 
 from . import scope as scope_module
+from . import stack as stack_module
 from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
@@ -188,6 +189,9 @@ class Descendant:
     #: the same as not written, and not the same as written.
     incomplete: int = 0
     truncated: bool = False
+    #: What ran the job that writes it and where it lives, as the events say
+    #: (#39). Who has to act on a descendant the erasure did not reach.
+    stack: stack_module.Stack = field(default_factory=stack_module.Stack)
 
     @property
     def how(self) -> str:
@@ -298,6 +302,8 @@ class Record:
     scope: Scope = field(default_factory=Scope)
     completeness: Completeness = field(default_factory=Completeness)
     generated_from: str = ""
+    #: Where the erased dataset lives, as any event naming it says (#39).
+    stored_in: str = ""
 
     @property
     def complete(self) -> bool:
@@ -439,9 +445,13 @@ def build(
                 if not truncated:
                     frontier.append((output.key, level + 1))
 
+    labels = stack_module.labels(config.platforms)
     descendants = tuple(
         sorted(
-            (_measure(d, events, tombstone) for d in found.values()),
+            (
+                _measure(d, events, tombstone, stack_module.of(events, d.dataset, labels))
+                for d in found.values()
+            ),
             key=lambda d: (d.depth, d.dataset),
         )
     )
@@ -464,6 +474,7 @@ def build(
             descendants, dataset=dataset, tombstone=tombstone, scope=scope, report=report
         ),
         generated_from=report.origin if report else "",
+        stored_in=stack_module.where(events, dataset, labels),
     )
 
 
@@ -481,7 +492,12 @@ def _how_written(output: Any) -> str:
     return ""
 
 
-def _measure(descendant: Descendant, events: Sequence[Event], tombstone: Tombstone) -> Descendant:
+def _measure(
+    descendant: Descendant,
+    events: Sequence[Event],
+    tombstone: Tombstone,
+    stack: stack_module.Stack,
+) -> Descendant:
     """Whether anything wrote this dataset after the erasure, and how.
 
     A completed run that wrote it counts; a run that started and never reported
@@ -492,7 +508,14 @@ def _measure(descendant: Descendant, events: Sequence[Event], tombstone: Tombsto
     it appended (#35).
     """
     if tombstone.at is None:
-        return descendant
+        return Descendant(
+            dataset=descendant.dataset,
+            depth=descendant.depth,
+            through=descendant.through,
+            parent=descendant.parent,
+            truncated=descendant.truncated,
+            stack=stack,
+        )
 
     completed: dict[str, datetime] = {}
     kinds: dict[str, set[str]] = {}
@@ -534,6 +557,7 @@ def _measure(descendant: Descendant, events: Sequence[Event], tombstone: Tombsto
         unreported=sum(1 for run in completed if how[run] == ""),
         incomplete=len(started - completed.keys()),
         truncated=descendant.truncated,
+        stack=stack,
     )
 
 

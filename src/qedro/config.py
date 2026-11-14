@@ -1,6 +1,6 @@
 """`qedro.yaml` — the controller, the scope, and the mapping fallback.
 
-Three things live here, and only the first is required:
+Four things live here, and only the first is required:
 
     controller:            # who the record belongs to. Art. 30(1)(a).
       name: ACME GmbH
@@ -15,6 +15,10 @@ Three things live here, and only the first is required:
       "cordata.fraud/*":
         purpose: fraud-detection
         legal_basis: legitimate-interest
+
+    platforms:             # what a diagram box prints for an integration or a
+      lakehouse: Corp lake # namespace scheme it does not know (#39); see
+                           # `qedro.stack` for the defaults
 
 **The mapping is a fallback and is treated as one.** A purpose read from this
 file is an assertion by whoever wrote the file; a purpose read from an emitted
@@ -98,6 +102,10 @@ class Config:
     domains: tuple[str, ...] = ()
     rules: tuple[Rule, ...] = ()
     vocabulary: str = ""
+    #: Labels for integrations and namespace schemes, merged over
+    #: `stack.LABELS`. A label says what the events already named; it never
+    #: supplies a platform the events did not.
+    platforms: Mapping[str, str] = field(default_factory=dict)
     origin: str = ""
 
     @property
@@ -184,8 +192,24 @@ def _build(raw: Mapping[str, Any] | None, *, origin: str) -> Config:
         domains=_domains(raw.get("domains"), origin),
         rules=_rules(raw.get("jobs"), origin),
         vocabulary=_str(raw.get("vocabulary")),
+        platforms=_platforms(raw.get("platforms"), origin),
         origin=origin,
     )
+
+
+def _platforms(raw: Any, origin: str) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ConfigError(
+            f"`platforms` in {origin} should be a mapping of integration or scheme to a label"
+        )
+    out = {}
+    for key, label in raw.items():
+        if not (isinstance(key, str) and isinstance(label, str) and label.strip()):
+            raise ConfigError(f"`platforms: {key}` in {origin} should be a label in words")
+        out[key.strip().lower()] = label.strip()
+    return out
 
 
 def _controller(raw: Any, origin: str) -> Controller:

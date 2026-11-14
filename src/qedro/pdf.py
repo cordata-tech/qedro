@@ -115,42 +115,47 @@ class _Mark(Flowable):
         self.canv.rect(0, 0, self.size, self.size, stroke=0, fill=1)
 
 
-class _Wordmark(Flowable):
-    """QEDR and the square, as `docs/wordmark.svg` draws it, at the top of page one.
+def _wordmark_width(size: float) -> float:
+    # The proportions of the SVG: a square 0.64 em on a side, 0.09 em after the R.
+    return pdfmetrics.stringWidth("QEDR", BOLD, size) + 0.73 * size
+
+
+def _draw_wordmark(canvas: Any, x: float, y: float, size: float, complete: bool) -> None:
+    """QEDR and the square, as `docs/wordmark.svg` draws it, standing on *y*.
 
     The square is filled only on a record that earns the mark, and drawn as an
     outline on one that withholds it. The wordmark is the product's name finished
     by a complete run, so a filled square on a record that says it is not a
     proof would contradict the verdict printed under it.
     """
+    canvas.saveState()
+    canvas.setFillColor(INK)
+    canvas.setStrokeColor(INK)
+    canvas.setFont(BOLD, size)
+    canvas.drawString(x, y, "QEDR")
+    left, side = x + pdfmetrics.stringWidth("QEDR", BOLD, size) + 0.09 * size, 0.64 * size
+    if complete:
+        canvas.rect(left, y, side, side, stroke=0, fill=1)
+    else:
+        inset = size / 24  # half the line, so the outline covers the same square
+        canvas.setLineWidth(2 * inset)
+        canvas.rect(left + inset, y + inset, side - 2 * inset, side - 2 * inset, stroke=1, fill=0)
+    canvas.restoreState()
+
+
+class _Wordmark(Flowable):
+    """The wordmark at the top of page one, as at the top of the README."""
 
     SIZE = 14
 
     def __init__(self, complete: bool) -> None:
         super().__init__()
         self.complete = complete
-        self.text_w = pdfmetrics.stringWidth("QEDR", BOLD, self.SIZE)
-        # The proportions of the SVG: a square 0.64 em on a side, 0.09 em after
-        # the R, standing on the baseline.
-        self.side, self.gap = 0.64 * self.SIZE, 0.09 * self.SIZE
-        self.width = self.text_w + self.gap + self.side
+        self.width = _wordmark_width(self.SIZE)
         self.height = self.SIZE
 
     def draw(self) -> None:
-        canvas = self.canv
-        canvas.setFillColor(INK)
-        canvas.setStrokeColor(INK)
-        canvas.setFont(BOLD, self.SIZE)
-        canvas.drawString(0, 0, "QEDR")
-        x = self.text_w + self.gap
-        if self.complete:
-            canvas.rect(x, 0, self.side, self.side, stroke=0, fill=1)
-        else:
-            inset = 0.75  # half the line, so the outline covers the same square
-            canvas.setLineWidth(2 * inset)
-            canvas.rect(
-                x + inset, inset, self.side - 2 * inset, self.side - 2 * inset, stroke=1, fill=0
-            )
+        _draw_wordmark(self.canv, 0, 0, self.SIZE, self.complete)
 
 
 def _verdict(record: Any, earned: str) -> list[Flowable]:
@@ -210,10 +215,14 @@ def _document(title: str, body: Sequence[Flowable], *, footer: str, complete: bo
     body = [_Wordmark(complete), Spacer(1, 10), *body]
 
     def page(canvas: Any, doc: Any) -> None:
+        # The wordmark again on every page, small, because printed pages get
+        # separated: page four on its own still says what made it and whether
+        # the record it came from claims to be a proof.
+        _draw_wordmark(canvas, 20 * mm, 12 * mm, 7, complete)
         canvas.saveState()
         canvas.setFont(FONT, 7)
         canvas.setFillColor(MUTED)
-        canvas.drawString(20 * mm, 12 * mm, footer)
+        canvas.drawString(20 * mm + _wordmark_width(7) + 4, 12 * mm, f"{__version__} — {footer}")
         canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f"page {doc.page}")
         canvas.restoreState()
 
@@ -368,16 +377,28 @@ def _tree(nodes: Sequence[_Node]) -> Drawing:
     return drawing
 
 
+def _stack_line(described: str) -> str:
+    """Where a step ran, for a box or a cell, or that the events did not say (#39)."""
+    return f"on {described}" if described else "platform not reported"
+
+
 def _erasure_nodes(record: Any) -> list[_Node]:
     # The erased dataset's box gives the instant only; the full tombstone
     # sentence is printed above the diagram and would overrun a box.
     at = record.tombstone.at.isoformat() if record.tombstone.at else "no erasure instant"
-    nodes = [_Node(record.dataset, 0, (record.dataset, f"erased — {at}"), root=True)]
+    nodes = [
+        _Node(
+            record.dataset,
+            0,
+            (record.dataset, f"erased — {at}", _stack_line(record.stored_in)),
+            root=True,
+        )
+    ]
     nodes += [
         _Node(
             d.dataset,
             d.depth,
-            (d.dataset, _state(d)),
+            (d.dataset, _state(d), _stack_line(d.stack.describe())),
             parent=d.parent or record.dataset,
             gap=not d.reached,
             edge=d.through,
@@ -424,6 +445,7 @@ def erasure_document(record: Any) -> bytes:
                     [
                         _key(d.dataset, 82 * mm),
                         _p(f"derived by {d.through or 'unreported'}", SMALL),
+                        _p(_stack_line(d.stack.describe()), SMALL),
                     ],
                     _p(str(d.depth), CELL),
                     _p(state, CELL),
@@ -449,7 +471,7 @@ def erasure_document(record: Any) -> bytes:
     return _document(
         f"Erasure of {record.dataset}",
         body,
-        footer=f"qedro {__version__} — erasure of {record.dataset}",
+        footer=f"erasure of {record.dataset}",
         complete=record.complete,
     )
 
@@ -483,7 +505,12 @@ def _provenance_nodes(record: Any) -> list[_Node]:
             gap = False
         else:
             commit = f"at {p.code.short}" if p.code.commit else "no commit named"
-            lines = (step.dataset, f"{p.job}, {commit}", _signature_word(p))
+            lines = (
+                step.dataset,
+                f"{p.job}, {commit}",
+                _signature_word(p),
+                _stack_line(p.stack.describe()),
+            )
             # The gaps the chain withholds its mark for: a step that cannot show
             # a signed commit. An ending is stated, not tinted, because a source
             # and a producer outside the window look the same from here.
@@ -535,6 +562,7 @@ def provenance_document(record: Any) -> bytes:
                     f"code: {p.code.describe()}",
                     f"signature: {p.signature.describe()}",
                     f"source: {p.published.describe()}",
+                    f"platform: {p.stack.describe() or 'not reported'}",
                 ]
                 if step.also_produced_by:
                     n = step.also_produced_by
@@ -559,7 +587,7 @@ def provenance_document(record: Any) -> bytes:
     return _document(
         f"Provenance of {record.dataset}",
         body,
-        footer=f"qedro {__version__} — provenance of {record.dataset}",
+        footer=f"provenance of {record.dataset}",
         complete=record.complete,
     )
 
@@ -815,6 +843,6 @@ def ropa_document(record: Any) -> bytes:
     return _document(
         f"Record of processing activities — {name}",
         body,
-        footer=f"qedro {__version__} — record of processing activities, {name}",
+        footer=f"record of processing activities, {name}",
         complete=record.complete,
     )

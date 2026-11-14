@@ -39,6 +39,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from . import scope as scope_module
+from . import stack as stack_module
 from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
@@ -207,6 +208,8 @@ class Production:
     signature: Signature
     reads: tuple[str, ...] = ()
     published: Published = field(default_factory=Published)
+    #: What ran the job and where its output lives, as the events say (#39).
+    stack: stack_module.Stack = field(default_factory=stack_module.Stack)
 
     @property
     def authorised(self) -> bool:
@@ -346,6 +349,7 @@ def build(
         for output in event.outputs:
             producers.setdefault(output.key, []).append(event)
 
+    labels = stack_module.labels(config.platforms)
     steps: list[Step] = []
     seen = {dataset}
     frontier = [(dataset, 0)]
@@ -364,7 +368,9 @@ def build(
         ordered = sorted(timed, key=lambda e: e.event_time, reverse=True) + [
             e for e in found if e.event_time is None
         ]
-        production = _production(ordered[0])
+        # Read from every run that wrote it, newest first, because an emitter
+        # may name its integration on one event of a run and not another.
+        production = _production(ordered[0], stack_module.of(ordered, key, labels))
         # Distinct runs, not events. Emitters routinely declare the outputs on
         # START *and* on COMPLETE — dbt does — so counting events reported one
         # run as two and printed "1 other run wrote this" about a run that had
@@ -417,7 +423,7 @@ def build(
     )
 
 
-def _production(event: Event) -> Production:
+def _production(event: Event, stack: stack_module.Stack) -> Production:
     code = _code(event)
     signature = _signature(event)
     if signature.known and not code.commit:
@@ -435,6 +441,7 @@ def _production(event: Event) -> Production:
         signature=signature,
         reads=tuple(sorted({d.key for d in event.inputs})),
         published=_published(event),
+        stack=stack,
     )
 
 

@@ -21,12 +21,13 @@ right they did not, so those values came from a mapping file and a list of decla
 activities, and the record says it is not a proof and tints each row that is part of
 why.*
 
-![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset and its state: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
+![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset, its state, and what ran it and where it lives, such as dbt on Snowflake or Spark on S3: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
 
 *What an erasure reached, from the erasure record's PDF
 (`qedro erasure docs/examples/erasure --dataset crm_raw.contacts --out erasure.pdf`).
 Every dataset derived from the erased one is a box saying, in words, whether a job
-has replaced it since; the tinted ones still hold what the erasure removed upstream.*
+has replaced it since, and what ran that job and where the data lives, as the events
+report it; the tinted ones still hold what the erasure removed upstream.*
 
 The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
 known in German as the *DSGVO*. Its Article 30 requires an organisation that processes
@@ -300,6 +301,10 @@ jobs:               # the fallback, for pipelines that emit no facet
   "acme.fraud/*":
     purpose: fraud-detection
     legal_basis: legitimate-interest
+
+platforms:          # labels for the platform line, merged over qedro's own
+  cordata: AWS Glue # a namespace scheme qedro does not know
+  s3: the export bucket
 ```
 
 Patterns are fnmatch against `namespace/name` and then the bare name, first match in
@@ -488,6 +493,7 @@ everything that run read.
 $ qedro provenance demo/lineage --dataset billing_curated.dunning_cases
   warehouse/billing_curated.dunning_cases
     produced by   acme.billing/dunning-weekly
+    platform      dbt · PostgreSQL
     code          https://github.com/acme-finanz/data-platform at b7eb23bd289c
                   main models/billing/dunning_cases.sql
     signature     signature unknown — nothing reported it
@@ -522,6 +528,14 @@ says nothing about that. There is no standard facet for it — `datasetVersion` 
 which version a run read without saying who published it — so today only
 `pipeline-runtime` reports it.
 
+**The `platform` line says what ran the step and where its output lives**, as the
+events say: the integration from the standard `jobType` facet, or from the `producer`
+URL, and the platform from the dataset's namespace (`snowflake://…`, `s3://…`) or its
+`dataSource` facet. Nothing is guessed from a name, so where the events say neither
+the line reads *not reported*. A namespace written as a URI is not always a platform
+— pipeline-runtime's `cordata://fraud` names a domain — so a scheme qedro has no label
+for is left out rather than printed; `platforms:` in `qedro.yaml` gives it one.
+
 Nothing here calls a forge API to resolve a commit. Read-only is a property of what
 the code can reach.
 
@@ -542,14 +556,17 @@ Erasure of warehouse/crm_raw.contacts
     tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite, not a drop or truncate
 
     warehouse/crm_curated.customers
+      platform      dbt · PostgreSQL
       state         written 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
       how           not reported, so not shown to have replaced the contents
 
       warehouse/billing_curated.invoices
+        platform      Airflow · PostgreSQL
         state         written 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
         how           not reported, so not shown to have replaced the contents
 
         warehouse/billing_curated.dunning_cases
+          platform      dbt · PostgreSQL
           state         not written since the tombstone
 
   this record does not claim to be a proof:

@@ -6,6 +6,22 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The erasure record and the provenance chain say what ran each step and where its
+  data lives** (#39), such as `dbt · Snowflake`. Read from the events only: the
+  integration from the standard `jobType` facet or the `producer` URL, the platform
+  from the dataset's namespace or its `dataSource` facet. Where they say neither, the
+  output says *not reported* rather than guessing. Text output gains a `platform` line
+  for each descendant and step, markdown a column, xlsx two (`Ran on`, `Stored in`),
+  JSON the fields `ran_on` and `stored_in`, and each PDF box a line.
+- **`platforms:` in `qedro.yaml`** labels an integration or a namespace scheme qedro
+  does not know, or replaces one of its labels. A namespace scheme with no label is
+  left out, because many namespaces are logical names written as URIs.
+- **Every PDF page's footer carries the wordmark**, small, with the square filled only
+  when the record earns the mark, so a page separated from its record still says
+  whether that record claims to be a proof.
+
 ## 0.13.1 — 2026-11-14
 
 A fix to how the erasure record's text output indents a tree that branches, and
