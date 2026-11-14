@@ -6,7 +6,10 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.13.0 — 2026-11-14
+
+The Art. 30 record can be written as PDF too, which leaves only the deployer view
+and the quality history without one. Nothing changes in what any record says.
 
 - **The Art. 30 record as a PDF** (#37): `qedro ropa … --out record.pdf`, with the
   `pdf` extra. The controller and the verdict come first, then an overview of the
