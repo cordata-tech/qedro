@@ -6,6 +6,21 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The erasure record's text output nests each descendant under the dataset it came
+  from.** It printed them in the order the walk found them, breadth-first, indented by
+  depth, so where two datasets branched a descendant appeared under its parent's
+  sibling. The `derived by` line was right; the indentation contradicted it. No
+  descendant, state or verdict changes, and a straight chain prints as before.
+- **Every PDF opens with the wordmark**, QEDR and its square, as at the top of the
+  README. The square is filled on a record that earns the mark and drawn as an outline
+  on one that withholds it, so the wordmark never claims what the verdict below it does
+  not. The scope statement is now kept on one page where it fits.
+- **An example erasure that branches**, in `docs/examples/erasure`, which the README's
+  picture of the erasure tree is drawn from. The demo's erasure is a straight chain;
+  this one shows every state a descendant can be in.
+
 ## 0.13.0 — 2026-11-14
 
 The Art. 30 record can be written as PDF too, which leaves only the deployer view

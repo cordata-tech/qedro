@@ -21,6 +21,13 @@ right they did not, so those values came from a mapping file and a list of decla
 activities, and the record says it is not a proof and tints each row that is part of
 why.*
 
+![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset and its state: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
+
+*What an erasure reached, from the erasure record's PDF
+(`qedro erasure docs/examples/erasure --dataset crm_raw.contacts --out erasure.pdf`).
+Every dataset derived from the erased one is a box saying, in words, whether a job
+has replaced it since; the tinted ones still hold what the erasure removed upstream.*
+
 The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
 known in German as the *DSGVO*. Its Article 30 requires an organisation that processes
 personal data, or processes it on another's behalf, to keep a written record of its
@@ -563,6 +570,10 @@ materialisation — and as **only appended to** where dbt says `incremental` or
 and then the descendant is counted as **written**, with a line saying how it was
 written was not reported. dbt does not report `--full-refresh`, so a full refresh of an
 incremental model reads as an append, which errs toward withholding.
+
+The demo's erasure is a straight chain, so it shows two of those states. The tree at
+the top of this page is the same projection run against `docs/examples/erasure`, a
+small set of events that branches and shows all of them; `--out erasure.pdf` draws it.
 
 **The tombstone is evidence or an assertion.** OpenLineage already has the facet —
 `lifecycleStateChange`, whose `DROP`, `TRUNCATE` and `OVERWRITE` values are erasures

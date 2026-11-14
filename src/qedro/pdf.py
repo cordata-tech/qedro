@@ -115,6 +115,44 @@ class _Mark(Flowable):
         self.canv.rect(0, 0, self.size, self.size, stroke=0, fill=1)
 
 
+class _Wordmark(Flowable):
+    """QEDR and the square, as `docs/wordmark.svg` draws it, at the top of page one.
+
+    The square is filled only on a record that earns the mark, and drawn as an
+    outline on one that withholds it. The wordmark is the product's name finished
+    by a complete run, so a filled square on a record that says it is not a
+    proof would contradict the verdict printed under it.
+    """
+
+    SIZE = 14
+
+    def __init__(self, complete: bool) -> None:
+        super().__init__()
+        self.complete = complete
+        self.text_w = pdfmetrics.stringWidth("QEDR", BOLD, self.SIZE)
+        # The proportions of the SVG: a square 0.64 em on a side, 0.09 em after
+        # the R, standing on the baseline.
+        self.side, self.gap = 0.64 * self.SIZE, 0.09 * self.SIZE
+        self.width = self.text_w + self.gap + self.side
+        self.height = self.SIZE
+
+    def draw(self) -> None:
+        canvas = self.canv
+        canvas.setFillColor(INK)
+        canvas.setStrokeColor(INK)
+        canvas.setFont(BOLD, self.SIZE)
+        canvas.drawString(0, 0, "QEDR")
+        x = self.text_w + self.gap
+        if self.complete:
+            canvas.rect(x, 0, self.side, self.side, stroke=0, fill=1)
+        else:
+            inset = 0.75  # half the line, so the outline covers the same square
+            canvas.setLineWidth(2 * inset)
+            canvas.rect(
+                x + inset, inset, self.side - 2 * inset, self.side - 2 * inset, stroke=1, fill=0
+            )
+
+
 def _verdict(record: Any, earned: str) -> list[Flowable]:
     """The mark and the sentence it ends, or the reasons it is withheld.
 
@@ -162,11 +200,14 @@ def _scope(
             ]
         )
     )
-    return [_p(title, HEADING), table, Spacer(1, 6), _p(scope.OUT_OF_VIEW, SMALL)]
+    # Kept together where it fits: the sentence saying what the record cannot
+    # see belongs on the same page as what it did, not split by a page footer.
+    return [KeepTogether([_p(title, HEADING), table, Spacer(1, 6), _p(scope.OUT_OF_VIEW, SMALL)])]
 
 
-def _document(title: str, body: Sequence[Flowable], *, footer: str) -> bytes:
+def _document(title: str, body: Sequence[Flowable], *, footer: str, complete: bool) -> bytes:
     buffer = io.BytesIO()
+    body = [_Wordmark(complete), Spacer(1, 10), *body]
 
     def page(canvas: Any, doc: Any) -> None:
         canvas.saveState()
@@ -409,6 +450,7 @@ def erasure_document(record: Any) -> bytes:
         f"Erasure of {record.dataset}",
         body,
         footer=f"qedro {__version__} — erasure of {record.dataset}",
+        complete=record.complete,
     )
 
 
@@ -518,6 +560,7 @@ def provenance_document(record: Any) -> bytes:
         f"Provenance of {record.dataset}",
         body,
         footer=f"qedro {__version__} — provenance of {record.dataset}",
+        complete=record.complete,
     )
 
 
@@ -773,4 +816,5 @@ def ropa_document(record: Any) -> bytes:
         f"Record of processing activities — {name}",
         body,
         footer=f"qedro {__version__} — record of processing activities, {name}",
+        complete=record.complete,
     )

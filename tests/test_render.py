@@ -957,6 +957,35 @@ class TestTheArt30Pdf:
         assert "No controller is declared" in as_text(render.pdf(ropa_record(cfg="")))
 
 
+class TestTheWordmark:
+    """QEDR and its square head every PDF, the square filled only when earned."""
+
+    @pytest.mark.parametrize("projection", ["ropa", "provenance", "erasure"])
+    def test_every_pdf_starts_with_it(self, projection):
+        # Past the footer, which is drawn on the page before its content.
+        text = as_text(render.pdf(PROJECTIONS[projection]()))
+        assert text.split("page 1", 1)[1].lstrip().startswith("QEDR")
+
+    def test_the_square_is_filled_only_on_a_record_that_earns_the_mark(self):
+        from qedro.pdf import _Wordmark
+
+        class Canvas:
+            def __init__(self):
+                self.rects = []
+
+            def rect(self, *args, stroke, fill):
+                self.rects.append(fill)
+
+            def __getattr__(self, name):
+                return lambda *args, **kwargs: None
+
+        for complete, filled in ((True, 1), (False, 0)):
+            mark = _Wordmark(complete)
+            mark.canv = Canvas()
+            mark.draw()
+            assert mark.canv.rects == [filled]
+
+
 class TestALongKeyIsKeptWhole:
     """A dataset key breaks after a `/`, never inside a name (#37)."""
 

@@ -960,7 +960,7 @@ def _(record: erasure_module.Record, *, symbol: bool = True, width: int = 88) ->
     if not record.descendants:
         out.append("  nothing in the window read it — no descendants were found")
         out.append("")
-    for descendant in record.descendants:
+    for descendant in _depth_first(record):
         indent = "  " + "  " * descendant.depth
         out.append(f"{indent}{descendant.dataset}")
         out.append(f"{indent}  derived by    {descendant.through or 'unreported'}")
@@ -975,6 +975,28 @@ def _(record: erasure_module.Record, *, symbol: bool = True, width: int = 88) ->
     out.append("")
     out.extend(_verdict_text(record, record.tombstone.earned(), symbol=symbol, withheld="record"))
     return "\n".join(out) + "\n"
+
+
+def _depth_first(record) -> list:
+    """The descendants with each one directly under the dataset it came from.
+
+    The walk finds them breadth-first, and indenting that order by depth put a
+    dataset under whichever sibling of its parent happened to come last — the
+    indentation claimed a derivation the record did not.
+    """
+    children: dict[str, list] = {}
+    for d in record.descendants:
+        children.setdefault(d.parent or record.dataset, []).append(d)
+    out: list = []
+
+    def visit(key: str) -> None:
+        for d in children.get(key, []):
+            out.append(d)
+            visit(d.dataset)
+
+    visit(record.dataset)
+    # Anything the walk could not hang on a parent still gets printed.
+    return out + [d for d in record.descendants if d not in out]
 
 
 @markdown.register
