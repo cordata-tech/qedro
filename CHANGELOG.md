@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.12.0 — 2026-11-14
+
+The erasure record and the provenance chain can be written as PDF, for the people who
+receive a record rather than run qedro. Nothing else changes in what either record
+says; the erasure JSON gains one field.
 
 - **The erasure record as a PDF** (#37): `qedro erasure … --out erasure.pdf`, for the
   people who receive a record rather than run qedro — an auditor who files it, a DPO
