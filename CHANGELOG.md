@@ -6,7 +6,10 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.13.1 — 2026-11-14
+
+A fix to how the erasure record's text output indents a tree that branches, and
+the wordmark on every PDF. No verdict changes.
 
 - **The erasure record's text output nests each descendant under the dataset it came
   from.** It printed them in the order the walk found them, breadth-first, indented by
