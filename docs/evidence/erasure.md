@@ -1,6 +1,6 @@
 # Transcript: `qedro erasure`, evidenced, and across routine overwrites
 
-Captured by script from qedro 0.11.0, at commit `4577f39` with a clean working tree,
+Captured by script from qedro 0.14.0, at commit `67a5c11` with a clean working tree,
 on Python 3.12.13. The output below is what each command printed, unedited. Run the
 same commands from the repository root to reproduce it.
 
@@ -31,16 +31,19 @@ Erasure of warehouse/crm_raw.contacts
 
     warehouse/crm_curated.customers
       derived by    acme.crm/customers-curated
+      platform      dbt · PostgreSQL
       state         written 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
       how           not reported, so not shown to have replaced the contents
 
       warehouse/billing_curated.invoices
         derived by    acme.billing/invoices-nightly
+        platform      Airflow · PostgreSQL
         state         written 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
         how           not reported, so not shown to have replaced the contents
 
         warehouse/billing_curated.dunning_cases
           derived by    acme.billing/dunning-weekly
+          platform      dbt · PostgreSQL
           state         not written since the tombstone
 
   Scope of this record
@@ -79,6 +82,7 @@ Erasure of warehouse/crm_curated.contacts_snapshot
 
     warehouse/crm_curated.segments
       derived by    acme.crm/segments-daily
+      platform      Airflow
       state         written 2026-07-24T05:02:00+00:00 — 1 run since the tombstone
       how           not reported, so not shown to have replaced the contents
 
@@ -119,6 +123,7 @@ Erasure of warehouse/crm_curated.contacts_snapshot
 
     warehouse/crm_curated.segments
       derived by    acme.crm/segments-daily
+      platform      Airflow
       state         written 2026-07-24T05:02:00+00:00 — 2 runs since the tombstone
       how           not reported, so not shown to have replaced the contents
 
