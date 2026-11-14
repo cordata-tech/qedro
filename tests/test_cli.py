@@ -265,7 +265,7 @@ class TestRopa:
         # Driven off the registry rather than a list written here, so a format
         # added later cannot be unreachable from the CLI and still pass.
         events, config = _estate(tmp_path, facet=True)
-        for fmt in sorted(f for f in render.names() if f != "pdf"):  # no PDF yet, #37
+        for fmt in sorted(render.names()):
             argv = ["ropa", str(events), "--config", str(config), "--format", fmt]
             if render.is_binary(fmt):
                 out = tmp_path / f"record.{fmt}"
@@ -275,13 +275,20 @@ class TestRopa:
                 assert main(argv) == 0
                 assert capsys.readouterr().out.strip()
 
-    def test_a_pdf_is_refused_in_a_sentence_until_it_exists(self, tmp_path, capsys):
-        # #37: erasure has a PDF so far, and the Art. 30 record does not.
+    def test_a_pdf_is_written_from_its_suffix(self, tmp_path):
+        # #37: the record a DPO signs and an authority asks to see.
         events, config = _estate(tmp_path, facet=True)
         out = tmp_path / "record.pdf"
-        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 2
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
+        assert out.read_bytes().startswith(b"%PDF")
+
+    def test_the_deployer_view_refuses_a_pdf_in_a_sentence_until_it_exists(self, tmp_path, capsys):
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "record.pdf"
+        argv = ["ropa", str(events), "--config", str(config), "--view", "deployer"]
+        assert main([*argv, "--out", str(out)]) == 2
         err = capsys.readouterr().err
-        assert "not yet for ropa" in err and "--out record.xlsx" in err
+        assert "not yet for deployer" in err and "--out record.xlsx" in err
         assert not out.exists()
 
 

@@ -1341,7 +1341,7 @@ def pdf(record: object) -> bytes:
     """
     projection = type(record).__module__.rsplit(".", 1)[-1]
     raise UsageError(
-        f"PDF output is available for erasure and provenance so far, not yet for {projection} "
+        f"PDF output is available for the Art. 30 record, erasure and provenance so far, not yet for {projection} "
         "— see cordata-tech/qedro#37; --out record.xlsx gives the workbook meanwhile"
     )
 
@@ -1354,6 +1354,11 @@ def _pdf_module():
             "PDF output needs an optional dependency — pip install 'qedro[pdf]'"
         ) from None
     return module
+
+
+@pdf.register
+def _(record: Record) -> bytes:
+    return _pdf_module().ropa_document(record)
 
 
 @pdf.register

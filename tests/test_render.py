@@ -26,6 +26,7 @@ from openpyxl import load_workbook
 from qedro import (
     TOMBSTONE,
     __version__,
+    compare,
     config,
     deployer,
     erasure,
@@ -51,17 +52,20 @@ WORDS = vocabulary.load()
 def formats_for(kind: type) -> list[str]:
     """The formats with a renderer for records of *kind*, rather than a refusal.
 
-    Every format but PDF covers every projection; PDF covers erasure so far
-    (#37), and a projection gains it here, without a test changing, the day
-    its renderer is registered.
+    Every format but PDF covers every projection; PDF covers the Art. 30
+    record, erasure and provenance so far (#37), and a projection gains it
+    here, without a test changing, the day its renderer is registered.
     """
     return [fmt for fmt in sorted(render.FORMATS) if render.supports(fmt, kind)]
 
 
-#: What the Art. 30 record renders as, which is also what the other
-#: projections this file tests by format render as, PDF aside.
+#: What the Art. 30 record renders as. Each projection tested by format below
+#: uses its own list, so a PDF arrives in its tests the day it is registered.
 FORMATS = formats_for(Record)
 ERASURE_FORMATS = formats_for(erasure.Record)
+QUALITY_FORMATS = formats_for(quality.Record)
+DEPLOYER_FORMATS = formats_for(deployer.DeployerRecord)
+COMPARISON_FORMATS = formats_for(compare.Comparison)
 
 
 def record(events, cfg="controller: ACME GmbH\n"):
@@ -144,7 +148,7 @@ CASES = [(p, f) for p in sorted(PROJECTIONS) for f in formats_for(type(PROJECTIO
 #: coverage to the Art. 30 view it is built from. Excluded from that property
 #: rather than exempted from it quietly.
 DOMAIN_AWARE = ["ropa", "quality"]
-DOMAIN_CASES = [(p, f) for p in DOMAIN_AWARE for f in FORMATS]
+DOMAIN_CASES = [(p, f) for p in DOMAIN_AWARE for f in formats_for(type(PROJECTIONS[p]()))]
 
 
 def readable(record, fmt):
@@ -472,7 +476,7 @@ class TestEveryProjectionKeepsTheProperties:
 class TestQualityRendering:
     """What only this projection can get wrong."""
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", QUALITY_FORMATS)
     def test_the_domain_filter_and_what_it_left_out_are_rendered(self, fmt):
         # A dataset left out by a wrong domain guess is otherwise
         # indistinguishable from one that does not exist. See #11.
@@ -495,13 +499,13 @@ class TestQualityRendering:
                 in out
             )
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", QUALITY_FORMATS)
     def test_unchecked_datasets_are_named_not_only_counted(self, fmt):
         # The names are what somebody acts on. A count alone is a fact nobody
         # can do anything with.
         assert "wh/unchecked" in readable(quality_record(), fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", QUALITY_FORMATS)
     def test_a_failure_is_distinguishable_from_a_pass(self, fmt):
         failing = quality.build(
             [quality_event(assertions=[check(success=False)])],
@@ -568,11 +572,11 @@ class TestProvenanceRendering:
 class TestDeployerRendering:
     """What only the deployer view can get wrong, asserted in every format."""
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", DEPLOYER_FORMATS)
     def test_the_consolidated_text_is_cited(self, fmt):
         assert "02024R1689-20260727" in readable(deployer_record(), fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", DEPLOYER_FORMATS)
     def test_art_26_is_never_shown_without_its_date(self, fmt):
         # The deployer duties apply to Annex III high-risk systems from
         # 2 December 2027. A format that cited Art. 26 without that would
@@ -581,13 +585,13 @@ class TestDeployerRendering:
         assert "Art. 26" in out or "article_26" in out
         assert "2 December 2027" in out or "2027-12-02" in out
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", DEPLOYER_FORMATS)
     def test_a_declared_use_case_is_marked_as_declared(self, fmt):
         out = readable(deployer_record(), fmt)
         assert "support-reply-drafts" in out
         assert "declared" in out
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", DEPLOYER_FORMATS)
     def test_the_model_version_is_named(self, fmt):
         assert "2026-06-fraud-v3" in readable(deployer_record(), fmt)
 
@@ -656,11 +660,11 @@ class TestArt26ReferencesAreContextNotEvidence:
     """From the platform-side review of #7: an article number beside a list of
     inputs read as if the view had checked representativeness. It had not."""
 
-    @pytest.mark.parametrize("fmt", [f for f in FORMATS if f != "json"])
+    @pytest.mark.parametrize("fmt", [f for f in DEPLOYER_FORMATS if f != "json"])
     def test_the_inputs_are_context_for_art_26_4(self, fmt):
         assert "context for Art. 26(4)" in readable(deployer_record(), fmt)
 
-    @pytest.mark.parametrize("fmt", [f for f in FORMATS if f != "json"])
+    @pytest.mark.parametrize("fmt", [f for f in DEPLOYER_FORMATS if f != "json"])
     def test_the_records_are_context_for_art_26_6(self, fmt):
         assert "context for Art. 26(6)" in readable(deployer_record(), fmt)
 
@@ -711,17 +715,17 @@ class TestTheComparisonRendersInEveryFormat:
             document(after if after is not None else [activity()], **kw),
         )
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", COMPARISON_FORMATS)
     def test_no_format_prints_the_mark(self, fmt):
         # Two identical records: the case where a renderer that borrowed the
         # record's verdict would most plausibly print one.
         assert TOMBSTONE not in readable(self.built(), fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", COMPARISON_FORMATS)
     def test_every_format_states_what_a_comparison_cannot_verify(self, fmt):
         assert "verifies neither" in readable(self.built(), fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", COMPARISON_FORMATS)
     def test_every_format_reports_a_regression_with_the_value_unchanged(self, fmt):
         built = self.built(after=[activity(provenance="mapping")])
         out = readable(built, fmt)
@@ -737,7 +741,7 @@ class TestTheComparisonRendersInEveryFormat:
             assert "emitted facet" in out
             assert "mapping file" in out
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", COMPARISON_FORMATS)
     def test_every_format_carries_both_verdicts(self, fmt):
         built = self.built(complete=False)
         if fmt == "json":
@@ -748,11 +752,11 @@ class TestTheComparisonRendersInEveryFormat:
             assert "stands on its own evidence" in out
             assert "does not claim to be a proof" in out
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", COMPARISON_FORMATS)
     def test_every_format_carries_the_cautions(self, fmt):
         assert "different sources" in readable(self.built(source="s3://exports"), fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", COMPARISON_FORMATS)
     def test_a_comparison_with_no_findings_says_so_rather_than_printing_nothing(self, fmt):
         built = self.built()
         assert not built.changes
@@ -920,10 +924,62 @@ class TestTheProvenancePdf:
         assert "Every step ran under a signed commit." in text
 
 
+class TestTheArt30Pdf:
+    """#37: the record a DPO signs and a supervisory authority asks to see."""
+
+    def test_the_same_record_gives_the_same_bytes(self):
+        assert render.pdf(ropa_record()) == render.pdf(ropa_record())
+
+    def test_an_earned_record_states_the_sentence_the_mark_finishes(self):
+        text = as_text(render.pdf(record([event(facet=EVIDENCED)])))
+        assert "Every activity stands on emitted evidence." in text
+
+    def test_a_withheld_record_gives_its_reasons_before_the_activities(self):
+        text = as_text(render.pdf(record([event()])))
+        assert text.index("does not claim to be a proof") < text.index("The activities")
+        assert "no purpose or no legal basis" in text
+
+    def test_the_tint_is_explained_only_where_a_row_is_tinted(self):
+        assert "Tinted rows" in as_text(render.pdf(record([event()])))
+        assert "Tinted rows" not in as_text(render.pdf(record([event(facet=EVIDENCED)])))
+
+    def test_every_item_says_where_its_value_came_from(self):
+        text = as_text(render.pdf(record([event(facet=EVIDENCED)])))
+        for item in "bcdefg":
+            assert f"Art. 30(1)({item})" in text
+        assert "emitted facet" in text
+
+    def test_an_item_nothing_reported_says_so_rather_than_staying_blank(self):
+        # A dash alone would read as *no special categories here*.
+        assert "nothing reported" in as_text(render.pdf(record([event(facet=EVIDENCED)])))
+
+    def test_a_missing_controller_is_said_not_left_blank(self):
+        assert "No controller is declared" in as_text(render.pdf(ropa_record(cfg="")))
+
+
+class TestALongKeyIsKeptWhole:
+    """A dataset key breaks after a `/`, never inside a name (#37)."""
+
+    def test_a_key_that_fits_is_left_alone(self):
+        from reportlab.lib.units import mm
+
+        from qedro.pdf import _key
+
+        assert "<br/>" not in _key("wh/scores", 60 * mm).text
+
+    def test_a_key_too_wide_breaks_after_its_last_slash_that_fits(self):
+        from reportlab.lib.units import mm
+
+        from qedro.pdf import _key
+
+        name = "fraud_curated.transactions_scored_" * 2
+        assert _key(f"cordata://fraud/{name}", 60 * mm).text.endswith(f"<br/>{name}")
+
+
 class TestPdfIsRefusedWhereItDoesNotExistYet:
     """A projection without a PDF renderer says so in a sentence (#37)."""
 
-    @pytest.mark.parametrize("projection", ["ropa", "quality", "deployer"])
+    @pytest.mark.parametrize("projection", ["quality", "deployer"])
     def test_with_the_projection_named_and_the_workbook_offered(self, projection):
         from qedro.errors import UsageError
 

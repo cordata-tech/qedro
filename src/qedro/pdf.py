@@ -82,6 +82,26 @@ def _p(text: str, style: ParagraphStyle = BODY) -> Paragraph:
     return Paragraph(escape(text), style)
 
 
+def _key(key: str, width: float, style: ParagraphStyle = CELL) -> Paragraph:
+    """A dataset key, broken after a `/` rather than mid-word when it is too wide.
+
+    A key has no spaces, so reportlab would otherwise split it wherever the
+    column ends — `transactions_sc` / `ored` — and a reader checking a name
+    against the catalog is the reader that cannot afford that.
+    """
+    usable = width - 12  # the cell's own padding
+    if pdfmetrics.stringWidth(key, style.fontName, style.fontSize) <= usable:
+        return _p(key, style)
+    cut = key.rfind("/", 0, len(key) - 1)
+    while (
+        cut > 0 and pdfmetrics.stringWidth(key[: cut + 1], style.fontName, style.fontSize) > usable
+    ):
+        cut = key.rfind("/", 0, cut)
+    if cut <= 0:
+        return _p(key, style)
+    return Paragraph(f"{escape(key[: cut + 1])}<br/>{escape(key[cut + 1 :])}", style)
+
+
 class _Mark(Flowable):
     """The tombstone, drawn: Vera has no glyph for U+220E."""
 
@@ -122,10 +142,13 @@ def _verdict(record: Any, earned: str) -> list[Flowable]:
     return out
 
 
-def _scope(scope: Any, title: str = "Scope of this record") -> list[Flowable]:
+def _scope(
+    scope: Any, title: str = "Scope of this record", extra: Sequence[tuple[str, str]] = ()
+) -> list[Flowable]:
     """The scope statement, unconditionally, as every format prints it (#3)."""
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
     rows += [(label[0].upper() + label[1:], value) for label, value in scope.statement()]
+    rows += extra
     table = Table(
         [[_p(label, CELL), _p(value, CELL)] for label, value in rows],
         colWidths=[32 * mm, WIDTH - 32 * mm],
@@ -357,7 +380,10 @@ def erasure_document(record: Any) -> bytes:
             state = _reached_text(d) + (f" — {how}" if how else "")
             rows.append(
                 [
-                    [_p(d.dataset, CELL), _p(f"derived by {d.through or 'unreported'}", SMALL)],
+                    [
+                        _key(d.dataset, 82 * mm),
+                        _p(f"derived by {d.through or 'unreported'}", SMALL),
+                    ],
                     _p(str(d.depth), CELL),
                     _p(state, CELL),
                 ]
@@ -472,7 +498,7 @@ def provenance_document(record: Any) -> bytes:
                     n = step.also_produced_by
                     lines.append(f"also: {n} other {'run' if n == 1 else 'runs'} wrote this")
                 evidence = [_p(line, CELL) for line in lines]
-            rows.append([_p(step.dataset, CELL), _p(str(step.depth), CELL), evidence])
+            rows.append([_key(step.dataset, 72 * mm), _p(str(step.depth), CELL), evidence])
         table = Table(rows, colWidths=[72 * mm, 14 * mm, WIDTH - 86 * mm], repeatRows=1)
         style = [
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -492,4 +518,259 @@ def provenance_document(record: Any) -> bytes:
         f"Provenance of {record.dataset}",
         body,
         footer=f"qedro {__version__} — provenance of {record.dataset}",
+    )
+
+
+# --- the Art. 30 record --------------------------------------------------------
+
+#: Item, value, and where the value came from. The source column is what makes
+#: this a record rather than a register: a register states, this says on what.
+ITEM_W, SOURCE_W = 48 * mm, 40 * mm
+VALUE_W = WIDTH - ITEM_W - SOURCE_W
+
+
+@dataclass(frozen=True)
+class _Row:
+    """One line of an activity's table."""
+
+    label: str
+    value: str
+    source: str
+    #: The Art. 30(1) item it answers, cited under the label.
+    item: str = ""
+    #: Part of why the record does not claim to be a proof. Tinted, and the
+    #: source column says why in words.
+    gap: bool = False
+    #: Dataset keys, one per line, each kept whole.
+    keys: tuple[str, ...] = ()
+
+
+#: The classification rows, in Art. 30(1) order: the tag key, its label here,
+#: and the item it answers.
+CLASSIFICATION_ROWS = (
+    ("data_category", "Categories of personal data", "c"),
+    ("special_category", "Special categories", "c"),
+    ("subject_type", "Categories of data subjects", "c"),
+    ("residency", "Residency", "e"),
+    ("retention", "Retention", "f"),
+)
+
+
+def _sourced_row(label: str, sourced: Any, item: str = "") -> _Row:
+    from .xlsx import _source
+
+    return _Row(
+        label,
+        sourced.value or "—",
+        _source(sourced) if sourced.value else "nothing declared",
+        item=item,
+        gap=not sourced.evidenced or sourced.unrecognised,
+    )
+
+
+def _asserted_row(label: str, values: tuple[str, ...], item: str) -> _Row:
+    # Art. 30(1)(d) and (g): nothing emits either, so a value is always somebody's
+    # word, and says so in the column beside it.
+    if not values:
+        return _Row(label, "—", "nothing declared", item=item)
+    return _Row(label, "; ".join(values), "declared", item=item)
+
+
+def _activity_rows(activity: Any) -> list[_Row]:
+    from .xlsx import SOURCE
+
+    rows = [
+        _sourced_row("Purpose", activity.purpose, "b"),
+        _sourced_row("Legal basis", activity.legal_basis),
+    ]
+    for key, label, item in CLASSIFICATION_ROWS:
+        found = [c for c in activity.classification if c.key == key]
+        if not found:
+            # Nothing reported, which is not the same as nothing applies: a dash
+            # alone would read as *no special categories here*.
+            rows.append(_Row(label, "—", "nothing reported", item=item))
+            continue
+        by = sorted({j for c in found for j in c.declared_by})
+        source = SOURCE.get(str(found[0].provenance), str(found[0].provenance))
+        if by:
+            source += f", declared by {', '.join(by)}"
+        flagged = [c.value for c in found if c.unrecognised]
+        if flagged:
+            source += f" — {', '.join(flagged)} not in the vocabulary"
+        rows.append(
+            _Row(label, ", ".join(c.value for c in found), source, item=item, gap=bool(flagged))
+        )
+    rows.append(_asserted_row("Recipients", activity.recipients, "d"))
+    rows.append(_asserted_row("Security measures", activity.security_measures, "g"))
+    if activity.unclassified:
+        total = len(set(activity.inputs) | set(activity.outputs))
+        rows.append(
+            _Row(
+                "Unclassified",
+                f"{len(activity.unclassified)} of {total}",
+                "no classification the record can use",
+                keys=activity.unclassified,
+            )
+        )
+    if activity.inputs:
+        rows.append(_Row("Reads", "", "lineage", keys=activity.inputs))
+    if activity.outputs:
+        rows.append(_Row("Writes", "", "lineage", keys=activity.outputs))
+    first = activity.first_seen.isoformat() if activity.first_seen else "unreported"
+    last = activity.last_seen.isoformat() if activity.last_seen else "unreported"
+    rows.append(
+        _Row("Runs", f"{activity.runs} in the window, first {first}, last {last}", "lineage")
+    )
+    return rows
+
+
+def _declared_rows(entry: Any) -> list[_Row]:
+    # Every row the events would have filled says `no lineage`: a dash would read
+    # as *nothing applies* rather than *nothing could have said*.
+    rows = [
+        _sourced_row("Purpose", entry.purpose, "b"),
+        _sourced_row("Legal basis", entry.legal_basis),
+    ]
+    rows += [_Row(label, "no lineage", "—", item=item) for _, label, item in CLASSIFICATION_ROWS]
+    rows.append(_asserted_row("Recipients", entry.recipients, "d"))
+    rows.append(_asserted_row("Security measures", entry.security_measures, "g"))
+    if entry.inputs:
+        rows.append(_Row("Reads", "no lineage — declared:", "declared", keys=entry.inputs))
+    else:
+        rows.append(_Row("Reads", "no lineage", "—"))
+    rows += [_Row("Writes", "no lineage", "—"), _Row("Runs", "no lineage", "—")]
+    if entry.note:
+        rows.append(_Row("Note", entry.note, "declared"))
+    return rows
+
+
+def _activity_table(rows: Sequence[_Row]) -> Table:
+    cells = []
+    for r in rows:
+        label: list[Flowable] = [_p(r.label, CELL)]
+        if r.item:
+            label.append(_p(f"Art. 30(1)({r.item})", SMALL))
+        value: list[Flowable] = [_p(r.value, CELL)] if r.value else []
+        value += [_key(k, VALUE_W) for k in r.keys]
+        cells.append([label, value, _p(r.source, CELL)])
+    table = Table(cells, colWidths=[ITEM_W, VALUE_W, SOURCE_W])
+    style = [
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEABOVE", (0, 0), (-1, 0), 0.8, INK),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.25, RULE),
+    ]
+    style += [("BACKGROUND", (0, i), (-1, i), UNREACHED) for i, r in enumerate(rows) if r.gap]
+    table.setStyle(TableStyle(style))
+    return table
+
+
+def _overview(record: Any) -> Table:
+    """One line per activity, so a reader sees the whole record before any of it."""
+    from .xlsx import _source
+
+    widths = [58 * mm, 44 * mm, 38 * mm, WIDTH - 140 * mm]
+    rows: list[list[Any]] = [
+        [_p(h, CELL) for h in ("Activity", "Purpose", "Legal basis", "Purpose and basis from")]
+    ]
+    gaps: list[int] = []
+    for a in record.activities:
+        sources = {_source(a.purpose), _source(a.legal_basis)}
+        rows.append(
+            [
+                _key(a.key, widths[0]),
+                _p(a.purpose.value or "—", CELL),
+                _p(a.legal_basis.value or "—", CELL),
+                _p(" / ".join(sorted(sources)), CELL),
+            ]
+        )
+        if not a.evidenced or a.purpose.unrecognised or a.legal_basis.unrecognised:
+            gaps.append(len(rows) - 1)
+    for d in record.declared:
+        rows.append(
+            [
+                _key(d.name, widths[0]),
+                _p(d.purpose.value or "—", CELL),
+                _p(d.legal_basis.value or "—", CELL),
+                _p("declared, no lineage", CELL),
+            ]
+        )
+        gaps.append(len(rows) - 1)
+    table = Table(rows, colWidths=widths, repeatRows=1)
+    style = [
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, INK),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.25, RULE),
+    ]
+    style += [("BACKGROUND", (0, i), (-1, i), UNREACHED) for i in gaps]
+    table.setStyle(TableStyle(style))
+    return table
+
+
+def ropa_document(record: Any) -> bytes:
+    """An Art. 30 record of processing activities as PDF bytes."""
+    controller = record.controller
+    body: list[Flowable] = [_p("Record of processing activities", TITLE), Spacer(1, 4)]
+    # Art. 30(1)(a). A missing controller is said, not left blank: a blank reads
+    # as a layout slip rather than as the hole it is.
+    who = [("Controller", controller.name or "No controller is declared")]
+    who += [
+        (label, value)
+        for label, value in (
+            ("Contact", controller.contact),
+            ("Representative", controller.representative),
+            ("Data protection officer", controller.dpo),
+        )
+        if value
+    ]
+    people = Table(
+        [[_p(label, SMALL), _p(value, BODY)] for label, value in who],
+        colWidths=[ITEM_W, WIDTH - ITEM_W],
+        hAlign="LEFT",
+    )
+    people.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                *[(side, (0, 0), (-1, -1), 1) for side in ("TOPPADDING", "BOTTOMPADDING")],
+                ("LEFTPADDING", (0, 0), (0, -1), 0),
+            ]
+        )
+    )
+    body += [people, Spacer(1, 10)]
+    body += _verdict(record, "every activity stands on emitted evidence")
+
+    if record.activities or record.declared:
+        body.append(_p("The activities", HEADING))
+        body.append(_overview(record))
+        if any(not a.evidenced for a in record.activities) or record.declared:
+            body.append(Spacer(1, 4))
+            body.append(
+                _p(
+                    "Tinted rows are part of why the record does not claim to be a proof. "
+                    "Each also says why in words; the tint adds nothing the text does not.",
+                    SMALL,
+                )
+            )
+    else:
+        body += [Spacer(1, 6), _p("No processing activity was found in the window.")]
+
+    for activity in record.activities:
+        heading = activity.key + (f" ({activity.domain})" if activity.domain else "")
+        body.append(KeepTogether([_p(heading, HEADING), _activity_table(_activity_rows(activity))]))
+    for entry in record.declared:
+        heading = f"{entry.name} — declared, no lineage"
+        body.append(KeepTogether([_p(heading, HEADING), _activity_table(_declared_rows(entry))]))
+
+    scope = record.scope
+    extra = [("Vocabulary", record.vocabulary)] if record.vocabulary else []
+    if scope.domains_source():
+        extra.append(("Domains", scope.domains_source()))
+    if scope.domains_silent:
+        extra.append(("Silent", f"{', '.join(scope.domains_silent)} (in scope, no lineage)"))
+    body += _scope(scope, extra=extra)
+    name = controller.name or "no controller declared"
+    return _document(
+        f"Record of processing activities — {name}",
+        body,
+        footer=f"qedro {__version__} — record of processing activities, {name}",
     )

@@ -6,6 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The Art. 30 record as a PDF** (#37): `qedro ropa … --out record.pdf`, with the
+  `pdf` extra. The controller and the verdict come first, then an overview of the
+  activities, then one table per activity: each Art. 30(1) item, its value, and where
+  the value came from, tinted where it is part of why the mark is withheld. A declared
+  activity says *no lineage* wherever the events would have spoken. The deployer view
+  and the quality history still refuse `--out *.pdf` in a sentence.
+- **A dataset key too wide for its column breaks after a `/`** in every PDF, rather
+  than wherever the column ended, which split
+  `cordata://fraud/fraud_curated.transactions_scored` mid-word.
+
 ## 0.12.0 — 2026-11-14
 
 The erasure record and the provenance chain can be written as PDF, for the people who

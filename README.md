@@ -12,6 +12,15 @@ processing activities, an assertion history, the provenance chain from a publish
 number to the signed commit that authorised it, and the datasets an erasure had to
 reach, with whether it did.
 
+![The first page of two Art. 30 records of the same pipelines, side by side. The left one ends its verdict with the mark; the right one lists three reasons it does not claim to be a proof and tints every activity row whose purpose and legal basis came from a mapping file or a declaration.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/art30-pdf.png)
+
+*The same three weeks of demo lineage, recorded twice with
+`qedro ropa … --out record.pdf`. On the left, the pipelines emitted why they process,
+so every purpose and legal basis is evidence and the record ends with the mark. On the
+right they did not, so those values came from a mapping file and a list of declared
+activities, and the record says it is not a proof and tints each row that is part of
+why.*
+
 The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
 known in German as the *DSGVO*. Its Article 30 requires an organisation that processes
 personal data, or processes it on another's behalf, to keep a written record of its
@@ -25,7 +34,7 @@ $ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
 ```
 
 > [!NOTE]
-> Early development. All four projections work, in four output formats, and the test
+> Early development. All four projections work, in five output formats, and the test
 > suite runs against real lineage captured from dbt, Airflow, Spark, Flink and
 > `art30-emit`. `0.x`
 > interfaces may still move between releases, and [`CHANGELOG.md`](CHANGELOG.md) says
@@ -255,13 +264,15 @@ below the data is a caveat nobody reads — the same failure this tool exists to
 prevent, reproduced in its own output. Where a value came from is a column of
 words; the tint on a cell is reinforcement and never carries the meaning alone.
 
-**PDF is the version somebody files, prints and signs**, so far for the erasure
-record and the provenance chain: `qedro erasure … --out erasure.pdf`, after
-`pipx install 'qedro[pdf]'`. The verdict comes first, then a tree with each box's
-state written in it — everything descended from the erased dataset, or every step
-back from the published one with its commit and whether that commit was signed — then
-a table of the same rows and the scope statement. The same events give the same
-bytes. The Art. 30 record, the deployer view and the quality history refuse
+**PDF is the version somebody files, prints and signs**, so far for the Art. 30
+record, the erasure record and the provenance chain: `qedro ropa … --out record.pdf`,
+after `pipx install 'qedro[pdf]'`. The verdict comes first. The Art. 30 record then
+lists its activities, and gives each one a table of the Art. 30(1) items with where
+every value came from. The erasure record and the provenance chain draw a tree with
+each box's state written in it — everything descended from the erased dataset, or
+every step back from the published one with its commit and whether that commit was
+signed — and a table of the same rows. Each ends with the scope statement, and the
+same events give the same bytes. The deployer view and the quality history refuse
 `--out *.pdf` with a sentence until their PDFs exist (#37).
 
 ### Configuration

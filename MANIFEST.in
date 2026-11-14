@@ -29,5 +29,9 @@ graft demo
 exclude docs/architecture.md
 exclude docs/architecture.pdf
 
+# The README's picture of the PDF. It checks nothing, and the README links it
+# from GitHub rather than from the package, so it would only add 200 KB.
+prune docs/images
+
 global-exclude *.py[cod] __pycache__/* .DS_Store
 prune **/__pycache__
