@@ -10,11 +10,17 @@
 # mode a register maintained by hand always has, and the record says so instead
 # of hiding it.
 
+# Everyone and everything named here is fictitious, and chosen to be seen to be:
+# ACME is the stand-in company, Erika Mustermann the name on German specimen
+# documents, Musterstadt the stand-in town, 00000 a postcode Germany never
+# assigned, and `.example` a domain reserved so that no mail to it can arrive.
+# A real street here once put a real address on every demo record and on the
+# README's picture of one.
 controller:
   name: ACME Finanz GmbH
   contact: datenschutz@acme-finanz.example
-  dpo: Dr. R. Voss, Datenschutzbeauftragte
-  representative: ACME Finanz GmbH, Bockenheimer Landstraße 1, 60325 Frankfurt am Main
+  dpo: Erika Mustermann, Datenschutzbeauftragte
+  representative: ACME Finanz GmbH, Musterstraße 1, 00000 Musterstadt
 
 # Named so that a domain producing no lineage in the window is visible in the
 # output rather than silently absent.

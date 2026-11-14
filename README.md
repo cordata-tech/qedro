@@ -19,7 +19,8 @@ reach, with whether it did.
 so every purpose and legal basis is evidence and the record ends with the mark. On the
 right they did not, so those values came from a mapping file and a list of declared
 activities, and the record says it is not a proof and tints each row that is part of
-why.*
+why. ACME Finanz GmbH, its address and its data protection officer are fictitious, as
+is everything `qedro demo` writes.*
 
 ![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset, its state, and what ran it and where it lives, such as dbt on Snowflake or Spark on S3: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
 

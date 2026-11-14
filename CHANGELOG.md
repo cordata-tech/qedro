@@ -21,6 +21,10 @@ before `1.0`.
 - **Every PDF page's footer carries the wordmark**, small, with the square filled only
   when the record earns the mark, so a page separated from its record still says
   whether that record claims to be a proof.
+- **The demo's controller details are placeholders that read as placeholders.** The
+  representative's address was a real Frankfurt street; it is now Musterstraße 1,
+  00000 Musterstadt, and the data protection officer is Erika Mustermann. Every demo
+  record, and the README's picture of one, showed the old address.
 
 ## 0.13.1 — 2026-11-14
 
