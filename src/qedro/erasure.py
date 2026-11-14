@@ -172,6 +172,9 @@ class Descendant:
     #: The job whose run derived it from upstream. Named so a reader who has to
     #: go and rewrite this dataset knows what to run.
     through: str = ""
+    #: The dataset it was derived from on the walk: the erased one, or another
+    #: descendant. What a diagram of the closure draws its edges from (#37).
+    parent: str = ""
     #: The most recent completed run that wrote it after the tombstone, of any kind.
     written: datetime | None = None
     #: The most recent of those whose output said it replaced the contents.
@@ -430,6 +433,7 @@ def build(
                     dataset=output.key,
                     depth=level + 1,
                     through=event.job.key,
+                    parent=key,
                     truncated=truncated,
                 )
                 if not truncated:
@@ -522,6 +526,7 @@ def _measure(descendant: Descendant, events: Sequence[Event], tombstone: Tombsto
         dataset=descendant.dataset,
         depth=descendant.depth,
         through=descendant.through,
+        parent=descendant.parent,
         written=max(completed.values(), default=None),
         rebuilt=max(rebuilds, default=None),
         runs_since=len(completed),
@@ -625,7 +630,7 @@ def _completeness(
     if appended:
         n = len(appended)
         completeness = completeness.degraded(
-            f"{n} of {total} {plural(total, 'descendant was', 'descendants were')} only "
+            f"{n} of {total} {plural(total, 'descendant', 'descendants')} {plural(n, 'was', 'were')} only "
             f"appended to since the tombstone, so what {plural(n, 'it', 'they')} held "
             f"before the erasure is still there: {', '.join(d.dataset for d in appended)}"
         )

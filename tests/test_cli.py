@@ -265,7 +265,7 @@ class TestRopa:
         # Driven off the registry rather than a list written here, so a format
         # added later cannot be unreachable from the CLI and still pass.
         events, config = _estate(tmp_path, facet=True)
-        for fmt in sorted(render.names()):
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
             argv = ["ropa", str(events), "--config", str(config), "--format", fmt]
             if render.is_binary(fmt):
                 out = tmp_path / f"record.{fmt}"
@@ -274,6 +274,15 @@ class TestRopa:
             else:
                 assert main(argv) == 0
                 assert capsys.readouterr().out.strip()
+
+    def test_a_pdf_is_refused_in_a_sentence_until_it_exists(self, tmp_path, capsys):
+        # #37: erasure has a PDF so far, and the Art. 30 record does not.
+        events, config = _estate(tmp_path, facet=True)
+        out = tmp_path / "record.pdf"
+        assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 2
+        err = capsys.readouterr().err
+        assert "not yet for ropa" in err and "--out record.xlsx" in err
+        assert not out.exists()
 
 
 def _estate(tmp_path, *, facet: bool):
@@ -465,7 +474,7 @@ class TestQuality:
 
     def test_every_format_is_reachable(self, tmp_path, capsys):
         events, config = _asserting_estate(tmp_path)
-        for fmt in sorted(render.names()):
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
             argv = ["quality", str(events), "--config", str(config), "--format", fmt]
             if render.is_binary(fmt):
                 out = tmp_path / f"history.{fmt}"
@@ -553,7 +562,7 @@ class TestProvenance:
 
     def test_every_format_is_reachable(self, tmp_path, capsys):
         events, config = _chain_estate(tmp_path)
-        for fmt in sorted(render.names()):
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
             argv = [
                 "provenance",
                 str(events),
@@ -631,7 +640,7 @@ class TestTheDeployerView:
 
     def test_the_view_is_reachable_in_every_format(self, tmp_path, capsys):
         events, config = _estate(tmp_path, facet=True)
-        for fmt in sorted(render.names()):
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
             argv = ["ropa", str(events), "--config", str(config), "--view", "deployer"]
             argv += ["--format", fmt]
             if render.is_binary(fmt):
@@ -871,6 +880,16 @@ class TestTheErasureCommand:
         out = tmp_path / "erasure.xlsx"
         assert self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--out", str(out)) == 0
         assert out.exists()
+
+    def test_a_pdf_is_written_from_its_suffix(self, tmp_path):
+        # #37: the document somebody files, prints and signs.
+        out = tmp_path / "erasure.pdf"
+        assert self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--out", str(out)) == 0
+        assert out.read_bytes().startswith(b"%PDF")
+
+    def test_a_pdf_without_out_is_refused_before_anything_is_read(self, capsys):
+        assert self.run("--dataset", self.DATASET, "--format", "pdf") == 2
+        assert "add --out record.pdf" in capsys.readouterr().err
 
     def test_the_json_names_the_projection(self, capsys):
         self.run("--dataset", self.DATASET, "--since", "2026-07-10", "--format", "json")

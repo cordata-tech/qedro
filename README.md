@@ -244,7 +244,7 @@ behind each of those choices is recorded on
 
 ### Output
 
-`--format text|markdown|json|xlsx`, and `--out` to write a file. The format follows
+`--format text|markdown|json|xlsx|pdf`, and `--out` to write a file. The format follows
 the filename when you do not say — `--out ropa.xlsx` is a workbook, `--out ropa.md`
 is markdown — and an explicit `--format` always wins.
 
@@ -254,6 +254,13 @@ sits above the table on the first sheet rather than behind it, because a caveat
 below the data is a caveat nobody reads — the same failure this tool exists to
 prevent, reproduced in its own output. Where a value came from is a column of
 words; the tint on a cell is reinforcement and never carries the meaning alone.
+
+**PDF is the version somebody files, prints and signs**, so far for the erasure
+record: `qedro erasure … --out erasure.pdf`, after `pipx install 'qedro[pdf]'`. The
+verdict comes first, then a tree of everything descended from the erased dataset with
+each one's state written in its box, then the descendants and the scope statement.
+The same events give the same bytes. The other projections refuse `--out *.pdf` with
+a sentence until their PDFs exist (#37).
 
 ### Configuration
 

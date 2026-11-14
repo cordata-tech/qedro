@@ -149,7 +149,9 @@ this row exists to prevent.
 | text, markdown, json | **works** — `tests/test_render.py`, parametrised over format **and** projection |
 | xlsx | **works** — `tests/test_xlsx.py` |
 | CSV | **candidate** — trivial, and nobody has asked |
-| PDF | **candidate** — an auditor asks for xlsx; this would be for the version somebody prints and signs |
+| PDF, for the erasure record | **works** — `tests/test_render.py::TestThePdf`, and every erasure test that loops over formats reads the PDF back. The version somebody files, prints and signs (#37): the verdict first, then the descendant tree with each state labelled, the descendants and the scope statement. Byte-identical from the same events. An optional extra, `qedro[pdf]`, which installs reportlab |
+| PDF, for the other projections | **planned** — #37, provenance next and the Art. 30 record after it. Until then `--out *.pdf` is refused with a sentence naming the workbook instead, `tests/test_render.py::TestPdfIsRefusedWhereItDoesNotExistYet` |
+| PDF/A, the archival profile | **candidate** — reportlab does not produce it on its own; worth asking a DPO whether an archive requires it before building it (#37) |
 
 ## Python
 

@@ -45,10 +45,18 @@ dependencies = ["pyyaml>=6", "openpyxl>=3.1"]
 s3 = ["fsspec>=2024.6.0", "s3fs>=2024.6.0"]
 gcs = ["fsspec>=2024.6.0", "gcsfs>=2024.6.0"]
 azure = ["fsspec>=2024.6.0", "adlfs>=2024.4.1"]
+# PDF output (#37), for the people who receive a record rather than run qedro.
+# reportlab is BSD-licensed, pure Python with wheels for every platform, and
+# ships the font the documents use, so `pipx install 'qedro[pdf]'` needs no
+# system library — which is why it, and not WeasyPrint.
+pdf = ["reportlab>=4.0"]
 dev = [
     # The bucket reader's tests run against fsspec's in-memory filesystem, so
     # they need fsspec and none of the cloud backends.
     "fsspec>=2024.6.0",
+    # The PDF tests render with reportlab and read the text back with pypdf.
+    "reportlab>=4.0",
+    "pypdf>=5.0",
     "pytest>=8",
     # Pinned exactly, unlike everything else here. A ruff release changes which
     # rules fire, and with a floor CI installs whatever is newest: 0.17.0 turned

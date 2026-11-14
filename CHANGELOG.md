@@ -6,6 +6,21 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The erasure record as a PDF** (#37): `qedro erasure … --out erasure.pdf`, for the
+  people who receive a record rather than run qedro — an auditor who files it, a DPO
+  who signs it. The verdict comes first; then a tree from the erased dataset down, each
+  descendant's box labelled with its state and tinted where the proof does not reach;
+  then the descendants, and the scope statement in full. The same events give the same
+  bytes. It needs the new `pdf` extra, `pipx install 'qedro[pdf]'`, which installs
+  reportlab; without it the command names that line. The other projections refuse
+  `--out *.pdf` in a sentence until their PDFs exist.
+- **The erasure JSON names each descendant's parent** as `derived_from`, so a consumer
+  can draw the same tree.
+- **An append reason reads correctly for one descendant.** It said *1 of 7 descendants
+  were only appended to*; the verb now agrees with the count.
+
 ## 0.11.0 — 2026-11-07
 
 `qedro erasure` stops claiming more than the events show about how a descendant was

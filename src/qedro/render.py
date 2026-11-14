@@ -37,6 +37,7 @@ from . import deployer as deployer_module
 from . import erasure as erasure_module
 from . import provenance as provenance_module
 from . import quality as quality_module
+from .errors import UsageError
 from .ropa import ART30_ASSERTED_ONLY, ART30_COVERED, ART30_ITEMS, Activity, Record
 from .scope import Scope
 
@@ -1020,6 +1021,9 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
                 "dataset": d.dataset,
                 "depth": d.depth,
                 "derived_by": d.through,
+                # The dataset it was derived from on the walk, so a consumer can
+                # draw the same tree the PDF does (#37).
+                "derived_from": d.parent,
                 # `null`, not a date and not `false`: *nothing wrote it* and
                 # *we could not tell* are different answers, and the second is
                 # what `incomplete` is for.
@@ -1327,6 +1331,42 @@ def _(record: deployer_module.DeployerRecord) -> bytes:
     return deployer_workbook(record)
 
 
+@singledispatch
+def pdf(record: object) -> bytes:
+    """The PDF, as bytes, for the projections that have one so far (#37).
+
+    reportlab is imported inside each implementation, as openpyxl is for the
+    workbook, and is an optional extra; a missing one is a sentence naming the
+    command, and so is a projection whose PDF has not been built yet.
+    """
+    projection = type(record).__module__.rsplit(".", 1)[-1]
+    raise UsageError(
+        f"PDF output is available for erasure records so far, not yet for {projection} "
+        "— see cordata-tech/qedro#37; --out record.xlsx gives the workbook meanwhile"
+    )
+
+
+def _pdf_module():
+    try:
+        from . import pdf as module
+    except ImportError:
+        raise UsageError(
+            "PDF output needs an optional dependency — pip install 'qedro[pdf]'"
+        ) from None
+    return module
+
+
+@pdf.register
+def _(record: erasure_module.Record) -> bytes:
+    return _pdf_module().erasure_document(record)
+
+
+def supports(fmt: str, kind: type) -> bool:
+    """Whether *fmt* has a renderer for records of *kind*, rather than a refusal."""
+    renderer = FORMATS[fmt]
+    return renderer.dispatch(kind) is not renderer.dispatch(object)  # type: ignore[attr-defined]
+
+
 #: Public name to renderer. The CLI's `--format` choices come from this, so a
 #: new format is added in one place.
 FORMATS: dict[str, object] = {
@@ -1334,11 +1374,12 @@ FORMATS: dict[str, object] = {
     "markdown": markdown,
     "json": json,
     "xlsx": xlsx,
+    "pdf": pdf,
 }
 
 #: Formats that return bytes. A caller has to know before it decides whether
 #: standard output is somewhere this can go — see `is_binary`.
-BINARY = frozenset({"xlsx"})
+BINARY = frozenset({"xlsx", "pdf"})
 
 
 # --- what changed between two records, #14 ---------------------------------
@@ -1674,6 +1715,7 @@ BY_SUFFIX = {
     ".json": "json",
     ".txt": "text",
     ".xlsx": "xlsx",
+    ".pdf": "pdf",
 }
 
 

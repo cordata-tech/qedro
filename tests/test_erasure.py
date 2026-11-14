@@ -18,6 +18,8 @@ from qedro import config, erasure
 from qedro.events import parse_event
 from qedro.ropa import Provenance
 
+from .as_text import as_text
+
 CONTROLLER = "controller: ACME GmbH\n"
 ERASED = "wh/crm_raw.contacts"
 
@@ -222,10 +224,6 @@ class TestChoosingTheErasureAmongSeveral:
     def test_the_verdict_names_what_was_emitted_in_every_format(self, state, said):
         # The tombstone line calls an overwrite "not a drop or truncate", and the
         # verdict below it used to call the same event "an emitted erasure".
-        from io import BytesIO
-
-        from openpyxl import load_workbook
-
         from qedro import render
 
         out = record([*spark_write(5, lifecycle=state), *chain(day=10)])
@@ -234,16 +232,7 @@ class TestChoosingTheErasureAmongSeveral:
         for fmt, renderer in render.FORMATS.items():
             if fmt == "json":
                 continue  # carries the verdict as fields, not as a sentence
-            rendered = renderer(out)
-            if isinstance(rendered, bytes):
-                book = load_workbook(BytesIO(rendered))
-                rendered = " ".join(
-                    str(c.value)
-                    for s in book.worksheets
-                    for r in s.iter_rows()
-                    for c in r
-                    if c.value
-                )
+            rendered = as_text(renderer(out))
             assert expected in rendered, fmt
             assert "emitted erasure" not in rendered, fmt
 
@@ -448,9 +437,6 @@ class TestHowADescendantWasWritten:
 
     def test_the_output_says_how_in_every_format(self):
         import json as json_lib
-        from io import BytesIO
-
-        from openpyxl import load_workbook
 
         from qedro import render
 
@@ -461,16 +447,7 @@ class TestHowADescendantWasWritten:
                 [d] = json_lib.loads(rendered)["descendants"]
                 assert (d["how"], d["reached"]) == ("appended", False)
                 continue
-            if isinstance(rendered, bytes):
-                book = load_workbook(BytesIO(rendered))
-                rendered = " ".join(
-                    str(c.value)
-                    for s in book.worksheets
-                    for r in s.iter_rows()
-                    for c in r
-                    if c.value
-                )
-            assert "only appended to" in " ".join(rendered.split()), fmt
+            assert "only appended to" in as_text(rendered), fmt
 
     def test_against_the_dbt_capture(self):
         # openlineage-dbt 1.53.0 reports `materialized: table` for both models

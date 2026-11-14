@@ -34,8 +34,9 @@ from qedro import (
     render,
     vocabulary,
 )
-from qedro.ropa import build
+from qedro.ropa import Record, build
 
+from .as_text import as_text
 from .test_compare import activity, compared, document
 from .test_deployer import a_declared
 from .test_deployer import event as deployer_event
@@ -45,7 +46,22 @@ from .test_quality import event as quality_event
 from .test_ropa import EVIDENCED, event
 
 WORDS = vocabulary.load()
-FORMATS = sorted(render.FORMATS)
+
+
+def formats_for(kind: type) -> list[str]:
+    """The formats with a renderer for records of *kind*, rather than a refusal.
+
+    Every format but PDF covers every projection; PDF covers erasure so far
+    (#37), and a projection gains it here, without a test changing, the day
+    its renderer is registered.
+    """
+    return [fmt for fmt in sorted(render.FORMATS) if render.supports(fmt, kind)]
+
+
+#: What the Art. 30 record renders as, which is also what the other
+#: projections this file tests by format render as, PDF aside.
+FORMATS = formats_for(Record)
+ERASURE_FORMATS = formats_for(erasure.Record)
 
 
 def record(events, cfg="controller: ACME GmbH\n"):
@@ -120,7 +136,7 @@ PROJECTIONS = {
     "deployer": deployer_record,
     "erasure": erasure_record,
 }
-CASES = [(p, f) for p in sorted(PROJECTIONS) for f in FORMATS]
+CASES = [(p, f) for p in sorted(PROJECTIONS) for f in formats_for(type(PROJECTIONS[p]()))]
 
 #: Projections that make a claim about domain coverage. `provenance` does not
 #: — a chain is about one dataset — so it carries no declared domains and can
@@ -138,19 +154,7 @@ def readable(record, fmt):
     printed* would quietly stop being checked — so xlsx is read back and
     flattened rather than skipped.
     """
-    out = render.FORMATS[fmt](record)
-    if isinstance(out, bytes):
-        book = load_workbook(BytesIO(out))
-        out = "\n".join(
-            str(cell.value)
-            for sheet in book.worksheets
-            for row in sheet.iter_rows()
-            for cell in row
-            if cell.value is not None
-        )
-    # Whitespace-normalised, because the terminal format wraps its paragraphs
-    # and a phrase that straddles a line break is still present in the output.
-    return " ".join(out.split())
+    return as_text(render.FORMATS[fmt](record))
 
 
 def rendered(events, fmt, cfg="controller: ACME GmbH\n"):
@@ -352,7 +356,12 @@ class TestFormatInference:
         assert render.infer("ropa.xlsx") == "xlsx"
 
     def test_an_unknown_suffix_falls_back(self):
-        assert render.infer("ropa.pdf") == "text"
+        assert render.infer("ropa.docx") == "text"
+
+    def test_a_pdf_suffix_means_pdf(self):
+        # #37. A projection without a PDF yet refuses in a sentence; see
+        # TestPdfIsRefusedWhereItDoesNotExistYet.
+        assert render.infer("erasure.pdf") == "pdf"
 
     def test_no_output_file_at_all(self):
         assert render.infer(None) == "text"
@@ -800,19 +809,19 @@ class TestTheErasureRecordRendersInEveryFormat:
             since=at(5),
         )
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", ERASURE_FORMATS)
     def test_every_format_says_it_reports_datasets_and_not_rows(self, fmt):
         out = readable(erasure_record(), fmt)
         assert "covers datasets, not rows" in out
         assert "no lineage event carries that" in out
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", ERASURE_FORMATS)
     def test_including_on_a_record_that_earns_the_mark(self, fmt):
         built = erasure_earned()
         assert built.complete
         assert "not proof that it was complete" in readable(built, fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", ERASURE_FORMATS)
     def test_every_format_states_where_the_tombstone_came_from(self, fmt):
         # An instant somebody typed and an instant somebody emitted are the
         # same date and a different claim, which is the provenance rule
@@ -826,7 +835,7 @@ class TestTheErasureRecordRendersInEveryFormat:
             assert "emitted drop" in readable(erasure_earned(), fmt)
             assert "not emitted" in readable(erasure_record(), fmt)
 
-    @pytest.mark.parametrize("fmt", FORMATS)
+    @pytest.mark.parametrize("fmt", ERASURE_FORMATS)
     def test_every_format_names_a_descendant_the_erasure_did_not_reach(self, fmt):
         built = self.unreached()
         out = readable(built, fmt)
@@ -854,3 +863,52 @@ class TestTheErasureRecordRendersInEveryFormat:
         assert "not written since the erasure" in values
         # No column headed *erased*: that would read as the row-level claim.
         assert not any(isinstance(v, str) and v.strip() == "Erased" for v in values)
+
+
+class TestThePdf:
+    """#37: the erasure record as a document somebody files, prints and signs."""
+
+    def test_the_same_record_gives_the_same_bytes(self):
+        # No creation date and no random document id, so a PDF is reproducible
+        # from its events, as the JSON is.
+        assert render.pdf(erasure_record()) == render.pdf(erasure_record())
+
+    def test_the_diagram_labels_every_state_in_words(self):
+        # The tint marks what the proof does not reach; the label says it too,
+        # so the page reads in grey print.
+        text = as_text(render.pdf(erasure_record()))
+        assert "erased —" in text
+        assert "not written since the erasure" in text or "written, how not reported" in text
+
+    def test_the_verdict_comes_before_the_findings(self):
+        text = as_text(render.pdf(erasure_record()))
+        assert text.index("does not claim to be a proof") < text.index("Descendants")
+
+    def test_an_earned_record_states_the_sentence_the_mark_finishes(self):
+        text = as_text(render.pdf(erasure_earned()))
+        assert "Every descendant was written after the emitted drop." in text
+
+
+class TestPdfIsRefusedWhereItDoesNotExistYet:
+    """A projection without a PDF renderer says so in a sentence (#37)."""
+
+    @pytest.mark.parametrize("projection", ["ropa", "quality", "provenance", "deployer"])
+    def test_with_the_projection_named_and_the_workbook_offered(self, projection):
+        from qedro.errors import UsageError
+
+        with pytest.raises(UsageError, match="not yet for") as caught:
+            render.pdf(PROJECTIONS[projection]())
+        assert "--out record.xlsx" in str(caught.value)
+
+    def test_without_the_extra_the_command_is_named(self, monkeypatch):
+        # `qedro.pdf` imports reportlab at module scope, so a missing extra is an
+        # ImportError on importing it — which `None` in sys.modules reproduces.
+        import sys
+
+        import qedro
+        from qedro.errors import UsageError
+
+        monkeypatch.setitem(sys.modules, "qedro.pdf", None)
+        monkeypatch.delattr(qedro, "pdf", raising=False)
+        with pytest.raises(UsageError, match=r"pip install 'qedro\[pdf\]'"):
+            render.pdf(erasure_record())

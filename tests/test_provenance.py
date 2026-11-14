@@ -439,11 +439,9 @@ class TestARepositoryUrlNeverCarriesCredentials:
             assert without_credentials(given) == expected, given
 
     def test_a_token_reaches_no_output_format(self, tmp_path):
-        from io import BytesIO
-
-        from openpyxl import load_workbook
-
         from qedro import render
+
+        from .as_text import as_text
 
         raw = {
             "eventType": "COMPLETE",
@@ -468,16 +466,9 @@ class TestARepositoryUrlNeverCarriesCredentials:
         out = chain([parsed], "wh/scores")
         assert out.steps[0].production.code.repository == "https://github.com/acme/platform"
         for fmt, renderer in render.FORMATS.items():
-            rendered = renderer(out)
-            if isinstance(rendered, bytes):
-                book = load_workbook(BytesIO(rendered))
-                rendered = " ".join(
-                    str(cell.value)
-                    for sheet in book.worksheets
-                    for row in sheet.iter_rows()
-                    for cell in row
-                    if cell.value is not None
-                )
+            if not render.supports(fmt, type(out)):
+                continue  # no provenance PDF yet (#37); it refuses rather than renders
+            rendered = as_text(renderer(out))
             assert self.TOKEN not in rendered, fmt
             # The markdown table names the commit and not the repository.
             if fmt != "markdown":
