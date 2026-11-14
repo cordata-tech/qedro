@@ -256,11 +256,13 @@ prevent, reproduced in its own output. Where a value came from is a column of
 words; the tint on a cell is reinforcement and never carries the meaning alone.
 
 **PDF is the version somebody files, prints and signs**, so far for the erasure
-record: `qedro erasure … --out erasure.pdf`, after `pipx install 'qedro[pdf]'`. The
-verdict comes first, then a tree of everything descended from the erased dataset with
-each one's state written in its box, then the descendants and the scope statement.
-The same events give the same bytes. The other projections refuse `--out *.pdf` with
-a sentence until their PDFs exist (#37).
+record and the provenance chain: `qedro erasure … --out erasure.pdf`, after
+`pipx install 'qedro[pdf]'`. The verdict comes first, then a tree with each box's
+state written in it — everything descended from the erased dataset, or every step
+back from the published one with its commit and whether that commit was signed — then
+a table of the same rows and the scope statement. The same events give the same
+bytes. The Art. 30 record, the deployer view and the quality history refuse
+`--out *.pdf` with a sentence until their PDFs exist (#37).
 
 ### Configuration
 

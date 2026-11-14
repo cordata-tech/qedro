@@ -889,10 +889,41 @@ class TestThePdf:
         assert "Every descendant was written after the emitted drop." in text
 
 
+def provenance_signed(cfg="controller: ACME GmbH\n"):
+    return provenance.build(
+        [provenance_event(writes=["scores"], signed=True)],
+        dataset="wh/scores",
+        config=config.parse(cfg),
+    )
+
+
+class TestTheProvenancePdf:
+    """#37: the chain from a published dataset back to the commits that made it."""
+
+    def test_the_same_record_gives_the_same_bytes(self):
+        assert render.pdf(provenance_record()) == render.pdf(provenance_record())
+
+    def test_each_step_says_its_signature_in_words(self):
+        assert "signature unknown" in as_text(render.pdf(provenance_record()))
+        signed = as_text(render.pdf(provenance_signed()))
+        assert "signed" in signed
+        assert "not signed" not in signed and "signature unknown" not in signed
+
+    def test_the_tint_is_explained_only_where_a_box_is_tinted(self):
+        # A chain whose ending is a source still has no tinted box: an ending is
+        # where the window stops, not a step the proof failed to reach.
+        assert "Tinted boxes" in as_text(render.pdf(provenance_record()))
+        assert "Tinted boxes" not in as_text(render.pdf(provenance_signed()))
+
+    def test_an_earned_chain_states_the_sentence_the_mark_finishes(self):
+        text = as_text(render.pdf(provenance_signed()))
+        assert "Every step ran under a signed commit." in text
+
+
 class TestPdfIsRefusedWhereItDoesNotExistYet:
     """A projection without a PDF renderer says so in a sentence (#37)."""
 
-    @pytest.mark.parametrize("projection", ["ropa", "quality", "provenance", "deployer"])
+    @pytest.mark.parametrize("projection", ["ropa", "quality", "deployer"])
     def test_with_the_projection_named_and_the_workbook_offered(self, projection):
         from qedro.errors import UsageError
 

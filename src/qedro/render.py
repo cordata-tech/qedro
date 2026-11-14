@@ -1341,7 +1341,7 @@ def pdf(record: object) -> bytes:
     """
     projection = type(record).__module__.rsplit(".", 1)[-1]
     raise UsageError(
-        f"PDF output is available for erasure records so far, not yet for {projection} "
+        f"PDF output is available for erasure and provenance so far, not yet for {projection} "
         "— see cordata-tech/qedro#37; --out record.xlsx gives the workbook meanwhile"
     )
 
@@ -1359,6 +1359,11 @@ def _pdf_module():
 @pdf.register
 def _(record: erasure_module.Record) -> bytes:
     return _pdf_module().erasure_document(record)
+
+
+@pdf.register
+def _(record: provenance_module.Record) -> bytes:
+    return _pdf_module().provenance_document(record)
 
 
 def supports(fmt: str, kind: type) -> bool:

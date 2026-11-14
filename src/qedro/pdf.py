@@ -28,6 +28,7 @@ from __future__ import annotations
 import io
 import os
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -121,7 +122,7 @@ def _verdict(record: Any, earned: str) -> list[Flowable]:
     return out
 
 
-def _scope(scope: Any) -> list[Flowable]:
+def _scope(scope: Any, title: str = "Scope of this record") -> list[Flowable]:
     """The scope statement, unconditionally, as every format prints it (#3)."""
     rows = [("Source", scope.source or "unknown"), ("Window", scope.window())]
     rows += [(label[0].upper() + label[1:], value) for label, value in scope.statement()]
@@ -138,7 +139,7 @@ def _scope(scope: Any) -> list[Flowable]:
             ]
         )
     )
-    return [_p("Scope of this record", HEADING), table, Spacer(1, 6), _p(scope.OUT_OF_VIEW, SMALL)]
+    return [_p(title, HEADING), table, Spacer(1, 6), _p(scope.OUT_OF_VIEW, SMALL)]
 
 
 def _document(title: str, body: Sequence[Flowable], *, footer: str) -> bytes:
@@ -185,17 +186,35 @@ def _state(descendant: Any) -> str:
     return STATE_LABEL[descendant.how]
 
 
-def _tree(record: Any) -> Drawing:
-    """The closure from the erased dataset down, one box per dataset.
+@dataclass(frozen=True)
+class _Node:
+    """One box in a tree diagram: a dataset, and what the record says about it."""
 
-    A tidy layout of the simplest kind: leaves take columns in walk order, a
-    parent sits over the middle of its children, and depth is the row. Scaled
-    down to the page width when the closure is wide, never up.
+    key: str
+    depth: int
+    lines: tuple[str, ...]
+    parent: str = ""
+    #: Where the proof does not reach. Tinted, and always said in `lines` too.
+    gap: bool = False
+    #: The tree's root, drawn with a heavier border.
+    root: bool = False
+    #: What labels the edge from the parent, such as the job that derived it.
+    edge: str = ""
+
+
+def _tree(nodes: Sequence[_Node]) -> Drawing:
+    """A tree of boxes, root at the top, one row per depth.
+
+    A tidy layout of the simplest kind: leaves take columns in the order given,
+    a parent sits over the middle of its children, and depth is the row. Scaled
+    down to the page width when the tree is wide, never up. Shared by every
+    projection whose record is a tree, so they draw alike.
     """
-    descendants = list(record.descendants)
-    children: dict[str, list[Any]] = {}
-    for d in descendants:
-        children.setdefault(d.parent or record.dataset, []).append(d)
+    root = next(n for n in nodes if n.root)
+    children: dict[str, list[_Node]] = {}
+    for n in nodes:
+        if not n.root:
+            children.setdefault(n.parent or root.key, []).append(n)
 
     column: dict[str, float] = {}
     next_leaf = [0.0]
@@ -206,84 +225,102 @@ def _tree(record: Any) -> Drawing:
             column[key] = next_leaf[0]
             next_leaf[0] += 1
         else:
-            spots = [place(k.dataset) for k in kids]
+            spots = [place(k.key) for k in kids]
             column[key] = (spots[0] + spots[-1]) / 2
         return column[key]
 
-    place(record.dataset)
+    place(root.key)
+    placed = [n for n in nodes if n.key in column]
 
-    # The erased dataset's box gives the instant only; the full tombstone
-    # sentence is printed above the diagram and would overrun a box.
-    at = record.tombstone.at.isoformat() if record.tombstone.at else "no erasure instant"
-    root_label = f"erased — {at}"
-    labels = [root_label, *(_state(d) for d in descendants)]
     box_w = 16 + max(
-        *(pdfmetrics.stringWidth(name, BOLD, 7) for name in [record.dataset, *column]),
-        *(pdfmetrics.stringWidth(label, FONT, 6.5) for label in labels),
+        max(
+            pdfmetrics.stringWidth(line, BOLD if i == 0 else FONT, 7 if i == 0 else 6.5)
+            for i, line in enumerate(n.lines)
+        )
+        for n in placed
     )
-    box_h, gap_x, gap_y = 30, 14, 26
-    rows = 1 + max((d.depth for d in descendants), default=0)
+    line_count = max(len(n.lines) for n in placed)
+    box_h, gap_x, gap_y = 12 + 9 * line_count, 14, 26
+    rows = 1 + max(n.depth for n in placed)
     width = next_leaf[0] * box_w + (next_leaf[0] - 1) * gap_x
     height = rows * box_h + (rows - 1) * gap_y
 
-    def origin(key: str, depth: int) -> tuple[float, float]:
-        x = column[key] * (box_w + gap_x)
-        y = height - (depth + 1) * box_h - depth * gap_y
+    def origin(n: _Node) -> tuple[float, float]:
+        x = column[n.key] * (box_w + gap_x)
+        y = height - (n.depth + 1) * box_h - n.depth * gap_y
         return x, y
 
     group = Group()
-    by_key = {d.dataset: d for d in descendants}
-    for d in descendants:
-        parent = d.parent or record.dataset
-        depth = by_key[parent].depth if parent in by_key else 0
-        px, py = origin(parent, depth)
-        cx, cy = origin(d.dataset, d.depth)
+    by_key = {n.key: n for n in placed}
+    for n in placed:
+        if n.root:
+            continue
+        px, py = origin(by_key[n.parent or root.key])
+        cx, cy = origin(n)
         group.add(
             Line(px + box_w / 2, py, cx + box_w / 2, cy + box_h, strokeColor=MUTED, strokeWidth=0.6)
         )
-        if d.through:
+        if n.edge:
             group.add(
                 String(
                     (px + cx) / 2 + box_w / 2 + 3,
                     (py + cy + box_h) / 2 - 2,
-                    d.through,
+                    n.edge,
                     fontName=FONT,
                     fontSize=5.5,
                     fillColor=MUTED,
                 )
             )
 
-    def box(key: str, depth: int, label: str, *, tint: Any, heavy: bool) -> None:
-        x, y = origin(key, depth)
+    for n in placed:
+        x, y = origin(n)
         group.add(
             Rect(
                 x,
                 y,
                 box_w,
                 box_h,
-                fillColor=tint,
+                fillColor=UNREACHED if n.gap else colors.white,
                 strokeColor=INK,
-                strokeWidth=1.2 if heavy else 0.6,
+                strokeWidth=1.2 if n.root else 0.6,
             )
         )
-        group.add(String(x + 8, y + box_h - 12, key, fontName=BOLD, fontSize=7, fillColor=INK))
-        group.add(String(x + 8, y + 7, label, fontName=FONT, fontSize=6.5, fillColor=MUTED))
-
-    box(record.dataset, 0, root_label, tint=colors.white, heavy=True)
-    for d in descendants:
-        box(
-            d.dataset,
-            d.depth,
-            _state(d),
-            tint=colors.white if d.reached else UNREACHED,
-            heavy=False,
-        )
+        for i, line in enumerate(n.lines):
+            group.add(
+                String(
+                    x + 8,
+                    y + box_h - 12 - 9 * i,
+                    line,
+                    fontName=BOLD if i == 0 else FONT,
+                    fontSize=7 if i == 0 else 6.5,
+                    fillColor=INK if i == 0 else MUTED,
+                )
+            )
 
     scale = min(1.0, WIDTH / width) if width else 1.0
     drawing = Drawing(width * scale, height * scale)
     group.scale(scale, scale)
     drawing.add(group)
     return drawing
+
+
+def _erasure_nodes(record: Any) -> list[_Node]:
+    # The erased dataset's box gives the instant only; the full tombstone
+    # sentence is printed above the diagram and would overrun a box.
+    at = record.tombstone.at.isoformat() if record.tombstone.at else "no erasure instant"
+    nodes = [_Node(record.dataset, 0, (record.dataset, f"erased — {at}"), root=True)]
+    nodes += [
+        _Node(
+            d.dataset,
+            d.depth,
+            (d.dataset, _state(d)),
+            parent=d.parent or record.dataset,
+            gap=not d.reached,
+            edge=d.through,
+        )
+        for d in record.descendants
+    ]
+    return nodes
 
 
 def erasure_document(record: Any) -> bytes:
@@ -297,7 +334,7 @@ def erasure_document(record: Any) -> bytes:
     if record.descendants:
         body += [
             _p("What descends from it, and whether the erasure reached it", HEADING),
-            KeepTogether([_tree(record)]),
+            KeepTogether([_tree(_erasure_nodes(record))]),
             Spacer(1, 4),
         ]
         if any(not d.reached for d in record.descendants):
@@ -346,4 +383,113 @@ def erasure_document(record: Any) -> bytes:
         f"Erasure of {record.dataset}",
         body,
         footer=f"qedro {__version__} — erasure of {record.dataset}",
+    )
+
+
+# --- provenance --------------------------------------------------------------
+
+
+def _signature_word(production: Any) -> str:
+    """The signature in two or three words, for a box; the table has the sentence."""
+    if production.signature.signed is True:
+        return "signed"
+    if production.signature.signed is False:
+        return "not signed"
+    if production.signature.without_commit:
+        return "verdict without a commit"
+    return "signature unknown"
+
+
+def _provenance_nodes(record: Any) -> list[_Node]:
+    """The chain as boxes, the published dataset at the top and its sources below.
+
+    The steps come in walk order with a depth each, as the text renderer
+    indents them, so a step's parent is the last step one level up.
+    """
+    nodes: list[_Node] = []
+    last: dict[int, str] = {}
+    for step in record.steps:
+        p = step.production
+        if p is None:
+            lines = (step.dataset, step.ended or "nothing in the window produced it")
+            gap = False
+        else:
+            commit = f"at {p.code.short}" if p.code.commit else "no commit named"
+            lines = (step.dataset, f"{p.job}, {commit}", _signature_word(p))
+            # The gaps the chain withholds its mark for: a step that cannot show
+            # a signed commit. An ending is stated, not tinted, because a source
+            # and a producer outside the window look the same from here.
+            gap = not p.authorised
+        nodes.append(
+            _Node(
+                step.dataset,
+                step.depth,
+                lines,
+                parent=last.get(step.depth - 1, ""),
+                gap=gap,
+                root=step.depth == 0,
+            )
+        )
+        last[step.depth] = step.dataset
+    return nodes
+
+
+def provenance_document(record: Any) -> bytes:
+    """A provenance chain as PDF bytes."""
+    body: list[Flowable] = [_p(f"Provenance of {record.dataset}", TITLE), Spacer(1, 8)]
+    body += _verdict(record, "every step ran under a signed commit")
+
+    if record.steps:
+        body += [
+            _p("From the published dataset back to what it was made from", HEADING),
+            KeepTogether([_tree(nodes := _provenance_nodes(record))]),
+            Spacer(1, 4),
+        ]
+        if any(n.gap for n in nodes):
+            body.append(
+                _p(
+                    "Tinted boxes are steps that cannot show a signed commit. Each box also "
+                    "says why in words; the tint adds nothing the label does not.",
+                    SMALL,
+                )
+            )
+        body.append(_p("Steps", HEADING))
+        rows = [[_p(h, CELL) for h in ("Step", "Depth", "Evidence")]]
+        for step in record.steps:
+            p = step.production
+            if p is None:
+                evidence = [_p(step.ended or "nothing in the window produced it", CELL)]
+            else:
+                when = p.when.isoformat() if p.when else "no time reported"
+                lines = [
+                    f"produced by {p.job}",
+                    f"run {p.run_id or 'unreported'} ({p.event_type.lower()}), {when}",
+                    f"code: {p.code.describe()}",
+                    f"signature: {p.signature.describe()}",
+                    f"source: {p.published.describe()}",
+                ]
+                if step.also_produced_by:
+                    n = step.also_produced_by
+                    lines.append(f"also: {n} other {'run' if n == 1 else 'runs'} wrote this")
+                evidence = [_p(line, CELL) for line in lines]
+            rows.append([_p(step.dataset, CELL), _p(str(step.depth), CELL), evidence])
+        table = Table(rows, colWidths=[72 * mm, 14 * mm, WIDTH - 86 * mm], repeatRows=1)
+        style = [
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.8, INK),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.25, RULE),
+        ]
+        style += [
+            ("BACKGROUND", (0, i), (-1, i), UNREACHED)
+            for i, step in enumerate(record.steps, start=1)
+            if step.production is not None and not step.production.authorised
+        ]
+        table.setStyle(TableStyle(style))
+        body.append(table)
+
+    body += _scope(record.scope, title="Scope of this chain")
+    return _document(
+        f"Provenance of {record.dataset}",
+        body,
+        footer=f"qedro {__version__} — provenance of {record.dataset}",
     )

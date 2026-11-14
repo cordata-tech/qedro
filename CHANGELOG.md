@@ -14,8 +14,12 @@ before `1.0`.
   descendant's box labelled with its state and tinted where the proof does not reach;
   then the descendants, and the scope statement in full. The same events give the same
   bytes. It needs the new `pdf` extra, `pipx install 'qedro[pdf]'`, which installs
-  reportlab; without it the command names that line. The other projections refuse
-  `--out *.pdf` in a sentence until their PDFs exist.
+  reportlab; without it the command names that line.
+- **The provenance chain as a PDF** (#37): `qedro provenance … --out chain.pdf`. The
+  same layout, drawn from the published dataset back to its sources: each step's box
+  names the job, the commit and whether it was signed, in words, and is tinted where
+  the step is not shown to be authorised. The Art. 30 record, the deployer view and
+  the quality history refuse `--out *.pdf` in a sentence until their PDFs exist.
 - **The erasure JSON names each descendant's parent** as `derived_from`, so a consumer
   can draw the same tree.
 - **An append reason reads correctly for one descendant.** It said *1 of 7 descendants

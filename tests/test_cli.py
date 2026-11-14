@@ -265,7 +265,7 @@ class TestRopa:
         # Driven off the registry rather than a list written here, so a format
         # added later cannot be unreachable from the CLI and still pass.
         events, config = _estate(tmp_path, facet=True)
-        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # no PDF yet, #37
             argv = ["ropa", str(events), "--config", str(config), "--format", fmt]
             if render.is_binary(fmt):
                 out = tmp_path / f"record.{fmt}"
@@ -474,7 +474,7 @@ class TestQuality:
 
     def test_every_format_is_reachable(self, tmp_path, capsys):
         events, config = _asserting_estate(tmp_path)
-        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # no PDF yet, #37
             argv = ["quality", str(events), "--config", str(config), "--format", fmt]
             if render.is_binary(fmt):
                 out = tmp_path / f"history.{fmt}"
@@ -562,7 +562,7 @@ class TestProvenance:
 
     def test_every_format_is_reachable(self, tmp_path, capsys):
         events, config = _chain_estate(tmp_path)
-        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
+        for fmt in sorted(render.names()):
             argv = [
                 "provenance",
                 str(events),
@@ -576,7 +576,10 @@ class TestProvenance:
             if render.is_binary(fmt):
                 out = tmp_path / f"chain.{fmt}"
                 assert main([*argv, "--out", str(out)]) == 0
-                assert load_workbook(out).sheetnames == ["Chain", "Scope"]
+                if fmt == "pdf":
+                    assert out.read_bytes().startswith(b"%PDF")
+                else:
+                    assert load_workbook(out).sheetnames == ["Chain", "Scope"]
             else:
                 assert main(argv) == 0
                 assert capsys.readouterr().out.strip()
@@ -640,7 +643,7 @@ class TestTheDeployerView:
 
     def test_the_view_is_reachable_in_every_format(self, tmp_path, capsys):
         events, config = _estate(tmp_path, facet=True)
-        for fmt in sorted(f for f in render.names() if f != "pdf"):  # PDF: erasure only, #37
+        for fmt in sorted(f for f in render.names() if f != "pdf"):  # no PDF yet, #37
             argv = ["ropa", str(events), "--config", str(config), "--view", "deployer"]
             argv += ["--format", fmt]
             if render.is_binary(fmt):

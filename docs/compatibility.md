@@ -150,7 +150,8 @@ this row exists to prevent.
 | xlsx | **works** — `tests/test_xlsx.py` |
 | CSV | **candidate** — trivial, and nobody has asked |
 | PDF, for the erasure record | **works** — `tests/test_render.py::TestThePdf`, and every erasure test that loops over formats reads the PDF back. The version somebody files, prints and signs (#37): the verdict first, then the descendant tree with each state labelled, the descendants and the scope statement. Byte-identical from the same events. An optional extra, `qedro[pdf]`, which installs reportlab |
-| PDF, for the other projections | **planned** — #37, provenance next and the Art. 30 record after it. Until then `--out *.pdf` is refused with a sentence naming the workbook instead, `tests/test_render.py::TestPdfIsRefusedWhereItDoesNotExistYet` |
+| PDF, for the provenance chain | **works** — `tests/test_render.py::TestTheProvenancePdf`, and the provenance tests that loop over formats read the PDF back. The verdict, then the chain drawn from the published dataset back to its sources, each step's box naming its job, commit and signature in words and tinted where the step is not shown to be authorised; then the steps with their evidence, and the scope statement |
+| PDF, for the other projections | **planned** — #37, the Art. 30 record next, then the deployer view and the quality history. Until then `--out *.pdf` is refused with a sentence naming the workbook instead, `tests/test_render.py::TestPdfIsRefusedWhereItDoesNotExistYet` |
 | PDF/A, the archival profile | **candidate** — reportlab does not produce it on its own; worth asking a DPO whether an archive requires it before building it (#37) |
 
 ## Python
