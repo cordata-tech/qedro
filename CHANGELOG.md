@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.15.0 — 2026-11-15
+
+The PDF trees draw an icon for the kind of each step and set the platform line apart
+from the state. `platforms:` entries can name a kind, and the JSON of the erasure
+record and the provenance chain gains two fields. Text output is unchanged.
 
 - **Icons in the PDF trees for the kind of thing each step is** (#39): a database,
   object storage, files or a stream beside each dataset's name, and a transformation,
