@@ -22,12 +22,13 @@ activities, and the record says it is not a proof and tints each row that is par
 why. ACME Finanz GmbH, its address and its data protection officer are fictitious, as
 is everything `qedro demo` writes.*
 
-![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset, its state, and what ran it and where it lives, such as dbt on Snowflake or Spark on S3: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
+![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset, its state, and what ran it and where it lives, such as dbt on Snowflake or Spark on S3, with an icon for each kind and a legend below: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
 
 *What an erasure reached, from the erasure record's PDF
 (`qedro erasure docs/examples/erasure --dataset crm_raw.contacts --out erasure.pdf`).
 Every dataset derived from the erased one is a box saying, in words, whether a job
-has replaced it since, and what ran that job and where the data lives, as the events
+has replaced it since, and, with an icon for each kind, what ran that job and where
+the data lives, as the events
 report it; the tinted ones still hold what the erasure removed upstream.*
 
 The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
@@ -304,8 +305,10 @@ jobs:               # the fallback, for pipelines that emit no facet
     legal_basis: legitimate-interest
 
 platforms:          # labels for the platform line, merged over qedro's own
-  cordata: AWS Glue # a namespace scheme qedro does not know
   s3: the export bucket
+  cordata:          # a namespace scheme qedro does not know, with the kind
+    label: AWS Glue # that picks its icon in a PDF tree
+    kind: database
 ```
 
 Patterns are fnmatch against `namespace/name` and then the bare name, first match in

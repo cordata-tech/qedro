@@ -25,6 +25,12 @@ replaces one. The two readings treat an unlabelled value differently:
   pipeline-runtime's `cordata://fraud` names a domain, not a platform — so an
   unknown scheme says nothing about where data lives until somebody maps it in
   `platforms:`.
+
+Each label can also have a **kind** — a database, object storage, a stream; a
+transformation, an orchestrator, a processing engine — which is what a diagram
+draws an icon for. Kinds are data too, in `KINDS`, keyed by label, so an icon
+never stands for a vendor and a platform somebody labels in `qedro.yaml` can be
+given one there. A label with no kind is drawn with no icon.
 """
 
 from __future__ import annotations
@@ -78,6 +84,36 @@ LABELS: Mapping[str, str] = {
     "wasbs": "Azure Blob Storage",
 }
 
+#: The kinds a diagram has an icon for, in the order a legend lists them.
+STORAGE_KINDS = ("database", "object storage", "files", "stream")
+RUNNER_KINDS = ("transformation", "orchestrator", "processing engine", "data quality")
+
+#: What kind of thing each label is. Keyed by label rather than by key, so
+#: `postgres` and `postgresql` cannot disagree.
+KINDS: Mapping[str, str] = {
+    "Airflow": "orchestrator",
+    "Dagster": "orchestrator",
+    "dbt": "transformation",
+    "Flink": "processing engine",
+    "Great Expectations": "data quality",
+    "Spark": "processing engine",
+    **dict.fromkeys(
+        (
+            "Athena", "BigQuery", "Cassandra", "ClickHouse", "Cosmos DB", "Databricks",
+            "Db2", "DuckDB", "Hive", "MongoDB", "MySQL", "Oracle", "PostgreSQL",
+            "Redshift", "Snowflake", "SQL Server", "SQLite", "Teradata", "Trino",
+        ),
+        "database",
+    ),
+    **dict.fromkeys(
+        ("Azure Blob Storage", "Azure Data Lake", "Cloud Storage", "HDFS", "S3"),
+        "object storage",
+    ),
+    "local files": "files",
+    "Kafka": "stream",
+    "Kinesis": "stream",
+}  # fmt: skip
+
 _PRODUCER = re.compile(r"/integration/([A-Za-z0-9_-]+)")
 _SCHEME = re.compile(r"^(?:jdbc:)?([A-Za-z][A-Za-z0-9+.-]*)://")
 
@@ -88,6 +124,9 @@ class Stack:
 
     ran_on: str = ""
     stored_in: str = ""
+    #: The kind of each, from `KINDS`, or "" where the label has none.
+    ran_on_kind: str = ""
+    stored_in_kind: str = ""
 
     def describe(self) -> str:
         """`dbt · Snowflake`, one side alone, or "" when neither is known."""
@@ -121,7 +160,12 @@ def stored_in(dataset: Dataset, labels: Mapping[str, str] = LABELS) -> str:
     return next((labels[c] for c in candidates if c in labels), "")
 
 
-def of(events: Iterable[Event], dataset: str, labels: Mapping[str, str] = LABELS) -> Stack:
+def of(
+    events: Iterable[Event],
+    dataset: str,
+    labels: Mapping[str, str] = LABELS,
+    kinds: Mapping[str, str] = KINDS,
+) -> Stack:
     """What ran the runs that wrote *dataset*, and where it lives.
 
     The first event that says each wins, in the order given. One that names
@@ -137,7 +181,12 @@ def of(events: Iterable[Event], dataset: str, labels: Mapping[str, str] = LABELS
         stored = stored or stored_in(output, labels)
         if ran and stored:
             break
-    return Stack(ran_on=ran, stored_in=stored)
+    return Stack(
+        ran_on=ran,
+        stored_in=stored,
+        ran_on_kind=kinds.get(ran, ""),
+        stored_in_kind=kinds.get(stored, ""),
+    )
 
 
 def where(events: Iterable[Event], dataset: str, labels: Mapping[str, str] = LABELS) -> str:
@@ -153,6 +202,11 @@ def where(events: Iterable[Event], dataset: str, labels: Mapping[str, str] = LAB
 def labels(extra: Mapping[str, str]) -> Mapping[str, str]:
     """The defaults with `platforms:` from `qedro.yaml` merged over them."""
     return {**LABELS, **{k.lower(): v for k, v in extra.items()}}
+
+
+def kinds(extra: Mapping[str, str]) -> Mapping[str, str]:
+    """The default kinds with those `platforms:` gives, keyed by label."""
+    return {**KINDS, **extra}
 
 
 def _scheme(text: str) -> str:

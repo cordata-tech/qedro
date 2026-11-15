@@ -860,6 +860,9 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
                     # lives (#39); `null` where they say nothing.
                     "ran_on": s.production.stack.ran_on or None,
                     "stored_in": s.production.stack.stored_in or None,
+                    # The kind each label is, which the PDF draws as an icon.
+                    "ran_on_kind": s.production.stack.ran_on_kind or None,
+                    "stored_in_kind": s.production.stack.stored_in_kind or None,
                     "code": {
                         "repository": s.production.code.repository,
                         "commit": s.production.code.commit,
@@ -1044,6 +1047,7 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
         "qedro": _document("erasure"),
         "dataset": record.dataset,
         "stored_in": record.stored_in or None,
+        "stored_in_kind": record.stored_in_kind or None,
         "tombstone": {
             "at": _when(record.tombstone.at),
             "provenance": str(record.tombstone.provenance),
@@ -1069,6 +1073,9 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
                 # lives (#39); `null` where they say nothing.
                 "ran_on": d.stack.ran_on or None,
                 "stored_in": d.stack.stored_in or None,
+                # The kind each label is, which the PDF draws as an icon.
+                "ran_on_kind": d.stack.ran_on_kind or None,
+                "stored_in_kind": d.stack.stored_in_kind or None,
                 # `null`, not a date and not `false`: *nothing wrote it* and
                 # *we could not tell* are different answers, and the second is
                 # what `incomplete` is for.

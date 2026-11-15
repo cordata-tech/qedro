@@ -304,6 +304,7 @@ class Record:
     generated_from: str = ""
     #: Where the erased dataset lives, as any event naming it says (#39).
     stored_in: str = ""
+    stored_in_kind: str = ""
 
     @property
     def complete(self) -> bool:
@@ -446,10 +447,11 @@ def build(
                     frontier.append((output.key, level + 1))
 
     labels = stack_module.labels(config.platforms)
+    kinds = stack_module.kinds(config.platform_kinds)
     descendants = tuple(
         sorted(
             (
-                _measure(d, events, tombstone, stack_module.of(events, d.dataset, labels))
+                _measure(d, events, tombstone, stack_module.of(events, d.dataset, labels, kinds))
                 for d in found.values()
             ),
             key=lambda d: (d.depth, d.dataset),
@@ -474,7 +476,8 @@ def build(
             descendants, dataset=dataset, tombstone=tombstone, scope=scope, report=report
         ),
         generated_from=report.origin if report else "",
-        stored_in=stack_module.where(events, dataset, labels),
+        stored_in=(where := stack_module.where(events, dataset, labels)),
+        stored_in_kind=kinds.get(where, ""),
     )
 
 

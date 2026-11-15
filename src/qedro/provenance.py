@@ -350,6 +350,7 @@ def build(
             producers.setdefault(output.key, []).append(event)
 
     labels = stack_module.labels(config.platforms)
+    kinds = stack_module.kinds(config.platform_kinds)
     steps: list[Step] = []
     seen = {dataset}
     frontier = [(dataset, 0)]
@@ -370,7 +371,7 @@ def build(
         ]
         # Read from every run that wrote it, newest first, because an emitter
         # may name its integration on one event of a run and not another.
-        production = _production(ordered[0], stack_module.of(ordered, key, labels))
+        production = _production(ordered[0], stack_module.of(ordered, key, labels, kinds))
         # Distinct runs, not events. Emitters routinely declare the outputs on
         # START *and* on COMPLETE — dbt does — so counting events reported one
         # run as two and printed "1 other run wrote this" about a run that had

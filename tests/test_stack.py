@@ -129,3 +129,71 @@ class TestRealCaptures:
         events, _ = read(str(FIXTURES / fixture))
         written = {o.key for e in events for o in e.outputs}
         assert {stack.of(events, key).describe() for key in written} == expected
+
+
+class TestKinds:
+    """What a diagram draws an icon for: a kind of thing, never a vendor."""
+
+    def test_each_label_has_the_kind_of_thing_it_is(self):
+        found = stack.of(
+            [event(integration="DBT", namespace="snowflake://acme")], "snowflake://acme/orders"
+        )
+        assert (found.ran_on_kind, found.stored_in_kind) == ("transformation", "database")
+
+    def test_two_vendors_of_one_kind_share_it(self):
+        assert stack.KINDS["Snowflake"] == stack.KINDS["PostgreSQL"] == "database"
+
+    def test_a_label_with_no_kind_gets_no_icon(self):
+        found = stack.of([event(integration="PREFECT")], "wh/orders")
+        assert found.ran_on == "PREFECT" and found.ran_on_kind == ""
+
+    def test_the_config_can_give_a_platform_its_kind(self):
+        cfg = config.parse("platforms:\n  cordata:\n    label: AWS Glue\n    kind: database\n")
+        found = stack.of(
+            [event(namespace="cordata://fraud")],
+            "cordata://fraud/orders",
+            stack.labels(cfg.platforms),
+            stack.kinds(cfg.platform_kinds),
+        )
+        assert (found.stored_in, found.stored_in_kind) == ("AWS Glue", "database")
+
+    def test_a_kind_outside_the_list_is_refused_by_name(self):
+        with pytest.raises(ConfigError, match="Allowed: database"):
+            config.parse("platforms:\n  cordata:\n    label: AWS Glue\n    kind: lake\n")
+
+
+class TestTheDiagram:
+    """The tree draws the platform apart from the state, and explains its icons."""
+
+    def nodes(self):
+        from qedro import erasure
+        from qedro.pdf import _erasure_nodes
+
+        events, report = read("docs/examples/erasure")
+        record = erasure.build(
+            events,
+            dataset="warehouse/crm_raw.contacts",
+            config=config.parse("controller: ACME\n"),
+            report=report,
+        )
+        return _erasure_nodes(record)
+
+    def test_the_platform_is_its_own_line_not_one_of_the_states(self):
+        by_key = {n.key: n for n in self.nodes()}
+        customers = by_key["warehouse/crm_curated.customers"]
+        assert customers.platform == "on dbt · Snowflake"
+        assert all("Snowflake" not in line for line in customers.lines)
+
+    def test_the_legend_names_only_the_kinds_the_tree_uses(self):
+        from qedro.pdf import _legend
+
+        legend = _legend(self.nodes())
+        words = {s.text for s in legend.contents[0].contents if hasattr(s, "text")}
+        assert words == {
+            "database", "object storage", "transformation", "orchestrator", "processing engine",
+        }  # fmt: skip
+
+    def test_a_tree_with_no_kinds_has_no_legend(self):
+        from qedro.pdf import _legend, _Node
+
+        assert _legend([_Node("a", 0, ("a",), root=True)]) is None

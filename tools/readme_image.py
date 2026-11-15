@@ -104,11 +104,24 @@ def erasure_tree() -> Image.Image:
         config=config_module.parse("controller: ACME Finanz GmbH\n"),
         report=report,
     )
-    drawing = pdf._tree(pdf._erasure_nodes(built))
-    page = pypdfium2.PdfDocument(renderPDF.drawToString(drawing))[0]
-    tree = page.render(scale=2.4).to_pil().convert("RGB")
-    out = Image.new("RGB", (tree.width + 2 * MARGIN, tree.height + 2 * MARGIN), "white")
-    out.paste(tree, (MARGIN, MARGIN))
+    nodes = pdf._erasure_nodes(built)
+    # The tree and, under it, the legend the PDF prints for its icons.
+    parts = [
+        pypdfium2.PdfDocument(renderPDF.drawToString(drawing))[0]
+        .render(scale=2.4)
+        .to_pil()
+        .convert("RGB")
+        for drawing in (pdf._tree(nodes), pdf._legend(nodes))
+        if drawing is not None
+    ]
+    gap = MARGIN // 2
+    width = max(p.width for p in parts) + 2 * MARGIN
+    height = sum(p.height for p in parts) + gap * (len(parts) - 1) + 2 * MARGIN
+    out = Image.new("RGB", (width, height), "white")
+    y = MARGIN
+    for part in parts:
+        out.paste(part, (MARGIN, y))
+        y += part.height + gap
     return out
 
 

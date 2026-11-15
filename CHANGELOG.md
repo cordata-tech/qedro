@@ -6,6 +6,21 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **Icons in the PDF trees for the kind of thing each step is** (#39): a database,
+  object storage, files or a stream beside each dataset's name, and a transformation,
+  an orchestrator, a processing engine or a data quality check beside what ran it.
+  An icon stands for a kind, never a vendor, and is drawn by qedro, so nothing is
+  licensed or bundled. A legend under each tree names the icons it uses.
+- **The platform line is drawn in its own colour**, apart from the state's grey and
+  the tint, in the boxes and in the descendants table, and a note under each tree says
+  what the lines, the colour and the tint mean. A job's name on a line now sits on a
+  white backing instead of being crossed by it.
+- **`platforms:` entries can give a kind**, `{label: AWS Glue, kind: database}`, so a
+  platform qedro does not know still gets its icon. The JSON of both records gains
+  `ran_on_kind` and `stored_in_kind`.
+
 ## 0.14.0 — 2026-11-14
 
 The erasure record and the provenance chain say what ran each step and where its
