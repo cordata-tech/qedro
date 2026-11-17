@@ -466,6 +466,11 @@ def _(record: Record, *, indent: int = 2) -> str:
         "vocabulary": record.vocabulary,
         "activities": [_activity_json(a) for a in record.activities],
         "declared": [_declared_json(d) for d in record.declared],
+        # Every dataset the activities read or write, and where it lives (#39).
+        "datasets": [
+            {"key": key, "stored_in": where or None, "stored_in_kind": kind or None}
+            for key, (where, kind) in record.stores.items()
+        ],
         "scope": {
             "source": record.scope.source,
             "window": {
@@ -593,6 +598,12 @@ def _activity_json(activity: Activity) -> dict[str, object]:
         "last_seen": _when(activity.last_seen),
         "evidenced": activity.evidenced,
         "gaps": activity.gaps(),
+        # What ran the job and where what it writes lives, as its events say
+        # (#39); `null` where they say nothing.
+        "ran_on": activity.stack.ran_on or None,
+        "ran_on_kind": activity.stack.ran_on_kind or None,
+        "stored_in": activity.stack.stored_in or None,
+        "stored_in_kind": activity.stack.stored_in_kind or None,
     }
 
 

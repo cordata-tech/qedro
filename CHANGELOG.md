@@ -6,6 +6,15 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The Art. 30 record's JSON says what ran each activity and where each dataset
+  lives** (#39), as the erasure record and the provenance chain already do: each
+  activity gains `ran_on`, `stored_in` and their kinds, and the record gains
+  `datasets`, every dataset its activities read or write with where it lives. Read
+  from the events only, `null` where they say nothing. The other formats are
+  unchanged; this is what lets the console draw the same icons the PDF trees do.
+
 ## 0.16.0 — 2026-11-17
 
 A person can sign a record off, and qedro keeps who accepted which version beside it.

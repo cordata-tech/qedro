@@ -197,3 +197,48 @@ class TestTheDiagram:
         from qedro.pdf import _legend, _Node
 
         assert _legend([_Node("a", 0, ("a",), root=True)]) is None
+
+
+class TestTheArt30Record:
+    """The Art. 30 JSON says what ran each activity and where each dataset lives,
+    so the console can draw the same kinds the PDF trees do (#39)."""
+
+    def record(self):
+        from qedro import ropa, vocabulary
+
+        events, report = read("demo/lineage-declared")
+        return ropa.build(
+            events,
+            config=config.load("demo/qedro.yaml"),
+            vocabulary=vocabulary.load(),
+            report=report,
+        )
+
+    def test_every_activity_names_what_ran_it(self):
+        ran = {a.key: (a.stack.ran_on, a.stack.ran_on_kind) for a in self.record().activities}
+        assert ran["acme.crm/customers-curated"] == ("dbt", "transformation")
+        assert ran["acme.billing/invoices-nightly"] == ("Airflow", "orchestrator")
+        assert set(ran.values()) <= {
+            ("dbt", "transformation"),
+            ("Airflow", "orchestrator"),
+            ("Spark", "processing engine"),
+        }
+
+    def test_every_dataset_in_view_has_an_entry(self):
+        record = self.record()
+        in_view = {d for a in record.activities for d in (*a.inputs, *a.outputs)}
+        assert set(record.stores) == in_view
+        assert set(record.stores.values()) == {("PostgreSQL", "database")}
+
+    def test_the_json_carries_both(self):
+        import json
+
+        from qedro import render
+
+        payload = json.loads(render.json(self.record()))
+        assert payload["activities"][0]["ran_on_kind"] in {
+            "transformation",
+            "orchestrator",
+            "processing engine",
+        }
+        assert {d["stored_in"] for d in payload["datasets"]} == {"PostgreSQL"}

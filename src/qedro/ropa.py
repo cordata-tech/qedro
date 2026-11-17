@@ -32,11 +32,13 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from . import scope, words
+from . import stack as stack_module
 from .config import Config, Controller, Rule
 from .events import Event
 from .mark import Completeness
 from .signoff import Standing
 from .sources import ReadReport
+from .stack import Stack
 from .vocabulary import Vocabulary
 
 if TYPE_CHECKING:  # declared.py builds on Provenance and Sourced from here
@@ -173,6 +175,8 @@ class Activity:
     #: nothing emits either.
     recipients: tuple[str, ...] = ()
     security_measures: tuple[str, ...] = ()
+    #: What ran the job and where what it writes lives, as its events say (#39).
+    stack: Stack = field(default_factory=Stack)
 
     @property
     def key(self) -> str:
@@ -385,6 +389,9 @@ class Record:
     #: `activities` so nothing that iterates over those — counts, domains, the
     #: deployer view's use cases — can take a declared entry for an evidenced one.
     declared: tuple[Declared, ...] = ()
+    #: Where each dataset in view lives, as label and kind, "" where nothing
+    #: said (#39). For a console drawing a dataset's icon beside its name.
+    stores: Mapping[str, tuple[str, str]] = field(default_factory=dict)
     #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
     #: verdict and never read by it: a signature is not evidence.
     signoff: Standing | None = None
@@ -417,11 +424,26 @@ def build(
 
     parents = _parents(grouped)
     tagged = _tags_in_view(events)
+    labels = stack_module.labels(config.platforms)
+    kinds = stack_module.kinds(config.platform_kinds)
     activities = tuple(
-        _activity(job_events, config=config, vocabulary=vocabulary, tagged=tagged)
+        _activity(
+            job_events,
+            config=config,
+            vocabulary=vocabulary,
+            tagged=tagged,
+            stack=stack_module.of_job(job_events, labels, kinds),
+        )
         for key, job_events in sorted(grouped.items())
         if key not in parents
     )
+    every = [e for job_events in grouped.values() for e in job_events]
+    in_view = sorted({d for a in activities for d in (*a.inputs, *a.outputs)})
+    stores = {
+        key: (where, kinds.get(where, ""))
+        for key in in_view
+        for where in (stack_module.where(every, key, labels),)
+    }
 
     scope = _scope(
         activities,
@@ -448,6 +470,7 @@ def build(
         vocabulary=vocabulary.name,
         generated_from=report.origin if report else "",
         declared=tuple(declared),
+        stores=stores,
     )
 
 
@@ -457,6 +480,7 @@ def _activity(
     config: Config,
     vocabulary: Vocabulary,
     tagged: Mapping[str, Mapping[tuple[str, str], frozenset[str]]] | None = None,
+    stack: Stack | None = None,
 ) -> Activity:
     first = events[0]
     rule = config.rule_for(first.job.namespace, first.job.name)
@@ -501,6 +525,7 @@ def _activity(
         events=len(events),
         first_seen=min(times) if times else None,
         last_seen=max(times) if times else None,
+        stack=stack or Stack(),
     )
 
 

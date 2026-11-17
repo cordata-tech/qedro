@@ -189,6 +189,35 @@ def of(
     )
 
 
+def of_job(
+    events: Iterable[Event],
+    labels: Mapping[str, str] = LABELS,
+    kinds: Mapping[str, str] = KINDS,
+) -> Stack:
+    """What ran a job's events, and where what it writes lives — or reads, when
+    it writes nothing. For the Art. 30 record, where an activity is a job rather
+    than a dataset.
+    """
+    events = list(events)
+    ran = next((found for e in events if (found := ran_on(e, labels))), "")
+    stored = next(
+        (
+            found
+            for side in ("outputs", "inputs")
+            for e in events
+            for d in getattr(e, side)
+            if (found := stored_in(d, labels))
+        ),
+        "",
+    )
+    return Stack(
+        ran_on=ran,
+        stored_in=stored,
+        ran_on_kind=kinds.get(ran, ""),
+        stored_in_kind=kinds.get(stored, ""),
+    )
+
+
 def where(events: Iterable[Event], dataset: str, labels: Mapping[str, str] = LABELS) -> str:
     """Where *dataset* lives, from any event that names it, written or read."""
     for event in events:
