@@ -136,6 +136,7 @@ def _activities(sheet: Any, record: Record) -> None:
     sheet["A3"] = f"Contact: {record.controller.contact}" if record.controller.contact else ""
     sheet["A4"] = _verdict(record)
     sheet["A4"].font = STRONG
+    _signoff(sheet, "A5", record)
 
     for index, (heading, width) in enumerate(COLUMNS, start=1):
         cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)
@@ -277,6 +278,13 @@ def _declared_row(sheet: Any, row: int, entry: Any) -> None:
         sheet.cell(row=row, column=column).fill = ASSERTED_FILL
 
 
+def _signoff(sheet: Any, cell: str, record: Any) -> None:
+    """The sign-off in the row under the verdict, when `--signoff` attached one (#40)."""
+    standing = getattr(record, "signoff", None)
+    if standing is not None:
+        sheet[cell] = f"Sign-off: {standing.describe()} — {standing.CAVEAT}"
+
+
 def _verdict(record: Record) -> str:
     if record.complete:
         return f"Every activity in this record stands on emitted evidence. {TOMBSTONE}"
@@ -401,6 +409,7 @@ def _descendants(sheet: Any, record: Any) -> None:
     # The verdict goes where the file opens, as in every other workbook here.
     sheet["A3"] = _erasure_verdict(record)
     sheet["A3"].font = STRONG
+    _signoff(sheet, "A4", record)
 
     header = 5
     for index, (heading, width) in enumerate(ERASURE_COLUMNS, start=1):
@@ -743,6 +752,7 @@ def _expectations(sheet: Any, record: QualityRecord) -> None:
     )
     sheet["A4"] = _quality_verdict(record)
     sheet["A4"].font = STRONG
+    _signoff(sheet, "A5", record)
 
     for index, (heading, width) in enumerate(QUALITY_COLUMNS, start=1):
         cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)
@@ -903,6 +913,7 @@ def _chain(sheet: Any, record: ProvenanceRecord) -> None:
     )
     sheet["A4"] = _provenance_verdict(record)
     sheet["A4"].font = STRONG
+    _signoff(sheet, "A5", record)
 
     for index, (heading, width) in enumerate(PROVENANCE_COLUMNS, start=1):
         cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)
@@ -1049,6 +1060,7 @@ def _use_cases(sheet: Any, record: DeployerRecord) -> None:
     sheet["A3"] = f"{record.regulation}. {record.application}"
     sheet["A4"] = _deployer_verdict(record)
     sheet["A4"].font = STRONG
+    _signoff(sheet, "A5", record)
 
     for index, (heading, width) in enumerate(DEPLOYER_COLUMNS, start=1):
         cell = sheet.cell(row=HEADER_ROW, column=index, value=heading)

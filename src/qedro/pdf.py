@@ -191,10 +191,22 @@ def _verdict(record: Any, earned: str) -> list[Flowable]:
                 ]
             )
         )
-        return [row]
+        return [row, *_signoff(record)]
     out: list[Flowable] = [_p("This record does not claim to be a proof:", VERDICT)]
     out += [_p(f"• {reason}") for reason in record.completeness.reasons]
-    return out
+    return out + _signoff(record)
+
+
+def _signoff(record: Any) -> list[Flowable]:
+    """The sign-off under the verdict, when `--signoff` attached one (#40)."""
+    standing = getattr(record, "signoff", None)
+    if standing is None:
+        return []
+    return [
+        Spacer(1, 4),
+        _p(f"Sign-off: {standing.describe()}"),
+        _p(f"A sign-off is {standing.CAVEAT}.", SMALL),
+    ]
 
 
 def _scope(

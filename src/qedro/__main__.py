@@ -13,6 +13,7 @@ in tests.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import sys
@@ -31,6 +32,7 @@ from . import (
     quality,
     render,
     ropa,
+    signoff,
     vocabulary,
     words,
 )
@@ -153,6 +155,7 @@ def _ropa(
     out: str | None,
     view: str = "art30",
     activities_path: str | None = None,
+    signoff_path: str | None = None,
 ) -> int:
     fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
@@ -191,9 +194,9 @@ def _ropa(
             since=since,
             until=until,
         )
-        return _emit(view_record, fmt=fmt, out=out, symbol=symbol)
+        return _emit(view_record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
 
-    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+    return _emit(record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
 
 
 def _quality(
@@ -206,6 +209,7 @@ def _quality(
     config_path: str | None,
     fmt: str | None,
     out: str | None,
+    signoff_path: str | None = None,
 ) -> int:
     fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
@@ -225,7 +229,7 @@ def _quality(
             print(f"  {reason}", file=sys.stderr)
         return 1
 
-    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+    return _emit(record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
 
 
 def _provenance(
@@ -239,6 +243,7 @@ def _provenance(
     config_path: str | None,
     fmt: str | None,
     out: str | None,
+    signoff_path: str | None = None,
 ) -> int:
     fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
@@ -271,7 +276,7 @@ def _provenance(
         until=until,
         depth=depth,
     )
-    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+    return _emit(record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
 
 
 def _erasure(
@@ -285,6 +290,7 @@ def _erasure(
     config_path: str | None,
     fmt: str | None,
     out: str | None,
+    signoff_path: str | None = None,
 ) -> int:
     fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
@@ -317,7 +323,7 @@ def _erasure(
         until=until,
         depth=depth,
     )
-    return _emit(record, fmt=fmt, out=out, symbol=symbol)
+    return _emit(record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
 
 
 def _format(fmt: str | None, out: str | None) -> str:
@@ -419,8 +425,70 @@ def _demo(target: str) -> int:
     return 0
 
 
-def _emit(record, *, fmt: str, out: str | None, symbol: bool) -> int:
+def _sign(record: str, *, state: str, by: str, note: str) -> int:
+    """Add one sign-off entry beside a record's JSON (#40)."""
+    path, entry = signoff.sign(
+        record, state=state, by=by, at=datetime.now(UTC).replace(microsecond=0), note=note
+    )
+    print(f"  {Path(record).name}: {entry.describe()}")
+    print(f"  wrote {path}")
+    return 0
+
+
+def _status(directory: str) -> int:
+    """Every record under *directory* and where its sign-off stands (#40).
+
+    Read from the files alone: each record's JSON, hashed as `qedro sign` hashes
+    it, against the sign-off file beside it. A JSON file that is not a record
+    qedro wrote is counted rather than listed, as a directory read counts what
+    it passed over.
+    """
+    root = Path(directory)
+    if not root.is_dir():
+        raise UsageError(f"no directory at {directory}")
+    rows: list[tuple[str, str, str, str]] = []
+    states: Counter[str] = Counter()
+    passed_over = 0
+    for path in sorted(root.rglob("*.json")):
+        if path.name.endswith(".signoff.json"):
+            continue
+        try:
+            payload = signoff.read_record(path)
+        except UsageError:
+            passed_over += 1
+            continue
+        standing = signoff.load(signoff.sidecar(path)).standing(signoff.digest(payload))
+        states[standing.state] += 1
+        verdict = "mark earned" if payload.get("complete") else "mark withheld"
+        rows.append(
+            (str(path.relative_to(root)), str(payload["qedro"].get("projection", "")), verdict,
+             standing.describe())
+        )  # fmt: skip
+    if not rows:
+        print(f"  no records qedro wrote under {directory}")
+    width = max((len(r[0]) for r in rows), default=0)
+    for name, projection, verdict, standing in rows:
+        print(f"  {name:<{width}}  {projection:<10}  {verdict:<13}  {standing}")
+    if rows:
+        counts = ", ".join(f"{states[s]} {s}" for s in signoff.STATES)
+        print(f"\n  {words.count(len(rows), 'record')}: {counts}")
+        print(f"  a sign-off is {signoff.Standing.CAVEAT}")
+    if passed_over:
+        print(f"  {words.count(passed_over, 'JSON file')} passed over: not a record qedro wrote")
+    return 0
+
+
+def _emit(
+    record, *, fmt: str, out: str | None, symbol: bool, signoff_path: str | None = None
+) -> int:
     """Render and deliver, the same way for every projection."""
+    if signoff_path:
+        # Against the record as built from these events, not as somebody saved
+        # it: a sign-off covers this version only if nothing it states changed.
+        if not Path(signoff_path).is_file():
+            raise UsageError(f"no sign-off file at {signoff_path}")
+        payload = json.loads(render.FORMATS["json"](record))
+        record.signoff = signoff.standing_of(payload, signoff_path)
     renderer = render.FORMATS[fmt]
     rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
 
@@ -500,6 +568,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     ropa_cmd.add_argument("--out", help="write to this file instead of standard output")
     ropa_cmd.add_argument(
+        "--signoff",
+        metavar="FILE",
+        help="print where this record stands against a sign-off file `qedro sign` wrote",
+    )
+    ropa_cmd.add_argument(
         "--view",
         choices=("art30", "deployer"),
         default="art30",
@@ -550,6 +623,11 @@ def main(argv: list[str] | None = None) -> int:
         help="output format. Defaults to the one implied by --out, else text",
     )
     quality_cmd.add_argument("--out", help="write to this file instead of standard output")
+    quality_cmd.add_argument(
+        "--signoff",
+        metavar="FILE",
+        help="print where this record stands against a sign-off file `qedro sign` wrote",
+    )
 
     provenance_cmd = sub.add_parser(
         "provenance",
@@ -590,6 +668,11 @@ def main(argv: list[str] | None = None) -> int:
         help="output format. Defaults to the one implied by --out, else text",
     )
     provenance_cmd.add_argument("--out", help="write to this file instead of standard output")
+    provenance_cmd.add_argument(
+        "--signoff",
+        metavar="FILE",
+        help="print where this record stands against a sign-off file `qedro sign` wrote",
+    )
 
     erasure_cmd = sub.add_parser(
         "erasure",
@@ -643,6 +726,11 @@ def main(argv: list[str] | None = None) -> int:
         help="output format. Defaults to the one implied by --out, else text",
     )
     erasure_cmd.add_argument("--out", help="write to this file instead of standard output")
+    erasure_cmd.add_argument(
+        "--signoff",
+        metavar="FILE",
+        help="print where this record stands against a sign-off file `qedro sign` wrote",
+    )
 
     diff_cmd = sub.add_parser(
         "diff",
@@ -684,6 +772,37 @@ def main(argv: list[str] | None = None) -> int:
         "directory", nargs="?", default="demo", help="where to write it (default ./demo)"
     )
 
+    sign_cmd = sub.add_parser(
+        "sign",
+        help="record a person's sign-off on a record's JSON, in a file beside it",
+        description=(
+            "Adds one entry to record.signoff.json beside record.json: the state, who "
+            "set it, when, and the SHA-256 of the record it covers. The states are "
+            "draft, for sign-off, approved and published, one step forward at a time "
+            "or back to draft, and nothing already in the file is changed. A sign-off "
+            "is a person's acceptance of the record, not evidence, and never changes "
+            "its verdict."
+        ),
+    )
+    sign_cmd.add_argument("record", help="the record's JSON, as --out record.json wrote it")
+    sign_cmd.add_argument("--as", dest="by", required=True, help="who is signing, by name")
+    sign_cmd.add_argument(
+        "--state", required=True, choices=list(signoff.STATES), help="the state to move to"
+    )
+    sign_cmd.add_argument("--note", default="", help="a sentence kept with the entry")
+
+    status_cmd = sub.add_parser(
+        "status",
+        help="every record in a directory and where its sign-off stands",
+        description=(
+            "Lists each record qedro wrote under a directory, whether it earned the "
+            "mark, and its sign-off, read from the files beside it. A record changed "
+            "since it was signed is reported as not signed off, naming the earlier "
+            "sign-off."
+        ),
+    )
+    status_cmd.add_argument("directory", nargs="?", default=".", help="where the records are")
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     # The env var is for CI logs and containers, where nobody is around to
@@ -704,6 +823,7 @@ def main(argv: list[str] | None = None) -> int:
                 config_path=args.config,
                 fmt=args.fmt,
                 out=args.out,
+                signoff_path=args.signoff,
             )
         if args.command == "provenance":
             since, until = _window(args)
@@ -717,6 +837,7 @@ def main(argv: list[str] | None = None) -> int:
                 config_path=args.config,
                 fmt=args.fmt,
                 out=args.out,
+                signoff_path=args.signoff,
             )
         if args.command == "erasure":
             since, until = _window(args)
@@ -730,9 +851,14 @@ def main(argv: list[str] | None = None) -> int:
                 config_path=args.config,
                 fmt=args.fmt,
                 out=args.out,
+                signoff_path=args.signoff,
             )
         if args.command == "demo":
             return _demo(args.directory)
+        if args.command == "sign":
+            return _sign(args.record, state=args.state, by=args.by, note=args.note)
+        if args.command == "status":
+            return _status(args.directory)
         if args.command == "diff":
             return _diff(args.before, args.after, fmt=args.fmt, out=args.out)
         if args.command == "ropa":
@@ -747,6 +873,7 @@ def main(argv: list[str] | None = None) -> int:
                 out=args.out,
                 view=args.view,
                 activities_path=args.activities,
+                signoff_path=args.signoff,
             )
     except QedroError as exc:
         # What the user wrote, handed back as a sentence rather than a

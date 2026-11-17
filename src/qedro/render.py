@@ -248,10 +248,24 @@ def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record"
 def _verdict_text(record, earned: str, *, symbol: bool, withheld: str = "record") -> list[str]:
     """The mark, or the reasons it was withheld. Never a bare boolean."""
     if record.complete:
-        return [f"  {earned}   {TOMBSTONE if symbol else '[complete]'}"]
-    return [f"  this {withheld} does not claim to be a proof:"] + [
-        f"    ! {reason}" for reason in record.completeness.reasons
-    ]
+        out = [f"  {earned}   {TOMBSTONE if symbol else '[complete]'}"]
+    else:
+        out = [f"  this {withheld} does not claim to be a proof:"] + [
+            f"    ! {reason}" for reason in record.completeness.reasons
+        ]
+    return out + _signoff_text(record)
+
+
+def _signoff_text(record) -> list[str]:
+    """The sign-off under the verdict, when `--signoff` attached one (#40).
+
+    After the verdict and apart from it, with the caveat every time: a reader
+    who sees *approved* beside a withheld mark must not take one for the other.
+    """
+    standing = getattr(record, "signoff", None)
+    if standing is None:
+        return []
+    return [f"  sign-off: {standing.describe()}", f"    {standing.CAVEAT}"]
 
 
 def _wrap(paragraph: str, width: int) -> list[str]:
@@ -373,12 +387,16 @@ def _scope_markdown(scope: Scope, *, title: str = "Scope of this record") -> lis
 
 def _verdict_markdown(record, earned: str, *, withheld: str = "record") -> list[str]:
     if record.complete:
-        return [f"{earned} {TOMBSTONE}", ""]
-    return (
-        [f"**This {withheld} does not claim to be a proof.**", ""]
-        + [f"- {reason}" for reason in record.completeness.reasons]
-        + [""]
-    )
+        out = [f"{earned} {TOMBSTONE}", ""]
+    else:
+        out = (
+            [f"**This {withheld} does not claim to be a proof.**", ""]
+            + [f"- {reason}" for reason in record.completeness.reasons]
+            + [""]
+        )
+    if (standing := getattr(record, "signoff", None)) is not None:
+        out += [f"**Sign-off:** {standing.describe()} _({standing.CAVEAT})_", ""]
+    return out
 
 
 def _asserted(values: tuple[str, ...]) -> str:
@@ -398,6 +416,27 @@ def _provenance_cell(activity: Activity) -> str:
     if "mapping" in sources:
         return "mapping file"
     return "not declared"
+
+
+def _dumps(payload: dict[str, object], record: object, indent: int) -> str:
+    """The JSON, with the sign-off added when `--signoff` attached one (#40).
+
+    Added only then, so a record nobody signed is byte-identical to before, and
+    left out of the hash a sign-off names, so adding it changes nothing it covers.
+    """
+    standing = getattr(record, "signoff", None)
+    if standing is not None:
+        payload["signoff"] = {
+            "state": standing.state,
+            "by": standing.latest.by if standing.latest else None,
+            "at": standing.latest.at.isoformat() if standing.latest else None,
+            "note": (standing.latest.note or None) if standing.latest else None,
+            "approved_by": standing.approved.by if standing.approved else None,
+            "earlier_version_signed": standing.earlier is not None,
+            "describe": standing.describe(),
+            "caveat": standing.CAVEAT,
+        }
+    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
 
 
 @singledispatch
@@ -469,7 +508,7 @@ def _(record: Record, *, indent: int = 2) -> str:
         "complete": record.complete,
         "reasons": list(record.completeness.reasons),
     }
-    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+    return _dumps(payload, record, indent)
 
 
 def _declared_json(entry) -> dict[str, object]:
@@ -754,7 +793,7 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
         "complete": record.complete,
         "reasons": list(record.completeness.reasons),
     }
-    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+    return _dumps(payload, record, indent)
 
 
 # --- provenance -------------------------------------------------------------
@@ -909,7 +948,7 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
         "complete": record.complete,
         "reasons": list(record.completeness.reasons),
     }
-    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+    return _dumps(payload, record, indent)
 
 
 @xlsx.register
@@ -1111,7 +1150,7 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
         "complete": record.complete,
         "reasons": list(record.completeness.reasons),
     }
-    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+    return _dumps(payload, record, indent)
 
 
 @xlsx.register
@@ -1373,7 +1412,7 @@ def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
         "complete": record.complete,
         "reasons": list(record.completeness.reasons),
     }
-    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+    return _dumps(payload, record, indent)
 
 
 @xlsx.register
@@ -1734,7 +1773,7 @@ def _(record: compare_module.Comparison, *, indent: int = 2) -> str:
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
     }
-    return _json.dumps(payload, indent=indent, ensure_ascii=False) + "\n"
+    return _dumps(payload, record, indent)
 
 
 def _finding_side(value) -> dict[str, object] | None:

@@ -35,6 +35,7 @@ from . import scope, words
 from .config import Config, Controller, Rule
 from .events import Event
 from .mark import Completeness
+from .signoff import Standing
 from .sources import ReadReport
 from .vocabulary import Vocabulary
 
@@ -384,6 +385,9 @@ class Record:
     #: `activities` so nothing that iterates over those — counts, domains, the
     #: deployer view's use cases — can take a declared entry for an evidenced one.
     declared: tuple[Declared, ...] = ()
+    #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
+    #: verdict and never read by it: a signature is not evidence.
+    signoff: Standing | None = None
 
     @property
     def complete(self) -> bool:

@@ -52,6 +52,7 @@ from .declared import Declared
 from .events import Event
 from .mark import Completeness
 from .ropa import Activity, Provenance, Record
+from .signoff import Standing
 from .sources import ReadReport
 
 #: How every rendering names the law it refers to. One text, cited once.
@@ -181,6 +182,9 @@ class DeployerRecord:
     vocabulary: str = ""
     regulation: str = REGULATION
     application: str = APPLICATION
+    #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
+    #: verdict and never read by it: a signature is not evidence.
+    signoff: Standing | None = None
 
     @property
     def complete(self) -> bool:

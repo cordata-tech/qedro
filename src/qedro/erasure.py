@@ -40,6 +40,7 @@ from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
 from .ropa import Provenance
+from .signoff import Standing
 from .sources import ReadReport, utc
 from .words import count, plural
 
@@ -305,6 +306,9 @@ class Record:
     #: Where the erased dataset lives, as any event naming it says (#39).
     stored_in: str = ""
     stored_in_kind: str = ""
+    #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
+    #: verdict and never read by it: a signature is not evidence.
+    signoff: Standing | None = None
 
     @property
     def complete(self) -> bool:

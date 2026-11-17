@@ -6,6 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **A person's sign-off on a record** (#40). `qedro sign record.json --as NAME --state
+  STATE` adds an entry to `record.signoff.json` beside it: draft, for sign-off,
+  approved or published, one step forward at a time or back to draft, each entry naming
+  the SHA-256 of the record it covers. `qedro status <directory>` lists every record,
+  whether it earned the mark, and where its sign-off stands, and reports a record that
+  changed since it was signed as not signed off. `--signoff FILE` on any projection
+  prints the sign-off under the verdict in every format. A sign-off is a person's
+  acceptance, not evidence: it never changes the verdict, and output with no
+  `--signoff` is unchanged.
+
 ## 0.15.0 — 2026-11-15
 
 The PDF trees draw an icon for the kind of each step and set the platform line apart

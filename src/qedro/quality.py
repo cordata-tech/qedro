@@ -40,6 +40,7 @@ from . import words
 from .config import Config, Controller
 from .events import Dataset, Event
 from .mark import Completeness
+from .signoff import Standing
 from .sources import ReadReport
 
 #: The standard OpenLineage facet. Not ours — this one the ecosystem already
@@ -180,6 +181,9 @@ class Record:
     scope: Scope = field(default_factory=Scope)
     completeness: Completeness = field(default_factory=Completeness)
     generated_from: str = ""
+    #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
+    #: verdict and never read by it: a signature is not evidence.
+    signoff: Standing | None = None
 
     @property
     def complete(self) -> bool:

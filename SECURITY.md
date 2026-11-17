@@ -27,7 +27,8 @@ actually issued.
 **No credential that could acquire one.** If a backend needs a token it comes
 from `QEDRO_API_TOKEN` and nowhere else — never a command-line flag, where it
 would land in shell history and in the output of `ps`. Nothing is written to
-disk except the artefact you asked for, at the path you named.
+disk except the artefact you asked for, at the path you named, and the sign-off
+file `qedro sign` writes beside the record you hand it, which it only adds to.
 
 **Buckets use your environment's credentials, so give them a read-only role.**
 Reading an `s3://`, `gs://` or `az://` prefix goes through the cloud's own
@@ -93,7 +94,9 @@ artefact claim more than that is a security issue here, and is listed as one abo
 ## Scope
 
 In scope: anything that lets a crafted lineage event, config file or vocabulary
-document cause code execution, a file write outside `--out`, a network request
+document cause code execution, a file write other than `--out` or the sign-off
+file beside the record `qedro sign` was given, a sign-off entry edited or removed
+rather than added, a network request
 to an address you did not name, or **an artefact that claims to be a proof when
 it is not**. That last one is a security issue here in a way it would not be
 elsewhere: the tombstone is a claim somebody may rely on in front of a regulator.

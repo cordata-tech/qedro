@@ -43,6 +43,7 @@ from . import stack as stack_module
 from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
+from .signoff import Standing
 from .sources import ReadReport
 from .words import count, plural
 
@@ -292,6 +293,9 @@ class Record:
     scope: Scope = field(default_factory=Scope)
     completeness: Completeness = field(default_factory=Completeness)
     generated_from: str = ""
+    #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
+    #: verdict and never read by it: a signature is not evidence.
+    signoff: Standing | None = None
 
     @property
     def complete(self) -> bool:

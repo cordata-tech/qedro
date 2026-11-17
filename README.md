@@ -449,6 +449,35 @@ document by nature, and reporting everything it omits would bury the findings th
 matter. See [`docs/evidence/register-drift.md`](docs/evidence/register-drift.md) for
 the whole thing, captured from a real run.
 
+## Signing a record off
+
+A record of processing activities is the controller's document, and a person signs it.
+`qedro sign` keeps who accepted which version, and when, in a file beside the record's
+JSON:
+
+```console
+$ qedro ropa ./lineage --out record.json
+$ qedro sign record.json --as "Erika Mustermann" --state "for sign-off"
+  record.json: waiting for sign-off, requested by Erika Mustermann on 2026-11-17
+$ qedro sign record.json --as "Erika Mustermann" --state approved --note "reviewed with the data team"
+  record.json: approved by Erika Mustermann on 2026-11-17 — reviewed with the data team
+$ qedro status .
+  record.json  ropa        mark earned    approved by Erika Mustermann on 2026-11-17 — reviewed with the data team
+```
+
+The states are *draft*, *for sign-off*, *approved* and *published*, one step forward at
+a time or back to draft, and `record.signoff.json` is only ever added to. Each entry
+names the SHA-256 of the record it covers, with the tool version and the sign-off itself
+left out of the hash, so the same command over the same events is still covered and a
+record that states anything different is not: `qedro status` then reports it as not
+signed off, naming the earlier sign-off. Kept in Git, the file's history is the audit
+trail.
+
+`--signoff record.signoff.json` on any projection prints where the record it builds
+stands, under the verdict, in every format. **A sign-off is a person's acceptance of
+the record, not evidence:** it never earns or withholds the mark, and every format says
+so beside it.
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and
