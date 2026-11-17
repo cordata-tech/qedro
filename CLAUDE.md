@@ -73,10 +73,11 @@ that disagree with the spec. Bad records are skipped and *counted*, and the coun
 reaches `ReadReport` → the summary line → the completeness decision. That chain is
 relied on downstream, not diagnostics.
 
-## The other three repos
+## The other four repos
 
 | Repo | Answers | Binding |
 |---|---|---|
+| [`qedro-platform`](https://github.com/cordata-tech/qedro-platform) (private until its foundation is settled) | *Can someone who will never run a CLI read the record?* The read-only console now, over the record files this CLI writes; the API and store from v0.6 | **must not be** — it shows what this repository's JSON says, and works nothing out itself |
 | [`pipeline-runtime`](https://github.com/cordata-tech/pipeline-runtime) | *What should this pipeline do, and did it?* | AWS-native by design. LF-tags are correct there |
 | [`catalog-mcp`](https://github.com/cordata-tech/catalog-mcp) (public, on PyPI as `cordata-catalog-mcp`, platform#26) | *What is the policy on this dataset, right now?* | AWS-native by design. Installs the runtime's base package and reads no OpenLineage events |
 | [`art30-emit`](https://github.com/cordata-tech/art30-emit) (public, on PyPI, #27) | *How does code nobody instruments say why it processes?* | **must not be** — it implements the published facet |
