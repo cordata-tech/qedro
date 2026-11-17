@@ -14,6 +14,11 @@
 Needs `qedro[pdf]` and, for rasterising, `pypdfium2` and `pillow`. Neither is a
 dependency of qedro, so this is not run in CI: rerun it by hand whenever the
 first page of the Art. 30 PDF or the erasure tree changes, and look at the result.
+
+The README's recording, `docs/images/demo.gif`, ends on the same first pages, so
+when this needs rerunning so does that: `vhs tools/readme_recording.tape`, then
+`python tools/readme_recording.py`. It also needs recording again whenever what
+`qedro demo` or the three `--out` commands print changes.
 """
 
 from __future__ import annotations

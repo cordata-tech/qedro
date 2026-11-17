@@ -57,6 +57,12 @@ does not exist, with no AWS anywhere in it, and prints the commands that run eac
 projection against it. It needs nothing but the package, and refuses a directory that
 already has anything in it.
 
+![A 40-second terminal recording. pip installs qedro with the pdf extra into an empty virtual environment; qedro demo writes the fictitious company ACME Finanz GmbH and lists the commands to try; qedro ropa writes the Art. 30 record twice, once from the plain lineage, which prints two reasons it is not a proof, and once from the lineage that declares its purposes, which ends with the mark; qedro erasure writes the erasure record and names the one descendant not written since. The recording ends on the first page of the two Art. 30 PDFs side by side, then the erasure PDF with its tree.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/demo.gif)
+
+*Every command in it runs for real, against qedro as published on PyPI, and the
+pages at the end are the PDFs those commands wrote. `vhs tools/readme_recording.tape`
+and `python tools/readme_recording.py` record it again.*
+
 ```console
 $ pipx install qedro
 $ qedro demo
