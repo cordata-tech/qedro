@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.16.0 — 2026-11-17
+
+A person can sign a record off, and qedro keeps who accepted which version beside it.
+Two new commands, `qedro sign` and `qedro status`, and a `--signoff` flag on every
+projection. Nothing changes in output that does not ask for a sign-off.
 
 - **A person's sign-off on a record** (#40). `qedro sign record.json --as NAME --state
   STATE` adds an entry to `record.signoff.json` beside it: draft, for sign-off,
