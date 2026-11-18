@@ -6,7 +6,12 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.20.0 — 2026-11-18
+
+Every Art. 30 field in the JSON is now explained: classification values, the datasets
+nothing classified, and the controller join the purpose, legal basis, recipients and
+security measures. Additions only, beside the existing keys, so sign-offs made with
+0.19.0 still stand.
 
 - **Classification, unclassified datasets and the controller are explained too** (#48).
   `explain.classification` lists, per job, each value with the datasets whose `tags`
