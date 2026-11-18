@@ -15,6 +15,10 @@ before `1.0`.
   platform, as the PDF's step table prints them. A
   consumer such as the console shows these words rather than composing its own, and
   the text output takes each sentence from the same constant, so the two cannot drift.
+- **The provenance PDF's tree hangs each step under the run that read it.** The walk is
+  breadth-first, and the tree hung each step under the last step one level up, so in a
+  chain where two branches both continued, every step two levels down was drawn under
+  the second branch.
 
 ## 0.17.0 — 2026-11-18
 

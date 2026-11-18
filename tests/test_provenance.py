@@ -705,3 +705,21 @@ class TestTheApplicationBehindWhatWasRead:
         assert out.scope.steps == 2
         [line] = [v for label, v in out.scope.lines() if label == "evidence"]
         assert "1 name the application that published what they read" in line
+
+
+class TestTheDiagramFollowsWhatEachRunRead:
+    """The walk is breadth-first, so a step's parent is the run that read it, not
+    whichever step one level up the walk happened to visit last."""
+
+    def test_two_branches_each_keep_their_own_children(self):
+        from qedro.pdf import _provenance_nodes
+
+        events = [
+            event(job="top", run="r1", writes=["final"], reads=["left", "right"]),
+            event(job="l", run="r2", writes=["left"], reads=["left_raw"]),
+            event(job="r", run="r3", writes=["right"], reads=["right_raw"]),
+        ]
+        out = chain(events, "wh/final")
+        parents = {n.key: n.parent for n in _provenance_nodes(out)}
+        assert parents["wh/left_raw"] == "wh/left"
+        assert parents["wh/right_raw"] == "wh/right"

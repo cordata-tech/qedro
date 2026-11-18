@@ -712,11 +712,18 @@ def _signature_word(production: Any) -> str:
 def _provenance_nodes(record: Any) -> list[_Node]:
     """The chain as boxes, the published dataset at the top and its sources below.
 
-    The steps come in walk order with a depth each, as the text renderer
-    indents them, so a step's parent is the last step one level up.
+    The walk is breadth-first, so the steps one level up are not necessarily
+    in order with their children: a step hangs under the step one level up
+    whose run read it, and under the last step one level up only when no run
+    says it read it.
     """
     nodes: list[_Node] = []
     last: dict[int, str] = {}
+    read_by: dict[tuple[int, str], str] = {}
+    for step in record.steps:
+        if step.production is not None:
+            for read in step.production.reads:
+                read_by.setdefault((step.depth, read), step.dataset)
     for step in record.steps:
         p = step.production
         if p is None:
@@ -734,7 +741,7 @@ def _provenance_nodes(record: Any) -> list[_Node]:
                 step.dataset,
                 step.depth,
                 lines,
-                parent=last.get(step.depth - 1, ""),
+                parent=read_by.get((step.depth - 1, step.dataset), last.get(step.depth - 1, "")),
                 gap=gap,
                 root=step.depth == 0,
                 platform=_stack_line(p.stack.describe()) if p else "",
