@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.17.0 — 2026-11-18
+
+The Art. 30 record's JSON says what ran each activity and where its data lives, and a
+sign-off covers what a record states rather than every byte of it. Sign-offs made with
+0.16.0 reopen once and need signing again; text and PDF output are unchanged.
 
 - **The Art. 30 record's JSON says what ran each activity and where each dataset
   lives** (#39), as the erasure record and the provenance chain already do: each
