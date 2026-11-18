@@ -59,6 +59,16 @@ BADGE = {
 }
 
 
+#: The sentence the mark finishes, per projection. In the text output beside the
+#: mark, and in the JSON as `earned`, so a consumer such as the console shows the
+#: same words rather than composing its own. The erasure record's depends on what
+#: the tombstone reported, so it comes from `Tombstone.earned()`.
+EARNED_ART30 = "every activity stands on emitted evidence"
+EARNED_QUALITY = "this history accounts for every dataset in view"
+EARNED_PROVENANCE = "every step ran under a signed commit"
+EARNED_DEPLOYER = "every AI use case in view stands on emitted evidence"
+
+
 def _document(projection: str, view: str = "") -> dict[str, object]:
     """What this document is, for whoever reads it back.
 
@@ -145,7 +155,7 @@ def _(record: Record, *, symbol: bool = True, width: int = 88) -> str:
 
     out.extend(_scope_text(record.scope, width=width))
     out.append("")
-    out.extend(_verdict_text(record, "every activity stands on emitted evidence", symbol=symbol))
+    out.extend(_verdict_text(record, EARNED_ART30, symbol=symbol))
 
     return "\n".join(out) + "\n"
 
@@ -511,6 +521,8 @@ def _(record: Record, *, indent: int = 2) -> str:
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
+        # The sentence the mark finishes, whether or not it was earned.
+        "earned": EARNED_ART30,
         "reasons": list(record.completeness.reasons),
     }
     return _dumps(payload, record, indent)
@@ -663,7 +675,7 @@ def _(record: quality_module.Record, *, symbol: bool = True, width: int = 88) ->
     out.extend(
         _verdict_text(
             record,
-            "this history accounts for every dataset in view",
+            EARNED_QUALITY,
             symbol=symbol,
             withheld="history",
         )
@@ -802,6 +814,8 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
+        # The sentence the mark finishes, whether or not it was earned.
+        "earned": EARNED_QUALITY,
         "reasons": list(record.completeness.reasons),
     }
     return _dumps(payload, record, indent)
@@ -825,7 +839,7 @@ def _(record: provenance_module.Record, *, symbol: bool = True, width: int = 88)
     out.extend(
         _verdict_text(
             record,
-            "every step ran under a signed commit",
+            EARNED_PROVENANCE,
             symbol=symbol,
             withheld="chain",
         )
@@ -957,6 +971,8 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
+        # The sentence the mark finishes, whether or not it was earned.
+        "earned": EARNED_PROVENANCE,
         "reasons": list(record.completeness.reasons),
     }
     return _dumps(payload, record, indent)
@@ -1110,6 +1126,8 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             # `--since` picked among them or the latest was taken (#29).
             "candidates": record.tombstone.candidates,
             "chosen_by_since": record.tombstone.chosen_by_since,
+            # The line the text and PDF print, so a consumer shows the same words.
+            "describe": record.tombstone.describe(),
         },
         "descendants": [
             {
@@ -1159,6 +1177,8 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
+        # The sentence the mark finishes, whether or not it was earned.
+        "earned": record.tombstone.earned(),
         "reasons": list(record.completeness.reasons),
     }
     return _dumps(payload, record, indent)
@@ -1285,7 +1305,7 @@ def _(record: deployer_module.DeployerRecord, *, symbol: bool = True, width: int
     out.extend(
         _verdict_text(
             record,
-            "every AI use case in view stands on emitted evidence",
+            EARNED_DEPLOYER,
             symbol=symbol,
             withheld="view",
         )
@@ -1421,6 +1441,8 @@ def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
+        # The sentence the mark finishes, whether or not it was earned.
+        "earned": EARNED_DEPLOYER,
         "reasons": list(record.completeness.reasons),
     }
     return _dumps(payload, record, indent)

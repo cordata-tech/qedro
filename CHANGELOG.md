@@ -6,6 +6,14 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **Every projection's JSON carries `earned`**, the sentence the mark finishes — *every
+  activity stands on emitted evidence*, *every step ran under a signed commit* — and the
+  erasure record's tombstone carries `describe`, the line the text and PDF print. A
+  consumer such as the console shows these words rather than composing its own, and
+  the text output takes each sentence from the same constant, so the two cannot drift.
+
 ## 0.17.0 — 2026-11-18
 
 The Art. 30 record's JSON says what ran each activity and where its data lives, and a

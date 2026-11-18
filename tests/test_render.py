@@ -1028,3 +1028,23 @@ class TestPdfIsRefusedWhereItDoesNotExistYet:
         monkeypatch.delattr(qedro, "pdf", raising=False)
         with pytest.raises(UsageError, match=r"pip install 'qedro\[pdf\]'"):
             render.pdf(erasure_record())
+
+
+class TestTheJsonCarriesTheVerdictsSentence:
+    """`earned` in the JSON is the sentence the text prints beside the mark, so a
+    consumer shows the same words instead of composing its own."""
+
+    @pytest.mark.parametrize("projection", sorted(PROJECTIONS))
+    def test_it_is_the_texts_sentence(self, projection):
+        record = PROJECTIONS[projection]()
+        earned = json_lib.loads(render.json(record))["earned"]
+        assert earned
+        complete = dataclasses.replace(
+            record, completeness=dataclasses.replace(record.completeness, reasons=())
+        )
+        assert earned in render.text(complete)
+
+    def test_the_erasure_tombstone_carries_its_line(self):
+        payload = json_lib.loads(render.json(erasure_earned()))
+        assert payload["tombstone"]["describe"].endswith("— emitted drop")
+        assert payload["earned"] == "every descendant was written after the emitted drop"
