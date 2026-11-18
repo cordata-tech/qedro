@@ -6,6 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The PDF and the workbook print the explanations** (#48). The PDF puts a numbered
+  marker in each row's source column and the sentence as a footnote under that
+  activity's table, the controller's under the controller, and ends with the
+  regulation's wording for every requirement, quoted once. The workbook gains an
+  Explanations sheet, one filterable row per explained value with the requirement it
+  answers and what it rests on, and a Requirements sheet with the wording. A
+  workbook now has four sheets rather than two.
+- **`qedro ropa --explain`** adds the same to text and Markdown output, which stay as
+  they were without it.
+
 ## 0.20.0 — 2026-11-18
 
 Every Art. 30 field in the JSON is now explained: classification values, the datasets

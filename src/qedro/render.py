@@ -612,6 +612,37 @@ def _explain_json(record: Record) -> dict[str, object]:
     }
 
 
+def explanations(record: Record, *, markdown: bool = False) -> str:
+    """Where each value of an Art. 30 record came from, as a section to append
+    to the text or Markdown output when `--explain` asks for it (#48)."""
+    rows = explain.every(record)
+    if markdown:
+        out = ["", "## Where each value came from", ""]
+        for item in rows:
+            e = item.explanation
+            value = f": {item.value}" if item.value else ""
+            cite = f" *{e.answers.cite}*" if e.answers else ""
+            out.append(f"- **{item.subject}** · {item.field}{value} — {e.text}{cite}")
+        refs = record.references
+        if refs.by_id:
+            out += ["", "### What each field answers, in the regulation's words", ""]
+            out += [f"- **{r.cite}**: “{r.text}”" for r in refs.by_id.values()]
+        return "\n".join(out) + "\n"
+
+    out = ["", "Where each value came from", ""]
+    subject = None
+    for item in rows:
+        if item.subject != subject:
+            subject = item.subject
+            out.append(f"  {subject}")
+        e = item.explanation
+        value = f": {item.value}" if item.value else ""
+        cite = f" ({e.answers.cite})" if e.answers else ""
+        out.append(f"    {item.field}{value}")
+        out.append(f"      {e.text.replace('`', '')}{cite}")
+    return "\n".join(out) + "\n"
+
+
 def _references_json(refs) -> dict[str, object]:
     """The regulation's wording, once, for every requirement a field cites."""
     return {

@@ -403,7 +403,7 @@ class TestTheWorkbook:
         assert main(["ropa", str(events), "--config", str(config), "--out", str(out)]) == 0
 
         book = load_workbook(out)
-        assert book.sheetnames == ["Art. 30 record", "Scope"]
+        assert book.sheetnames == ["Art. 30 record", "Explanations", "Requirements", "Scope"]
         assert "wrote" in capsys.readouterr().out
 
     def test_asking_for_it_with_nowhere_to_put_it_is_a_sentence(self, tmp_path, capsys):

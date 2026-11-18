@@ -117,11 +117,71 @@ def workbook(record: Record) -> bytes:
     book.properties.description = record.scope.OUT_OF_VIEW
 
     _activities(book.active, record)
+    _explanations(book.create_sheet("Explanations"), record)
+    _requirements(book.create_sheet("Requirements"), record)
     _scope(book.create_sheet("Scope"), record)
 
     buffer = BytesIO()
     book.save(buffer)
     return buffer.getvalue()
+
+
+def _header(sheet: Any, columns: tuple[tuple[str, int], ...], row: int = 1) -> None:
+    for index, (heading, width) in enumerate(columns, start=1):
+        cell = sheet.cell(row=row, column=index, value=heading)
+        cell.font = HEADING
+        cell.fill = HEADING_FILL
+        cell.alignment = WRAP
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
+
+def _explanations(sheet: Any, record: Record) -> None:
+    """One row per explained value (#48): where it came from in a sentence, the
+    requirement it answers, and what it rests on. A sheet of its own rather than
+    more columns on the record's, so it can be filtered by field or activity."""
+    from . import explain
+
+    columns = (
+        ("Activity or dataset", 34),
+        ("Field", 22),
+        ("Value", 24),
+        ("Where it came from", 80),
+        ("Answers", 18),
+        ("Rests on", 40),
+    )
+    _header(sheet, columns)
+    rows = explain.every(record)
+    for offset, item in enumerate(rows, start=2):
+        e = item.explanation
+        rests = "; ".join(
+            f"{link.kind} {link.id}" + (f" ({link.file}, line {link.line})" if link.line else "")
+            for link in e.rests_on
+        )
+        values = (
+            item.subject,
+            item.field,
+            item.value or "—",
+            e.text.replace("`", ""),
+            e.answers.cite if e.answers else "—",
+            rests or "—",
+        )
+        for column, value in enumerate(values, start=1):
+            sheet.cell(row=offset, column=column, value=value).alignment = WRAP
+    sheet.auto_filter.ref = f"A1:{get_column_letter(len(columns))}{len(rows) + 1}"
+    sheet.freeze_panes = "A2"
+
+
+def _requirements(sheet: Any, record: Record) -> None:
+    """The regulation's wording for each requirement, once, quoted (#48)."""
+    refs = record.references
+    _header(sheet, (("Requirement", 22), ("Wording", 100)))
+    for offset, ref in enumerate(refs.by_id.values(), start=2):
+        sheet.cell(row=offset, column=1, value=ref.cite).alignment = WRAP
+        sheet.cell(row=offset, column=2, value=ref.text).alignment = WRAP
+    if refs.regulation:
+        row = len(refs.by_id) + 3
+        sheet.cell(row=row, column=1, value="Source").font = STRONG
+        sheet.cell(row=row, column=2, value=f"{refs.regulation} — {refs.source}")
 
 
 def _activities(sheet: Any, record: Record) -> None:

@@ -28,8 +28,8 @@ from __future__ import annotations
 import io
 import math
 import os
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -836,6 +836,9 @@ class _Row:
     gap: bool = False
     #: Dataset keys, one per line, each kept whole.
     keys: tuple[str, ...] = ()
+    #: Where the value came from, in qedro's sentences (#48), printed as
+    #: numbered footnotes under the table. One per value for classification.
+    why: tuple[str, ...] = ()
 
 
 #: The classification rows, in Art. 30(1) order: the tag key, its label here,
@@ -867,6 +870,75 @@ def _asserted_row(label: str, values: tuple[str, ...], item: str) -> _Row:
     if not values:
         return _Row(label, "—", "nothing declared", item=item)
     return _Row(label, "; ".join(values), "declared", item=item)
+
+
+def _plain(text: str) -> str:
+    """qedro's sentence with its backticks dropped: on paper a name reads as itself."""
+    return text.replace("`", "")
+
+
+def _explained(rows: list[_Row], whys: Mapping[str, tuple[str, ...]]) -> list[_Row]:
+    """Each row with the sentences explaining it, matched by label."""
+    return [replace(r, why=whys.get(r.label, ())) for r in rows]
+
+
+def _activity_whys(record: Any, activity: Any) -> dict[str, tuple[str, ...]]:
+    from . import explain
+
+    refs, vocab = record.references, record.vocabulary
+    whys: dict[str, tuple[str, ...]] = {
+        label: (
+            _plain(
+                explain.activity_value(
+                    activity, name, getattr(activity, name), references=refs, vocabulary=vocab
+                ).text
+            ),
+        )
+        for label, name in (("Purpose", "purpose"), ("Legal basis", "legal_basis"))
+    }
+    whys |= {
+        label: (
+            _plain(
+                explain.activity_list(activity, name, getattr(activity, name), references=refs).text
+            ),
+        )
+        for label, name in (
+            ("Recipients", "recipients"),
+            ("Security measures", "security_measures"),
+        )
+    }
+    for key, label, _ in CLASSIFICATION_ROWS:
+        whys[label] = tuple(
+            _plain(explain.classification(activity, c, references=refs, vocabulary=vocab).text)
+            for c in activity.classification
+            if c.key == key
+        )
+    return whys
+
+
+def _declared_whys(record: Any, entry: Any) -> dict[str, tuple[str, ...]]:
+    from . import explain
+
+    refs, vocab = record.references, record.vocabulary
+    whys: dict[str, tuple[str, ...]] = {
+        label: (
+            _plain(
+                explain.declared_value(
+                    entry, name, getattr(entry, name), references=refs, vocabulary=vocab
+                ).text
+            ),
+        )
+        for label, name in (("Purpose", "purpose"), ("Legal basis", "legal_basis"))
+    }
+    return whys | {
+        label: (
+            _plain(explain.declared_list(entry, name, getattr(entry, name), references=refs).text),
+        )
+        for label, name in (
+            ("Recipients", "recipients"),
+            ("Security measures", "security_measures"),
+        )
+    }
 
 
 def _activity_rows(activity: Any) -> list[_Row]:
@@ -937,15 +1009,24 @@ def _declared_rows(entry: Any) -> list[_Row]:
     return rows
 
 
-def _activity_table(rows: Sequence[_Row]) -> Table:
+def _activity_table(rows: Sequence[_Row]) -> list[Flowable]:
+    """The table, then its footnotes: the sentences saying where each value came
+    from (#48), numbered from 1 under each activity so a note sits on the same
+    page as the row that cites it."""
     cells = []
+    notes: list[str] = []
     for r in rows:
         label: list[Flowable] = [_p(r.label, CELL)]
         if r.item:
             label.append(_p(f"Art. 30(1)({r.item})", SMALL))
         value: list[Flowable] = [_p(r.value, CELL)] if r.value else []
         value += [_key(k, VALUE_W) for k in r.keys]
-        cells.append([label, value, _p(r.source, CELL)])
+        marks = []
+        for why in r.why:
+            notes.append(why)
+            marks.append(f"[{len(notes)}]")
+        source = f"{r.source} {' '.join(marks)}" if marks else r.source
+        cells.append([label, value, _p(source, CELL)])
     table = Table(cells, colWidths=[ITEM_W, VALUE_W, SOURCE_W])
     style = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -954,7 +1035,8 @@ def _activity_table(rows: Sequence[_Row]) -> Table:
     ]
     style += [("BACKGROUND", (0, i), (-1, i), UNREACHED) for i, r in enumerate(rows) if r.gap]
     table.setStyle(TableStyle(style))
-    return table
+    footnotes = [_p(f"[{n}] {note}", SMALL) for n, note in enumerate(notes, start=1)]
+    return [table, *([Spacer(1, 3)] if footnotes else []), *footnotes]
 
 
 def _overview(record: Any) -> Table:
@@ -999,6 +1081,29 @@ def _overview(record: Any) -> Table:
     return table
 
 
+def _requirements(record: Any) -> list[Flowable]:
+    """The regulation's wording for every requirement the record answers, once,
+    quoted rather than paraphrased (#48). From the references document, so a
+    record mapped to another regulation quotes that one."""
+    refs = record.references
+    if not refs.by_id:
+        return []
+    body: list[Flowable] = [_p("What each field answers, in the regulation's words", HEADING)]
+    if refs.regulation:
+        body.append(_p(refs.regulation + (f" — {refs.source}" if refs.source else ""), SMALL))
+    rows = [[_p(r.cite, CELL), _p(f"“{r.text}”", CELL)] for r in refs.by_id.values()]
+    table = Table(rows, colWidths=[ITEM_W, WIDTH - ITEM_W])
+    table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.25, RULE),
+            ]
+        )
+    )
+    return [*body, table]
+
+
 def ropa_document(record: Any) -> bytes:
     """An Art. 30 record of processing activities as PDF bytes."""
     controller = record.controller
@@ -1029,7 +1134,12 @@ def ropa_document(record: Any) -> bytes:
             ]
         )
     )
-    body += [people, Spacer(1, 10)]
+    body.append(people)
+    from . import explain
+
+    said = explain.controller(controller, references=record.references)
+    cite = f" ({said.answers.cite})" if said.answers else ""
+    body += [Spacer(1, 2), _p(_plain(said.text) + cite, SMALL), Spacer(1, 10)]
     body += _verdict(record, "every activity stands on emitted evidence")
 
     if record.activities or record.declared:
@@ -1049,10 +1159,13 @@ def ropa_document(record: Any) -> bytes:
 
     for activity in record.activities:
         heading = activity.key + (f" ({activity.domain})" if activity.domain else "")
-        body.append(KeepTogether([_p(heading, HEADING), _activity_table(_activity_rows(activity))]))
+        rows = _explained(_activity_rows(activity), _activity_whys(record, activity))
+        body.append(KeepTogether([_p(heading, HEADING), *_activity_table(rows)]))
     for entry in record.declared:
         heading = f"{entry.name} — declared, no lineage"
-        body.append(KeepTogether([_p(heading, HEADING), _activity_table(_declared_rows(entry))]))
+        rows = _explained(_declared_rows(entry), _declared_whys(record, entry))
+        body.append(KeepTogether([_p(heading, HEADING), *_activity_table(rows)]))
+    body += _requirements(record)
 
     scope = record.scope
     extra = [("Vocabulary", record.vocabulary)] if record.vocabulary else []

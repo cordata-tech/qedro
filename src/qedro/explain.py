@@ -24,7 +24,7 @@ from .ropa import Provenance, Sourced
 if TYPE_CHECKING:
     from .config import Controller
     from .declared import Declared
-    from .ropa import Activity, Classification
+    from .ropa import Activity, Classification, Record
 
 #: The words a field is called by in a sentence.
 LABELS = {
@@ -273,3 +273,56 @@ def declared_list(
     if values:
         return Explanation(f"Declared in {where} for `{entry.name}`.", answers, link)
     return Explanation(f"{where} declares `{entry.name}` without {label}.", answers, link)
+
+
+@dataclass(frozen=True)
+class Explained:
+    """One value of a record with its explanation: a row of the workbook's
+    Explanations sheet, a line of `--explain` text."""
+
+    #: The activity, declared activity or dataset it belongs to; the
+    #: controller's name for the controller.
+    subject: str
+    field: str
+    value: str
+    explanation: Explanation
+
+
+def every(record: Record) -> list[Explained]:
+    """Every explained value in an Art. 30 record, in the record's order."""
+    refs, vocab = record.references, record.vocabulary
+    out = [
+        Explained(
+            "the record",
+            "Controller",
+            record.controller.name,
+            controller(record.controller, references=refs),
+        )
+    ]
+    for a in record.activities:
+        for name in ("purpose", "legal_basis"):
+            s = getattr(a, name)
+            e = activity_value(a, name, s, references=refs, vocabulary=vocab)
+            out.append(Explained(a.key, LABELS[name].capitalize(), s.value, e))
+        for c in a.classification:
+            e = classification(a, c, references=refs, vocabulary=vocab)
+            label = CLASSIFICATION_LABELS.get(c.key, c.key).capitalize()
+            out.append(Explained(a.key, label, c.value, e))
+        for name in ("recipients", "security_measures"):
+            values = getattr(a, name)
+            e = activity_list(a, name, values, references=refs)
+            out.append(Explained(a.key, LABELS[name].capitalize(), "; ".join(values), e))
+    for d in record.declared:
+        for name in ("purpose", "legal_basis"):
+            s = getattr(d, name)
+            e = declared_value(d, name, s, references=refs, vocabulary=vocab)
+            out.append(Explained(d.name, LABELS[name].capitalize(), s.value, e))
+        for name in ("recipients", "security_measures"):
+            values = getattr(d, name)
+            e = declared_list(d, name, values, references=refs)
+            out.append(Explained(d.name, LABELS[name].capitalize(), "; ".join(values), e))
+    for dataset in record.scope.unclassified:
+        touched = [a.key for a in record.activities if dataset in a.unclassified]
+        e = unclassified(dataset, touched, references=refs)
+        out.append(Explained(dataset, "Classification", "", e))
+    return out

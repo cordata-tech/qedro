@@ -157,6 +157,7 @@ def _ropa(
     view: str = "art30",
     activities_path: str | None = None,
     signoff_path: str | None = None,
+    explain_values: bool = False,
 ) -> int:
     fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
@@ -198,7 +199,14 @@ def _ropa(
         )
         return _emit(view_record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
 
-    return _emit(record, fmt=fmt, out=out, symbol=symbol, signoff_path=signoff_path)
+    return _emit(
+        record,
+        fmt=fmt,
+        out=out,
+        symbol=symbol,
+        signoff_path=signoff_path,
+        explain_values=explain_values,
+    )
 
 
 def _quality(
@@ -485,7 +493,13 @@ def _status(directory: str) -> int:
 
 
 def _emit(
-    record, *, fmt: str, out: str | None, symbol: bool, signoff_path: str | None = None
+    record,
+    *,
+    fmt: str,
+    out: str | None,
+    symbol: bool,
+    signoff_path: str | None = None,
+    explain_values: bool = False,
 ) -> int:
     """Render and deliver, the same way for every projection."""
     if signoff_path:
@@ -497,6 +511,11 @@ def _emit(
         record.signoff = signoff.standing_of(payload, signoff_path)
     renderer = render.FORMATS[fmt]
     rendered = renderer(record, symbol=symbol) if fmt == "text" else renderer(record)
+    # On request only in text and Markdown, which a person reads top to bottom
+    # and which a sentence per value would bury (#48). The other formats always
+    # carry them, where they sit apart from the record's own lines.
+    if explain_values and fmt in ("text", "markdown"):
+        rendered += render.explanations(record, markdown=fmt == "markdown")
 
     if not _deliver(rendered, out):
         return 0
@@ -591,6 +610,12 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="a document of declared activities — processing that emits no lineage. "
         "Marked as declared in the output, and never counted as evidence",
+    )
+    ropa_cmd.add_argument(
+        "--explain",
+        action="store_true",
+        help="add where each value came from, in a sentence, and the requirement it answers "
+        "to text and markdown output. JSON, PDF and xlsx always carry them",
     )
 
     quality_cmd = sub.add_parser(
@@ -880,6 +905,7 @@ def main(argv: list[str] | None = None) -> int:
                 view=args.view,
                 activities_path=args.activities,
                 signoff_path=args.signoff,
+                explain_values=args.explain,
             )
     except QedroError as exc:
         # What the user wrote, handed back as a sentence rather than a

@@ -92,8 +92,8 @@ class TestTheVerdictIsWhereTheFileOpens:
 
 
 class TestTheTable:
-    def test_two_sheets_named_for_what_they_hold(self, evidenced):
-        assert evidenced.sheetnames == ["Art. 30 record", "Scope"]
+    def test_sheets_named_for_what_they_hold(self, evidenced):
+        assert evidenced.sheetnames == ["Art. 30 record", "Explanations", "Requirements", "Scope"]
 
     def test_one_row_per_activity_in_the_record_order(self):
         sheet = book([event(name="b"), event(name="a")]).worksheets[0]

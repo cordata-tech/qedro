@@ -264,3 +264,46 @@ class TestClassificationAndTheController:
         assert payload["classification"]
         assert payload["controller"]["answers"] == "art-30-1-a"
         assert set(payload["unclassified"]) == set(evidenced.scope.unclassified)
+
+
+class TestThePrintedFormats:
+    def test_the_workbook_has_one_row_per_explained_value(self, asserted):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from qedro import xlsx
+
+        book = load_workbook(BytesIO(xlsx.workbook(asserted)))
+        rows = list(book["Explanations"].iter_rows(min_row=2, values_only=True))
+        assert len(rows) == len(explain.every(asserted))
+        controller = rows[0]
+        assert controller[1] == "Controller" and controller[4] == "Art. 30(1)(a) GDPR"
+        assert all("`" not in str(row[3]) for row in rows)
+        wording = {row[0]: row[1] for row in book["Requirements"].iter_rows(values_only=True)}
+        assert wording["Art. 30(1)(b) GDPR"] == "the purposes of the processing;"
+
+    def test_the_pdf_prints_the_sentences_and_the_wording(self, asserted):
+        from qedro import pdf
+
+        body = pdf.ropa_document(asserted)
+        assert body.startswith(b"%PDF")
+        # reportlab compresses page streams, so the text is checked on the
+        # flowables that build them rather than in the bytes.
+        a = asserted.activities[0]
+        rows = pdf._explained(pdf._activity_rows(a), pdf._activity_whys(asserted, a))
+        purpose = next(r for r in rows if r.label == "Purpose")
+        assert purpose.why and "`" not in purpose.why[0]
+        assert pdf._requirements(asserted)
+
+    @pytest.mark.parametrize("fmt", ["text", "markdown"])
+    def test_text_and_markdown_explain_only_when_asked(self, fmt, capsys):
+        from qedro.__main__ import main
+
+        args = ["ropa", "demo/lineage-declared", "--config", "demo/qedro.yaml", "--format", fmt]
+        assert main(args) == 0
+        assert "Where each value came from" not in capsys.readouterr().out
+        assert main([*args, "--explain"]) == 0
+        out = capsys.readouterr().out
+        assert "Where each value came from" in out
+        assert "Art. 30(1)(a) GDPR" in out

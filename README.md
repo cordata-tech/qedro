@@ -267,6 +267,31 @@ evidenced counts unchanged. Any declared activity withholds the mark. The reason
 behind each of those choices is recorded on
 [#6](https://github.com/cordata-tech/qedro/issues/6).
 
+### Where each value came from
+
+Every field of an Art. 30 record can say where its value came from in a sentence, built
+only from what the record holds, and which requirement of the regulation the field
+answers ([#48](https://github.com/cordata-tech/qedro/issues/48)):
+
+```console
+$ qedro ropa demo/lineage --config demo/qedro.yaml --explain
+  ...
+Where each value came from
+
+  ...
+  acme.fraud/transactions-scored-daily
+    Purpose: fraud-detection
+      Asserted in demo/qedro.yaml (line 37), rule acme.fraud/transactions-*, because acme.fraud/transactions-scored-daily emitted no purpose in a processing facet. (Art. 30(1)(b) GDPR)
+```
+
+An explanation names the run whose event carried a value, or the mapping rule and its
+line, or the declaration, and never judges whether the value is the right one. Text
+and Markdown add them with `--explain`, to stay readable without. JSON carries them
+under `explain`, the PDF as footnotes under each activity, and the workbook on an
+Explanations sheet; all three quote the regulation's wording once. The requirements
+are a document, `regulations/gdpr.yaml`, loaded at runtime like the vocabulary, and
+`references:` in qedro.yaml points at another one.
+
 ### Output
 
 `--format text|markdown|json|xlsx|pdf`, and `--out` to write a file. The format follows
