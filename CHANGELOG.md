@@ -6,15 +6,20 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.18.0 — 2026-11-18
+
+The JSON of every projection carries the words qedro prints, so a reader such as the
+console says each state as qedro does, and the provenance PDF draws branching chains
+correctly. Every change to the JSON adds a key; none is removed or renamed, and none of
+the new keys is covered by a sign-off, so sign-offs made with 0.17.0 still stand.
 
 - **Every projection's JSON carries `earned`**, the sentence the mark finishes — *every
   activity stands on emitted evidence*, *every step ran under a signed commit* — and the
   erasure record's tombstone carries `describe`, the line the text and PDF print. Each
   run in a provenance chain carries `describe` too: its code, signature, source and
-  platform, as the PDF's step table prints them. A
-  consumer such as the console shows these words rather than composing its own, and
-  the text output takes each sentence from the same constant, so the two cannot drift.
+  platform, as the PDF's step table prints them. A consumer such as the console shows
+  these words rather than composing its own, and the text output takes each sentence
+  from the same constant, so the two cannot drift.
 - **The provenance PDF's tree hangs each step under the run that read it.** The walk is
   breadth-first, and the tree hung each step under the last step one level up, so in a
   chain where two branches both continued, every step two levels down was drawn under
