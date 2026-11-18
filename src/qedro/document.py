@@ -65,8 +65,9 @@ def parse(text: str, *, origin: str = "") -> Mapping[str, Any] | None:
     return raw
 
 
-def lines(text: str, *, origin: str = "", key: str) -> dict[str, int]:
-    """The line each entry under the top-level *key* starts on, 1-based.
+def lines(text: str, *, origin: str = "", key: str | None) -> dict[str, int]:
+    """The line each entry under the top-level *key* starts on, 1-based, or
+    each top-level key's own line when *key* is None.
 
     So an explanation can say *rule `acme.fraud/*` (line 31)* and a reviewer
     can open the file at it (#48). YAML and JSON only, which one parser reads;
@@ -83,6 +84,12 @@ def lines(text: str, *, origin: str = "", key: str) -> dict[str, int]:
         return {}
     if not isinstance(root, yaml.MappingNode):
         return {}
+    if key is None:
+        return {
+            name.value: name.start_mark.line + 1
+            for name, _ in root.value
+            if isinstance(name, yaml.ScalarNode)
+        }
     for name, value in root.value:
         if isinstance(name, yaml.ScalarNode) and name.value == key:
             if not isinstance(value, yaml.MappingNode):

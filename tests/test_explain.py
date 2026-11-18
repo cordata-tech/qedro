@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from pathlib import Path
@@ -66,6 +67,30 @@ def all_explanations(record: ropa.Record) -> list[tuple[str, dict, explain.Expla
                     explain.declared_value(d, name, s, references=refs, vocabulary=vocab),
                 )
             )
+    tag_keys = set(explain.CLASSIFICATION_LABELS)
+    for a in record.activities:
+        for c in a.classification:
+            facts = {a.key, f"{c.key}: {c.value}", c.value, vocab, "tags"}
+            facts |= {*c.reads, *c.writes, *c.declared_by}
+            out.append(
+                (
+                    "classification",
+                    facts,
+                    explain.classification(a, c, references=refs, vocabulary=vocab),
+                )
+            )
+    for dataset in record.scope.unclassified:
+        touched = [a.key for a in record.activities if dataset in a.unclassified]
+        out.append(
+            (
+                "unclassified",
+                {dataset, "tags", *tag_keys, *touched},
+                explain.unclassified(dataset, touched, references=refs),
+            )
+        )
+    out.append(
+        ("controller", {"controller"}, explain.controller(record.controller, references=refs))
+    )
     return out
 
 
@@ -194,3 +219,48 @@ class TestSignOffs:
 
     def test_qedro_yaml_can_point_at_another_document(self):
         assert config.parse("references: national.yaml\n").references == "national.yaml"
+
+
+class TestClassificationAndTheController:
+    def test_a_value_names_the_datasets_it_was_on_and_the_requirement(self, evidenced):
+        a = next(a for a in evidenced.activities if a.classification)
+        c = a.classification[0]
+        e = explain.classification(
+            a, c, references=evidenced.references, vocabulary=evidenced.vocabulary
+        )
+        assert e.text.startswith("The `tags` facet on ")
+        assert f"`{c.key}: {c.value}`" in e.text
+        assert {link.id for link in e.rests_on} >= {*c.reads, *c.writes}
+        assert e.answers is not None and e.answers.cite.startswith("Art. 30(1)(")
+
+    def test_a_value_only_another_job_carried_names_that_job(self, evidenced):
+        a = next(a for a in evidenced.activities if a.classification)
+        c = dataclasses.replace(a.classification[0], declared_by=("acme.other/tagger",))
+        e = explain.classification(a, c, references=evidenced.references, vocabulary="v")
+        assert "It came in events from `acme.other/tagger`" in e.text
+        assert f"none of `{a.key}`'s own events carried it" in e.text
+
+    def test_the_controller_points_at_its_line(self, evidenced):
+        e = explain.controller(evidenced.controller, references=evidenced.references)
+        (link,) = e.rests_on
+        line = Path(link.file).read_text(encoding="utf-8").splitlines()[link.line - 1]
+        assert line.startswith("controller:")
+        assert e.answers is not None and e.answers.cite == "Art. 30(1)(a) GDPR"
+
+    def test_a_missing_controller_is_said(self):
+        refs = references.load()
+        no_file = explain.controller(config.Config().controller, references=refs)
+        assert no_file.text == "Nothing names a controller: there is no qedro.yaml."
+        empty = explain.controller(config.parse("jobs: {}\n").controller, references=refs)
+        assert empty.text == "Nothing names a controller: qedro.yaml states none."
+
+    def test_the_json_keeps_them_apart_from_the_per_field_map(self, evidenced):
+        payload = json.loads(render.json(evidenced))["explain"]
+        assert all(
+            isinstance(e, dict) and "text" in e
+            for fields in payload["activities"].values()
+            for e in fields.values()
+        )
+        assert payload["classification"]
+        assert payload["controller"]["answers"] == "art-30-1-a"
+        assert set(payload["unclassified"]) == set(evidenced.scope.unclassified)

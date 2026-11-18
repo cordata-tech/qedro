@@ -6,6 +6,17 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **Classification, unclassified datasets and the controller are explained too** (#48).
+  `explain.classification` lists, per job, each value with the datasets whose `tags`
+  facet gave it, which the job read or wrote, and whose events carried it — the job's
+  own, or another job's when only that one tagged the dataset. `explain.unclassified`
+  says, for each dataset nothing classified, that no event tagged it with a key the
+  record uses, and which jobs touched it. `explain.controller` points at the line of
+  `controller:` in qedro.yaml. Each names the Art. 30(1) item it answers. They sit
+  beside `explain.activities`, whose entries stay one explanation per field.
+
 ## 0.19.0 — 2026-11-18
 
 The Art. 30 record's JSON says where each value came from in a sentence, and which

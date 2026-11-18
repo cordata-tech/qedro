@@ -46,7 +46,7 @@ which was chosen.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
@@ -77,6 +77,11 @@ class Controller:
     contact: str = ""
     representative: str = ""
     dpo: str = ""
+    #: Where it is written, for the explanation (#48): the config file and the
+    #: line `controller:` is on, `None` where the format keeps no positions.
+    #: Not part of who the controller is.
+    file: str = field(default="", compare=False)
+    line: int | None = field(default=None, compare=False)
 
     def __bool__(self) -> bool:
         return bool(self.name)
@@ -200,19 +205,28 @@ def parse(text: str, *, origin: str = "qedro.yaml") -> Config:
         document.parse(text, origin=origin),
         origin=origin,
         lines=document.lines(text, origin=origin, key="jobs"),
+        top=document.lines(text, origin=origin, key=None),
     )
 
 
 def _build(
-    raw: Mapping[str, Any] | None, *, origin: str, lines: Mapping[str, int] | None = None
+    raw: Mapping[str, Any] | None,
+    *,
+    origin: str,
+    lines: Mapping[str, int] | None = None,
+    top: Mapping[str, int] | None = None,
 ) -> Config:
     # An empty file is a legitimate thing to commit — a placeholder somebody
     # will fill in — and is not worth an error.
     if raw is None:
-        return Config(origin=origin)
+        return Config(controller=Controller("", file=origin), origin=origin)
 
     return Config(
-        controller=_controller(raw.get("controller"), origin),
+        controller=replace(
+            _controller(raw.get("controller"), origin),
+            file=origin,
+            line=(top or {}).get("controller"),
+        ),
         domains=_domains(raw.get("domains"), origin),
         rules=_rules(raw.get("jobs"), origin, lines or {}),
         vocabulary=_str(raw.get("vocabulary")),

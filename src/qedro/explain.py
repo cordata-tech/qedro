@@ -14,6 +14,7 @@ more than the provenance it is built from.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -21,8 +22,9 @@ from .references import Reference, References
 from .ropa import Provenance, Sourced
 
 if TYPE_CHECKING:
+    from .config import Controller
     from .declared import Declared
-    from .ropa import Activity
+    from .ropa import Activity, Classification
 
 #: The words a field is called by in a sentence.
 LABELS = {
@@ -37,9 +39,10 @@ LABELS = {
 class Link:
     """Something an explanation rests on, for a reader to follow."""
 
-    #: `run`, `rule` or `declaration`.
+    #: `run`, `rule`, `declaration`, `dataset`, `job` or `file`.
     kind: str
-    #: The run id, the rule's pattern, or the declared activity's name.
+    #: The run id, the rule's pattern, the declared activity's name, the
+    #: dataset or job key, or for a `file` the key in it the value is under.
     id: str
     file: str = ""
     line: int | None = None
@@ -155,6 +158,86 @@ def activity_list(
         f"Nothing names {label} for `{job}`: lineage carries none, and {where}.",
         answers,
     )
+
+
+#: What each classification key is called in a sentence.
+CLASSIFICATION_LABELS = {
+    "data_category": "data category",
+    "special_category": "special category",
+    "subject_type": "category of data subject",
+    "residency": "residency",
+    "retention": "retention period",
+}
+
+
+def _names(keys: Sequence[str], conjunction: str = "and") -> str:
+    named = [f"`{k}`" for k in keys]
+    if len(named) <= 2:
+        return f" {conjunction} ".join(named)
+    return ", ".join(named[:-1]) + f" {conjunction} {named[-1]}"
+
+
+def classification(
+    activity: Activity,
+    c: Classification,
+    *,
+    references: References,
+    vocabulary: str,
+) -> Explanation:
+    """A classification value: always a `tags` dataset facet, and on which datasets."""
+    label = CLASSIFICATION_LABELS.get(c.key, c.key)
+    job = f"`{activity.key}`"
+    sides = []
+    if c.reads:
+        sides.append(f"{_names(c.reads)}, which {job} reads")
+    if c.writes:
+        sides.append(f"{_names(c.writes)}, which {'it' if c.reads else job} writes")
+    on = ", and on ".join(sides)
+    if c.declared_by:
+        whose = (
+            f" It came in events from {_names(c.declared_by)}; none of {job}'s own events "
+            "carried it."
+        )
+    else:
+        whose = f" It came in {job}'s own events."
+    tail = (
+        f" `{c.value}` is not a {label} the `{vocabulary}` vocabulary defines."
+        if c.unrecognised
+        else ""
+    )
+    return Explanation(
+        f"The `tags` facet on {on}, gives `{c.key}: {c.value}`.{whose}{tail}",
+        references.answers(c.key),
+        tuple(Link("dataset", d) for d in (*c.reads, *c.writes))
+        + tuple(Link("job", j) for j in c.declared_by),
+    )
+
+
+def unclassified(dataset: str, touched_by: Sequence[str], *, references: References) -> Explanation:
+    """A dataset no event classified in a way the record can use."""
+    keys = _names(tuple(CLASSIFICATION_LABELS), "or")
+    jobs = f" {_names(touched_by)} read or wrote it." if touched_by else ""
+    return Explanation(
+        f"No event in the window puts a `tags` facet on `{dataset}` with any of {keys}.{jobs}",
+        references.answers("data_category"),
+        (Link("dataset", dataset),) + tuple(Link("job", j) for j in touched_by),
+    )
+
+
+def controller(who: Controller, *, references: References) -> Explanation:
+    """The controller: written by the controller, never in lineage."""
+    answers = references.answers("controller")
+    where = _at(who.file, who.line)
+    if who.name:
+        return Explanation(
+            f"Stated in {where} under `controller`. Lineage carries no controller, so it "
+            "can only be stated.",
+            answers,
+            (Link("file", "controller", who.file, who.line),) if who.file else (),
+        )
+    if who.file:
+        return Explanation(f"Nothing names a controller: {who.file} states none.", answers)
+    return Explanation("Nothing names a controller: there is no qedro.yaml.", answers)
 
 
 def declared_value(

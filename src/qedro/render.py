@@ -586,6 +586,29 @@ def _explain_json(record: Record) -> dict[str, object]:
             }
             for d in record.declared
         },
+        # Kept apart from `activities`, whose entries map a field to one
+        # explanation: an activity has a list of classification values, and a
+        # consumer reading the map should not meet a list in it.
+        "classification": {
+            a.key: [
+                {"key": c.key, "value": c.value}
+                | _explanation_json(explain.classification(a, c, references=refs, vocabulary=vocab))
+                for c in a.classification
+            ]
+            for a in record.activities
+            if a.classification
+        },
+        "unclassified": {
+            dataset: _explanation_json(
+                explain.unclassified(
+                    dataset,
+                    [a.key for a in record.activities if dataset in a.unclassified],
+                    references=refs,
+                )
+            )
+            for dataset in record.scope.unclassified
+        },
+        "controller": _explanation_json(explain.controller(record.controller, references=refs)),
     }
 
 
