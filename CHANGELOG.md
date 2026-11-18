@@ -10,7 +10,9 @@ before `1.0`.
 
 - **Every projection's JSON carries `earned`**, the sentence the mark finishes — *every
   activity stands on emitted evidence*, *every step ran under a signed commit* — and the
-  erasure record's tombstone carries `describe`, the line the text and PDF print. A
+  erasure record's tombstone carries `describe`, the line the text and PDF print. Each
+  run in a provenance chain carries `describe` too: its code, signature, source and
+  platform, as the PDF's step table prints them. A
   consumer such as the console shows these words rather than composing its own, and
   the text output takes each sentence from the same constant, so the two cannot drift.
 

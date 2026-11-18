@@ -1048,3 +1048,14 @@ class TestTheJsonCarriesTheVerdictsSentence:
         payload = json_lib.loads(render.json(erasure_earned()))
         assert payload["tombstone"]["describe"].endswith("— emitted drop")
         assert payload["earned"] == "every descendant was written after the emitted drop"
+
+    def test_each_provenance_step_carries_the_lines_the_text_prints(self):
+        record = PROJECTIONS["provenance"]()
+        text = render.text(record)
+        steps = json_lib.loads(render.json(record))["steps"]
+        described = [s["production"]["describe"] for s in steps if s["production"]]
+        assert described
+        for lines in described:
+            assert set(lines) == {"code", "signature", "source", "platform"}
+            for key in ("code", "signature"):
+                assert lines[key] in text

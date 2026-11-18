@@ -951,6 +951,15 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
                         "version": s.production.published.version or None,
                         "table": s.production.published.table or None,
                     },
+                    # The lines the text and PDF print for this run, so a reader
+                    # of the JSON says each state as qedro does instead of
+                    # working the words out from the fields above.
+                    "describe": {
+                        "code": s.production.code.describe(),
+                        "signature": s.production.signature.describe(),
+                        "source": s.production.published.describe(),
+                        "platform": s.production.stack.describe() or "not reported",
+                    },
                 },
             }
             for s in record.steps
