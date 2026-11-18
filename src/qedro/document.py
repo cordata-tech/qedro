@@ -65,6 +65,36 @@ def parse(text: str, *, origin: str = "") -> Mapping[str, Any] | None:
     return raw
 
 
+def lines(text: str, *, origin: str = "", key: str) -> dict[str, int]:
+    """The line each entry under the top-level *key* starts on, 1-based.
+
+    So an explanation can say *rule `acme.fraud/*` (line 31)* and a reviewer
+    can open the file at it (#48). YAML and JSON only, which one parser reads;
+    TOML's parser keeps no positions, so a TOML document gets none, and an
+    explanation then names the rule without a line rather than guessing one.
+    Never raises: a document that parsed once parses again, and a position is
+    a convenience, not part of the value.
+    """
+    if Path(origin).suffix.lower() == ".toml":
+        return {}
+    try:
+        root = yaml.compose(text)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(root, yaml.MappingNode):
+        return {}
+    for name, value in root.value:
+        if isinstance(name, yaml.ScalarNode) and name.value == key:
+            if not isinstance(value, yaml.MappingNode):
+                return {}
+            return {
+                entry.value: entry.start_mark.line + 1
+                for entry, _ in value.value
+                if isinstance(entry, yaml.ScalarNode)
+            }
+    return {}
+
+
 def read(path: Path) -> Mapping[str, Any] | None:
     try:
         text = path.read_text(encoding="utf-8")

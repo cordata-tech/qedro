@@ -67,12 +67,24 @@ class Declared:
 def load(path: str | Path, *, vocabulary: Vocabulary) -> tuple[Declared, ...]:
     """Read a declared-activities document. What the user wrote raises."""
     origin = Path(path)
-    raw = document.read(origin)
-    return parse(raw, origin=str(origin), vocabulary=vocabulary)
+    try:
+        text = origin.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"cannot read {origin}: {exc}") from None
+    return parse(
+        document.parse(text, origin=str(origin)),
+        origin=str(origin),
+        vocabulary=vocabulary,
+        lines=document.lines(text, origin=str(origin), key="activities"),
+    )
 
 
 def parse(
-    raw: Mapping[str, Any] | None, *, origin: str, vocabulary: Vocabulary
+    raw: Mapping[str, Any] | None,
+    *,
+    origin: str,
+    vocabulary: Vocabulary,
+    lines: Mapping[str, int] | None = None,
 ) -> tuple[Declared, ...]:
     if raw is None:
         raise ConfigError(f"{origin} is empty")
@@ -93,8 +105,10 @@ def parse(
         out.append(
             Declared(
                 name=str(name),
-                purpose=_sourced("purpose", spec, vocabulary),
-                legal_basis=_sourced("legal_basis", spec, vocabulary),
+                purpose=_sourced("purpose", spec, vocabulary, origin, (lines or {}).get(name)),
+                legal_basis=_sourced(
+                    "legal_basis", spec, vocabulary, origin, (lines or {}).get(name)
+                ),
                 domain=_text(spec.get("domain")),
                 model=_text(spec.get("model")),
                 inputs=_inputs(spec.get("inputs"), name=str(name), origin=origin),
@@ -113,11 +127,19 @@ def parse(
     return tuple(sorted(out, key=lambda d: d.name))
 
 
-def _sourced(key: str, spec: Mapping[str, Any], vocabulary: Vocabulary) -> Sourced:
+def _sourced(
+    key: str,
+    spec: Mapping[str, Any],
+    vocabulary: Vocabulary,
+    origin: str = "",
+    line: int | None = None,
+) -> Sourced:
     value = _text(spec.get(key))
     if not value:
-        return Sourced("", Provenance.ABSENT)
-    return Sourced(value, Provenance.DECLARED, vocabulary.unrecognised(key, value))
+        return Sourced("", Provenance.ABSENT, file=origin, line=line)
+    return Sourced(
+        value, Provenance.DECLARED, vocabulary.unrecognised(key, value), file=origin, line=line
+    )
 
 
 def _inputs(raw: Any, *, name: str, origin: str, key: str = "inputs") -> tuple[str, ...]:

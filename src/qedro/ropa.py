@@ -31,11 +31,13 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from . import references as references_module
 from . import scope, words
 from . import stack as stack_module
 from .config import Config, Controller, Rule
 from .events import Event
 from .mark import Completeness
+from .references import References
 from .signoff import Standing
 from .sources import ReadReport
 from .stack import Stack
@@ -111,6 +113,15 @@ class Sourced:
     value: str = ""
     provenance: Provenance = Provenance.ABSENT
     unrecognised: bool = False
+    #: What the value rests on, so an explanation can name it and a reader can
+    #: follow it there (#48): the run whose event carried the facet, or the
+    #: mapping rule's pattern, or the file and line of a rule or declaration.
+    #: Not part of the value's identity — the same purpose from another run is
+    #: the same purpose.
+    run: str = field(default="", compare=False)
+    rule: str = field(default="", compare=False)
+    file: str = field(default="", compare=False)
+    line: int | None = field(default=None, compare=False)
 
     def __bool__(self) -> bool:
         return bool(self.value)
@@ -177,6 +188,10 @@ class Activity:
     security_measures: tuple[str, ...] = ()
     #: What ran the job and where what it writes lives, as its events say (#39).
     stack: Stack = field(default_factory=Stack)
+    #: The mapping rule that matched the job, if one did, and the file it is
+    #: in: what the recipients and security measures rest on (#48).
+    rule: Rule | None = field(default=None, compare=False)
+    mapping: str = field(default="", compare=False)
 
     @property
     def key(self) -> str:
@@ -395,6 +410,8 @@ class Record:
     #: A person's sign-off, attached by `--signoff` (#40). Printed beside the
     #: verdict and never read by it: a signature is not evidence.
     signoff: Standing | None = None
+    #: What each field answers in the regulation, for the explanations (#48).
+    references: References = field(default_factory=References)
 
     @property
     def complete(self) -> bool:
@@ -416,8 +433,12 @@ def build(
     since: datetime | None = None,
     until: datetime | None = None,
     declared: Sequence[Declared] = (),
+    references: References | None = None,
 ) -> Record:
-    """Project events into an Art. 30 record, with any declared activities beside it."""
+    """Project events into an Art. 30 record, with any declared activities beside it.
+
+    *references* says what each field answers; the GDPR's ship as the default.
+    """
     grouped: dict[str, list[Event]] = {}
     for event in events:
         grouped.setdefault(event.job.key, []).append(event)
@@ -471,6 +492,7 @@ def build(
         generated_from=report.origin if report else "",
         declared=tuple(declared),
         stores=stores,
+        references=references if references is not None else references_module.load(),
     )
 
 
@@ -486,6 +508,7 @@ def _activity(
     rule = config.rule_for(first.job.namespace, first.job.name)
 
     facet = first.job_facet(FACET) or {}
+    carrier = first
     # A job's facet can arrive on any of its events and an emitter may attach it
     # to COMPLETE but not START. Take the first event that carries it rather
     # than assuming the first event does.
@@ -493,11 +516,13 @@ def _activity(
         for event in events:
             candidate = event.job_facet(FACET)
             if candidate:
-                facet = candidate
+                facet, carrier = candidate, event
                 break
 
-    purpose = _sourced("purpose", facet, rule, vocabulary)
-    legal_basis = _sourced("legal_basis", facet, rule, vocabulary)
+    purpose = _sourced("purpose", facet, rule, vocabulary, carrier.run.run_id, config.origin)
+    legal_basis = _sourced(
+        "legal_basis", facet, rule, vocabulary, carrier.run.run_id, config.origin
+    )
 
     times = [e.event_time for e in events if e.event_time is not None]
     runs = {e.run.run_id for e in events if e.run.run_id}
@@ -526,6 +551,8 @@ def _activity(
         first_seen=min(times) if times else None,
         last_seen=max(times) if times else None,
         stack=stack or Stack(),
+        rule=rule,
+        mapping=config.origin,
     )
 
 
@@ -631,19 +658,33 @@ def _classification(
 
 
 def _sourced(
-    key: str, facet: Mapping[str, object], rule: Rule | None, vocabulary: Vocabulary
+    key: str,
+    facet: Mapping[str, object],
+    rule: Rule | None,
+    vocabulary: Vocabulary,
+    run: str = "",
+    origin: str = "",
 ) -> Sourced:
     """Facet first, mapping second, nothing third. The order is the point."""
     emitted = facet.get(key)
     if isinstance(emitted, str) and emitted.strip():
         value = emitted.strip()
-        return Sourced(value, Provenance.FACET, vocabulary.unrecognised(key, value))
+        return Sourced(value, Provenance.FACET, vocabulary.unrecognised(key, value), run=run)
 
     mapped = getattr(rule, key, "") if rule else ""
-    if isinstance(mapped, str) and mapped:
-        return Sourced(mapped, Provenance.MAPPING, vocabulary.unrecognised(key, mapped))
+    if rule and isinstance(mapped, str) and mapped:
+        return Sourced(
+            mapped,
+            Provenance.MAPPING,
+            vocabulary.unrecognised(key, mapped),
+            rule=rule.pattern,
+            file=origin,
+            line=rule.line,
+        )
 
-    return Sourced("", Provenance.ABSENT)
+    # Nothing to point at but where a rule would have been: the mapping file,
+    # if there is one, so the explanation can say no rule in it matched.
+    return Sourced("", Provenance.ABSENT, file=origin)
 
 
 def _parents(grouped: Mapping[str, Sequence[Event]]) -> tuple[str, ...]:

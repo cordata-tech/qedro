@@ -37,6 +37,7 @@ from . import (
     words,
 )
 from . import config as config_module
+from . import references as references_module
 from .errors import ConfigError, QedroError, UsageError
 from .mark import Completeness
 from .sources import passed_over_text, read
@@ -175,6 +176,7 @@ def _ropa(
         since=since,
         until=until,
         declared=declared_uses,
+        references=references_module.load(settings.references or None),
     )
 
     if not record.activities and not report.clean:

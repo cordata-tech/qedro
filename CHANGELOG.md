@@ -6,6 +6,26 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The Art. 30 record's JSON explains its values** (#48, first part). A new `explain`
+  object says, for each activity's purpose, legal basis, recipients and security
+  measures, where the value came from in a sentence built only from what the record
+  holds: *Asserted in qedro.yaml (line 37), rule `acme.fraud/transactions-*`, because
+  `acme.fraud/transactions-scored-daily` emitted no purpose in a `processing` facet.*
+  Each names the requirement the field answers and what it rests on (the run whose
+  event carried the facet, the mapping rule and its line, or the declaration), so a
+  reader can follow it. Declared activities get the same. No explanation judges a
+  value; a test holds every one to that and to naming nothing the record does not
+  hold.
+- **What each field answers is a document**, `regulations/gdpr.yaml`, loaded at runtime
+  like the vocabulary and quoting the regulation's wording once under `references` in
+  the JSON. `references:` in qedro.yaml points at another one. YAML and JSON configs
+  give each rule's line; a TOML config cannot, and its explanations name the rule
+  without one.
+- Both sit beside the activities rather than inside them, so a sign-off made with
+  0.18.0 still stands. Text, Markdown, PDF and workbook output are unchanged for now.
+
 ## 0.18.0 — 2026-11-18
 
 The JSON of every projection carries the words qedro prints, so a reader such as the

@@ -22,6 +22,9 @@ Four things live here, and only the first is required:
         label: AWS Glue    # `qedro.stack` for the defaults and the kinds
         kind: database
 
+`vocabulary:` and `references:` name other documents to load in place of the shipped
+ones: the terms a value may take, and what each field answers in the regulation (#48).
+
 **The mapping is a fallback and is treated as one.** A purpose read from this
 file is an assertion by whoever wrote the file; a purpose read from an emitted
 facet is evidence produced by the thing that ran. The projection keeps the two
@@ -93,6 +96,10 @@ class Rule:
     #: and the record says so wherever it prints them. See cordata-tech/qedro#13.
     recipients: tuple[str, ...] = ()
     security_measures: tuple[str, ...] = ()
+    #: Where the rule is written, so an explanation can point at it (#48).
+    #: `None` for a TOML file, whose parser keeps no positions. Not part of the
+    #: rule's identity: moving a rule down a line does not change what it says.
+    line: int | None = field(default=None, compare=False)
 
     def matches(self, namespace: str, name: str) -> bool:
         return fnmatchcase(f"{namespace}/{name}", self.pattern) or fnmatchcase(name, self.pattern)
@@ -104,6 +111,9 @@ class Config:
     domains: tuple[str, ...] = ()
     rules: tuple[Rule, ...] = ()
     vocabulary: str = ""
+    #: The references document: what each field answers in the regulation
+    #: (#48). Empty for the shipped GDPR one.
+    references: str = ""
     #: Labels for integrations and namespace schemes, merged over
     #: `stack.LABELS`. A label says what the events already named; it never
     #: supplies a platform the events did not.
@@ -176,16 +186,26 @@ def load(path: str | Path | None) -> Config:
         return Config()
 
     file = Path(path)
-    return _build(document.read(file), origin=str(file))
+    try:
+        text = file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"cannot read {file}: {exc}") from None
+    return parse(text, origin=str(file))
 
 
 def parse(text: str, *, origin: str = "qedro.yaml") -> Config:
     """Parse a config from text. Format follows *origin*'s suffix — see
     :mod:`qedro.document`."""
-    return _build(document.parse(text, origin=origin), origin=origin)
+    return _build(
+        document.parse(text, origin=origin),
+        origin=origin,
+        lines=document.lines(text, origin=origin, key="jobs"),
+    )
 
 
-def _build(raw: Mapping[str, Any] | None, *, origin: str) -> Config:
+def _build(
+    raw: Mapping[str, Any] | None, *, origin: str, lines: Mapping[str, int] | None = None
+) -> Config:
     # An empty file is a legitimate thing to commit — a placeholder somebody
     # will fill in — and is not worth an error.
     if raw is None:
@@ -194,8 +214,9 @@ def _build(raw: Mapping[str, Any] | None, *, origin: str) -> Config:
     return Config(
         controller=_controller(raw.get("controller"), origin),
         domains=_domains(raw.get("domains"), origin),
-        rules=_rules(raw.get("jobs"), origin),
+        rules=_rules(raw.get("jobs"), origin, lines or {}),
         vocabulary=_str(raw.get("vocabulary")),
+        references=_str(raw.get("references")),
         platforms=(platforms := _platforms(raw.get("platforms"), origin))[0],
         platform_kinds=platforms[1],
         origin=origin,
@@ -269,7 +290,7 @@ def _domains(raw: Any, origin: str) -> tuple[str, ...]:
     return tuple(d.strip() for d in raw if isinstance(d, str) and d.strip())
 
 
-def _rules(raw: Any, origin: str) -> tuple[Rule, ...]:
+def _rules(raw: Any, origin: str, lines: Mapping[str, int]) -> tuple[Rule, ...]:
     if raw is None:
         return ()
     if not isinstance(raw, Mapping):
@@ -299,6 +320,7 @@ def _rules(raw: Any, origin: str) -> tuple[Rule, ...]:
                 security_measures=_list(
                     spec.get("security_measures"), f"`security_measures` in {origin}"
                 ),
+                line=lines.get(pattern),
             )
         )
     return tuple(rules)

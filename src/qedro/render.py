@@ -31,7 +31,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from functools import singledispatch
 
-from . import TOMBSTONE, __version__, words
+from . import TOMBSTONE, __version__, explain, words
 from . import compare as compare_module
 from . import deployer as deployer_module
 from . import erasure as erasure_module
@@ -524,8 +524,79 @@ def _(record: Record, *, indent: int = 2) -> str:
         # The sentence the mark finishes, whether or not it was earned.
         "earned": EARNED_ART30,
         "reasons": list(record.completeness.reasons),
+        # Where each value came from in a sentence, which requirement it
+        # answers, and what it rests on (#48). Beside the activities rather
+        # than inside them: a sign-off covers what the record states, and an
+        # explanation is prose built from that, so adding one reopens nothing.
+        "explain": _explain_json(record),
+        "references": _references_json(record.references),
     }
     return _dumps(payload, record, indent)
+
+
+def _explanation_json(e: explain.Explanation) -> dict[str, object]:
+    return {
+        "text": e.text,
+        "answers": e.answers.id if e.answers else None,
+        "cite": e.answers.cite if e.answers else None,
+        "rests_on": [
+            {"kind": link.kind, "id": link.id, "file": link.file or None, "line": link.line}
+            for link in e.rests_on
+        ],
+    }
+
+
+def _explain_json(record: Record) -> dict[str, object]:
+    refs, vocab = record.references, record.vocabulary
+    return {
+        "record": (
+            {"answers": ref.id, "cite": ref.cite} if (ref := refs.answers("record")) else None
+        ),
+        "activities": {
+            a.key: {
+                name: _explanation_json(
+                    explain.activity_value(
+                        a, name, getattr(a, name), references=refs, vocabulary=vocab
+                    )
+                )
+                for name in ("purpose", "legal_basis")
+            }
+            | {
+                name: _explanation_json(
+                    explain.activity_list(a, name, getattr(a, name), references=refs)
+                )
+                for name in ("recipients", "security_measures")
+            }
+            for a in record.activities
+        },
+        "declared": {
+            d.name: {
+                name: _explanation_json(
+                    explain.declared_value(
+                        d, name, getattr(d, name), references=refs, vocabulary=vocab
+                    )
+                )
+                for name in ("purpose", "legal_basis")
+            }
+            | {
+                name: _explanation_json(
+                    explain.declared_list(d, name, getattr(d, name), references=refs)
+                )
+                for name in ("recipients", "security_measures")
+            }
+            for d in record.declared
+        },
+    }
+
+
+def _references_json(refs) -> dict[str, object]:
+    """The regulation's wording, once, for every requirement a field cites."""
+    return {
+        "name": refs.name,
+        "regulation": refs.regulation,
+        "source": refs.source,
+        "requirements": {r.id: {"cite": r.cite, "text": r.text} for r in refs.by_id.values()},
+    }
 
 
 def _declared_json(entry) -> dict[str, object]:
