@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.19.0 — 2026-11-18
+
+The Art. 30 record's JSON says where each value came from in a sentence, and which
+requirement of the GDPR the field answers, quoting the regulation's wording. Additions
+only: no key is renamed or removed, and sign-offs made with 0.18.0 still stand.
 
 - **The Art. 30 record's JSON explains its values** (#48, first part). A new `explain`
   object says, for each activity's purpose, legal basis, recipients and security
