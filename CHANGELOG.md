@@ -14,6 +14,16 @@ before `1.0`.
   `datasets`, every dataset its activities read or write with where it lives. Read
   from the events only, `null` where they say nothing. The other formats are
   unchanged; this is what lets the console draw the same icons the PDF trees do.
+- **A sign-off covers what a record states, not every byte of it** (#40). 0.16.0
+  hashed the whole record, so rebuilding it over the next night's runs — new run
+  counts, a later window — or with a qedro that adds an output field reopened every
+  approval for nothing. A sign-off now covers an explicit list of each projection's
+  statements: the controller, purposes, legal bases, categories, recipients, the
+  datasets read and written, the verdict and its reasons. Each entry records which
+  version of that list it was made under and is always checked against it, so an
+  upgrade never reopens an approval by accident. **Sign-offs made with 0.16.0 still
+  verify**, against the whole record as before, and therefore reopen once the record
+  gains this release's new fields; sign them again with 0.17.0.
 
 ## 0.16.0 — 2026-11-17
 

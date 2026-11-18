@@ -467,11 +467,15 @@ $ qedro status .
 
 The states are *draft*, *for sign-off*, *approved* and *published*, one step forward at
 a time or back to draft, and `record.signoff.json` is only ever added to. Each entry
-names the SHA-256 of the record it covers, with the tool version and the sign-off itself
-left out of the hash, so the same command over the same events is still covered and a
-record that states anything different is not: `qedro status` then reports it as not
-signed off, naming the earlier sign-off. Kept in Git, the file's history is the audit
-trail.
+names the SHA-256 of what the record *states*: the controller, each activity's purpose,
+legal basis, categories, recipients and the datasets it reads and writes, and the
+verdict with its reasons. Run counts, timestamps, the window, the qedro version and
+display fields are left out, so a record rebuilt tomorrow over new runs of the same
+pipelines, or by a newer qedro, is still covered, while one that states anything
+different is not: `qedro status` then reports it as not signed off, naming the earlier
+sign-off. The covered fields are an explicit list per projection with a version, which
+each entry records, so an upgrade never reopens an approval by accident. Kept in Git,
+the file's history is the audit trail.
 
 `--signoff record.signoff.json` on any projection prints where the record it builds
 stands, under the verdict, in every format. **A sign-off is a person's acceptance of

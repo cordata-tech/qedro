@@ -457,7 +457,11 @@ def _status(directory: str) -> int:
         except UsageError:
             passed_over += 1
             continue
-        standing = signoff.load(signoff.sidecar(path)).standing(signoff.digest(payload))
+        if signoff.kind(payload) not in signoff.COVERED:
+            # A comparison is a record qedro wrote but not one anybody signs.
+            passed_over += 1
+            continue
+        standing = signoff.load(signoff.sidecar(path)).standing(payload)
         states[standing.state] += 1
         verdict = "mark earned" if payload.get("complete") else "mark withheld"
         rows.append(

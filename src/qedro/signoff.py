@@ -12,12 +12,22 @@ emitted; a sign-off says a person accepted the record, which is a different clai
 made by somebody else. Nothing here reads or changes `complete` or the reasons, and
 every renderer prints the sign-off beside the verdict, never in place of it.
 
-**Each entry names the version it covers**, as the SHA-256 of the record's JSON with
-the two parts that do not describe the processing left out: the `qedro` block, which
-names the tool version that wrote it, and `signoff`, which is this. The same command
-over the same events gives the same hash, so a sign-off still covers a record built
-again from the same evidence, and stops covering it when anything the record states
-has changed.
+**Each entry names what it covers**, as the SHA-256 of the record's *statements*:
+the fields a person vouches for by approving it — the controller, each activity's
+purpose and legal basis, its categories and recipients, what it reads and writes,
+the verdict and its reasons — and nothing else. Run counts, timestamps, the window
+and the tool version change every time a record is built again over new lineage,
+and display fields such as a platform label say nothing about the processing;
+hashing them would reopen every approval each night and at every upgrade, and a
+signature that reopens for no reason teaches people to sign without reading.
+
+The covered fields are an **explicit list per projection**, `COVERED`, not a list of
+exclusions, so a field qedro adds later is outside the hash until somebody decides
+it belongs in it. The list has a version, `COVERAGE`, recorded in every entry, and
+an entry is always checked against the list it was made with: an upgrade never
+reopens an approval by accident. When a release grows the list, the approval still
+stands for what it covered, and the standing says that signing again would cover
+more. Version 1, used by 0.16.0, hashed the whole record.
 
 **No store.** The file is written where the record is, like `--out`; kept in Git, its
 history is the audit trail, and the commit that added an entry is a second timestamp
@@ -28,7 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -47,10 +57,81 @@ NEXT: Mapping[str, tuple[str, ...]] = {
     "published": ("draft",),
 }
 
-#: Left out of the hash: what wrote the document, and the sign-off itself.
-UNHASHED = ("qedro", "signoff")
-
 FORMAT = 1
+
+#: The coverage new entries are made under. Raise it whenever `COVERED` changes.
+COVERAGE = 2
+
+Path_ = tuple[str, ...]
+
+_VERDICT: tuple[Path_, ...] = (("complete",), ("reasons",))
+
+#: What a sign-off vouches for, per kind of document: paths into its JSON, `*`
+#: for every element of a list. Everything not named here is outside the hash.
+COVERED: Mapping[str, tuple[Path_, ...]] = {
+    "ropa/art30": (
+        ("controller",),
+        ("activities", "*", "job"),
+        ("activities", "*", "domain"),
+        ("activities", "*", "purpose"),
+        ("activities", "*", "legal_basis"),
+        ("activities", "*", "classification", "*", "key"),
+        ("activities", "*", "classification", "*", "value"),
+        ("activities", "*", "classification", "*", "provenance"),
+        ("activities", "*", "classification", "*", "unrecognised"),
+        ("activities", "*", "unclassified"),
+        ("activities", "*", "recipients"),
+        ("activities", "*", "security_measures"),
+        ("activities", "*", "reads"),
+        ("activities", "*", "writes"),
+        ("declared",),
+        *_VERDICT,
+    ),
+    "ropa/deployer": (
+        ("controller",),
+        ("references", "regulation"),
+        ("use_cases", "*", "job"),
+        ("use_cases", "*", "evidence"),
+        ("use_cases", "*", "purpose"),
+        ("use_cases", "*", "legal_basis"),
+        ("use_cases", "*", "model_versions", "*", "version"),
+        ("declared",),
+        *_VERDICT,
+    ),
+    "erasure": (
+        ("dataset",),
+        ("tombstone", "at"),
+        ("tombstone", "provenance"),
+        ("tombstone", "lifecycle_state"),
+        ("descendants", "*", "dataset"),
+        ("descendants", "*", "derived_from"),
+        ("descendants", "*", "derived_by"),
+        ("descendants", "*", "how"),
+        ("descendants", "*", "reached"),
+        *_VERDICT,
+    ),
+    "provenance": (
+        ("dataset",),
+        ("steps", "*", "dataset"),
+        ("steps", "*", "ended"),
+        ("steps", "*", "production", "job"),
+        ("steps", "*", "production", "code", "repository"),
+        ("steps", "*", "production", "code", "commit"),
+        ("steps", "*", "production", "signed"),
+        ("steps", "*", "production", "authorised"),
+        ("steps", "*", "production", "source_published"),
+        *_VERDICT,
+    ),
+    "quality": (
+        ("datasets", "*", "dataset"),
+        ("datasets", "*", "holds"),
+        ("datasets", "*", "expectations", "*", "assertion"),
+        ("datasets", "*", "expectations", "*", "column"),
+        ("datasets", "*", "expectations", "*", "holds"),
+        ("unchecked",),
+        *_VERDICT,
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -62,6 +143,8 @@ class Entry:
     by: str
     at: datetime
     note: str = ""
+    #: The `COVERED` version the hash was made under; 1 hashed the whole record.
+    coverage: int = 1
 
     def describe(self) -> str:
         when = self.at.date().isoformat()
@@ -72,6 +155,9 @@ class Entry:
             return f"returned to draft by {self.by} on {when}{said}"
         return f"{self.state} by {self.by} on {when}{said}"
 
+    def covers(self, payload: Mapping[str, Any]) -> bool:
+        return self.record_sha256 == digest(payload, coverage=self.coverage)
+
 
 @dataclass(frozen=True)
 class SignOff:
@@ -79,23 +165,26 @@ class SignOff:
 
     entries: tuple[Entry, ...] = ()
 
-    def for_version(self, digest: str) -> tuple[Entry, ...]:
-        return tuple(e for e in self.entries if e.record_sha256 == digest)
+    def for_record(self, payload: Mapping[str, Any]) -> tuple[Entry, ...]:
+        """The entries that cover this record, each checked under its own coverage."""
+        return tuple(e for e in self.entries if e.covers(payload))
 
-    def state(self, digest: str) -> str:
-        own = self.for_version(digest)
+    def state(self, payload: Mapping[str, Any]) -> str:
+        own = self.for_record(payload)
         return own[-1].state if own else "draft"
 
-    def standing(self, digest: str) -> Standing:
-        own = self.for_version(digest)
-        earlier = tuple(e for e in self.entries if e.record_sha256 != digest)
+    def standing(self, payload: Mapping[str, Any]) -> Standing:
+        own = self.for_record(payload)
+        earlier = tuple(e for e in self.entries if e not in own)
+        latest = own[-1] if own else None
         return Standing(
-            state=own[-1].state if own else "draft",
-            latest=own[-1] if own else None,
+            state=latest.state if latest else "draft",
+            latest=latest,
             approved=next((e for e in reversed(own) if e.state == "approved"), None),
             earlier=next(
                 (e for e in reversed(earlier) if e.state in ("approved", "published")), None
             ),
+            narrower=latest is not None and latest.state != "draft" and latest.coverage < COVERAGE,
         )
 
 
@@ -109,12 +198,20 @@ class Standing:
     #: The most recent approval of a *different* version, when this one has none:
     #: the record changed after somebody signed it.
     earlier: Entry | None = None
+    #: The approval stands, made when a sign-off covered less of the record than
+    #: this qedro's does; signing again would cover the rest.
+    narrower: bool = False
 
     def describe(self) -> str:
         if self.latest is not None and self.state != "draft":
             line = self.latest.describe()
             if self.state == "published" and self.approved is not None:
                 line += f" (approved by {self.approved.by} on {self.approved.at.date()})"
+            if self.narrower:
+                line += (
+                    " — signed when a sign-off covered less of the record than this "
+                    "version of qedro states; sign again to cover the rest"
+                )
             return line
         if self.earlier is not None:
             return (
@@ -129,9 +226,50 @@ class Standing:
     CAVEAT = "a person's acceptance of the record, not evidence; it does not change the verdict"
 
 
-def digest(payload: Mapping[str, Any]) -> str:
-    """The SHA-256 of a record's JSON, without the parts that do not describe it."""
-    kept = {k: v for k, v in payload.items() if k not in UNHASHED}
+def kind(payload: Mapping[str, Any]) -> str:
+    """`ropa/art30`, `erasure`, …: which list of covered fields applies."""
+    block = payload.get("qedro", {})
+    projection = str(block.get("projection", ""))
+    view = block.get("view")
+    return f"{projection}/{view}" if view else projection
+
+
+def statements(payload: Mapping[str, Any]) -> Any:
+    """The part of a record a sign-off covers: its `COVERED` fields, nothing else."""
+    paths = COVERED.get(kind(payload))
+    if paths is None:
+        raise UsageError(
+            f"qedro cannot sign a {kind(payload) or 'document of no known kind'}: "
+            f"it signs {', '.join(sorted(COVERED))}"
+        )
+    return _select(payload, paths)
+
+
+def _select(value: Any, paths: Sequence[Path_]) -> Any:
+    """*value* reduced to *paths*, keeping the shape and the order of lists."""
+    if any(len(p) == 0 for p in paths):
+        return value
+    if isinstance(value, list):
+        rest = [p[1:] for p in paths if p[0] == "*"]
+        return [_select(item, rest) for item in value]
+    if isinstance(value, Mapping):
+        out = {}
+        for key in dict.fromkeys(p[0] for p in paths):
+            if key in value:
+                out[key] = _select(value[key], [p[1:] for p in paths if p[0] == key])
+        return out
+    return value
+
+
+def digest(payload: Mapping[str, Any], *, coverage: int = COVERAGE) -> str:
+    """The SHA-256 of what a sign-off made under *coverage* vouches for."""
+    if coverage == 1:
+        # 0.16.0: the whole record but what wrote it and the sign-off itself.
+        kept: Any = {k: v for k, v in payload.items() if k not in ("qedro", "signoff")}
+    elif coverage == COVERAGE:
+        kept = statements(payload)
+    else:
+        raise UsageError(f"a sign-off made under coverage {coverage} needs a newer qedro")
     canonical = json.dumps(kept, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -173,6 +311,7 @@ def load(path: str | Path) -> SignOff:
                 by=e["by"],
                 at=datetime.fromisoformat(e["at"]),
                 note=e.get("note", ""),
+                coverage=int(e.get("coverage", 1)),
             )
             for e in raw["entries"]
         )
@@ -195,17 +334,24 @@ def sign(
         raise UsageError(f"{state!r} is not a sign-off state. Use one of: {', '.join(STATES)}")
     if not by.strip():
         raise UsageError("a sign-off needs a name — add --as 'Erika Mustermann'")
-    version = digest(read_record(record))
+    payload = read_record(record)
     path = sidecar(record)
     current = load(path)
-    now = current.state(version)
+    now = current.state(payload)
     if state not in NEXT[now]:
         allowed = " or ".join(NEXT[now])
         raise UsageError(
             f"this version of {Path(record).name} is {now}; from there it can go to {allowed}, "
             f"not {state}"
         )
-    entry = Entry(record_sha256=version, state=state, by=by.strip(), at=at, note=note.strip())
+    entry = Entry(
+        record_sha256=digest(payload),
+        state=state,
+        by=by.strip(),
+        at=at,
+        note=note.strip(),
+        coverage=COVERAGE,
+    )
     entries = [*current.entries, entry]
     path.write_text(
         json.dumps(
@@ -215,6 +361,7 @@ def sign(
                 "entries": [
                     {
                         "record_sha256": e.record_sha256,
+                        "coverage": e.coverage,
                         "state": e.state,
                         "by": e.by,
                         "at": e.at.isoformat(),
@@ -234,4 +381,4 @@ def sign(
 
 def standing_of(payload: Mapping[str, Any], signoff_path: str | Path) -> Standing:
     """Where the record in *payload* stands against a sign-off file."""
-    return load(signoff_path).standing(digest(payload))
+    return load(signoff_path).standing(payload)

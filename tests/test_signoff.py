@@ -35,25 +35,129 @@ def approved(path, by="Erika Mustermann"):
     return signoff.sidecar(path)
 
 
-class TestTheHash:
-    def test_it_leaves_out_the_tool_version_and_the_signoff(self):
-        payload = json.loads(render.json(PROJECTIONS["ropa"]()))
+def ropa_payload():
+    return json.loads(render.json(PROJECTIONS["ropa"]()))
+
+
+class TestWhatASignOffCovers:
+    """A sign-off covers what the record states, and nothing that changes merely
+    because the record was built again, or by a newer qedro."""
+
+    def test_not_the_tool_version_nor_the_signoff(self):
+        payload = ropa_payload()
         changed = {**payload, "qedro": {**payload["qedro"], "version": "9.9.9"}, "signoff": {}}
         assert signoff.digest(changed) == signoff.digest(payload)
 
-    def test_it_changes_with_anything_the_record_states(self):
-        payload = json.loads(render.json(PROJECTIONS["ropa"]()))
+    def test_not_run_counts_timestamps_or_the_window(self):
+        payload = ropa_payload()
+        rebuilt = json.loads(json.dumps(payload))
+        for activity in rebuilt["activities"]:
+            activity["runs"] += 5
+            activity["last_seen"] = "2027-01-01T00:00:00+00:00"
+        rebuilt["scope"]["window"]["until"] = "2027-01-01T00:00:00+00:00"
+        assert signoff.digest(rebuilt) == signoff.digest(payload)
+
+    def test_not_a_field_a_newer_qedro_adds(self):
+        payload = ropa_payload()
+        upgraded = json.loads(json.dumps(payload))
+        for activity in upgraded["activities"]:
+            activity["ran_on"] = "dbt"
+        upgraded["something_new"] = [1, 2, 3]
+        assert signoff.digest(upgraded) == signoff.digest(payload)
+
+    @pytest.mark.parametrize(
+        ("where", "change"),
+        [
+            ("purpose", lambda a: a["purpose"].update(value="marketing")),
+            ("legal basis", lambda a: a["legal_basis"].update(provenance="mapping")),
+            ("writes", lambda a: a["writes"].append("wh/new_table")),
+            ("recipients", lambda a: a["recipients"]["values"].append("a bureau")),
+        ],
+    )
+    def test_any_statement_about_the_processing(self, where, change):
+        payload = ropa_payload()
+        changed = json.loads(json.dumps(payload))
+        change(changed["activities"][0])
+        assert signoff.digest(changed) != signoff.digest(payload), where
+
+    def test_the_verdict(self):
+        payload = ropa_payload()
         assert signoff.digest({**payload, "complete": not payload["complete"]}) != (
             signoff.digest(payload)
+        )
+
+    @pytest.mark.parametrize("projection", sorted(PROJECTIONS))
+    def test_every_covered_field_exists_in_what_qedro_writes(self, projection):
+        # A renamed field would otherwise drop out of the hash unnoticed.
+        payload = json.loads(render.json(PROJECTIONS[projection]()))
+        paths = signoff.COVERED[signoff.kind(payload)]
+        for path in paths:
+            assert _reachable(payload, path), f"{signoff.kind(payload)}: {'.'.join(path)}"
+
+    def test_a_comparison_cannot_be_signed(self):
+        with pytest.raises(UsageError, match="cannot sign"):
+            signoff.digest({"qedro": {"projection": "compare"}})
+
+
+def _reachable(value, path):
+    """Whether *path* leads somewhere in *value*. An empty list counts, as there is
+    nothing in it to miss, and so does `null` — a provenance step that ends at a
+    source has no production — but a missing key does not."""
+    if not path or value is None:
+        return True
+    head, rest = path[0], path[1:]
+    if head == "*":
+        return isinstance(value, list) and all(_reachable(item, rest) for item in value)
+    return isinstance(value, dict) and head in value and _reachable(value[head], rest)
+
+
+class TestAnOlderSignOff:
+    """An entry is checked against the coverage it was made under."""
+
+    def test_one_made_by_0_16_still_covers_the_record_it_signed(self, tmp_path):
+        path = written(tmp_path)
+        payload = signoff.read_record(path)
+        signoff.sidecar(path).write_text(
+            json.dumps(
+                {
+                    "qedro_signoff": 1,
+                    "record": path.name,
+                    "entries": [
+                        {
+                            "record_sha256": signoff.digest(payload, coverage=1),
+                            "state": "for sign-off",
+                            "by": "Erika Mustermann",
+                            "at": AT.isoformat(),
+                        },
+                        {
+                            "record_sha256": signoff.digest(payload, coverage=1),
+                            "state": "approved",
+                            "by": "Erika Mustermann",
+                            "at": AT.isoformat(),
+                        },
+                    ],
+                }
+            )
+        )
+        standing = signoff.standing_of(payload, signoff.sidecar(path))
+        assert standing.state == "approved"
+        # It covered less than a sign-off made now would, and says so.
+        assert standing.narrower
+        assert "sign again to cover the rest" in standing.describe()
+
+    def test_a_new_one_is_made_under_the_current_coverage(self, tmp_path):
+        path = written(tmp_path)
+        _, entry = signoff.sign(path, state="for sign-off", by="Erika Mustermann", at=AT)
+        assert entry.coverage == signoff.COVERAGE
+        assert json.loads(signoff.sidecar(path).read_text())["entries"][0]["coverage"] == (
+            signoff.COVERAGE
         )
 
 
 class TestTheStates:
     def test_a_record_starts_as_draft(self, tmp_path):
         path = written(tmp_path)
-        assert signoff.load(signoff.sidecar(path)).state(
-            signoff.digest(signoff.read_record(path))
-        ) == ("draft")
+        assert signoff.load(signoff.sidecar(path)).state(signoff.read_record(path)) == "draft"
 
     def test_one_step_forward_at_a_time(self, tmp_path):
         path = written(tmp_path)
@@ -64,8 +168,8 @@ class TestTheStates:
         path = written(tmp_path)
         for state in ("for sign-off", "approved", "published", "draft", "for sign-off"):
             signoff.sign(path, state=state, by="Erika Mustermann", at=AT)
-        version = signoff.digest(signoff.read_record(path))
-        assert signoff.load(signoff.sidecar(path)).state(version) == "for sign-off"
+        payload = signoff.read_record(path)
+        assert signoff.load(signoff.sidecar(path)).state(payload) == "for sign-off"
 
     def test_an_entry_is_only_ever_added(self, tmp_path):
         path = written(tmp_path)
