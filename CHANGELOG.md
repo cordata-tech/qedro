@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.22.0 — 2026-11-19
+
+`qedro status --against` says, for every signed Art. 30 record, which activities still
+match what runs and which have changed since the sign-off. Additions only: no output
+changes shape.
 
 - **`qedro status --against SOURCE` says whether each signed record still describes
   what runs** (#42). It builds a fresh Art. 30 record from the lineage, with the same
