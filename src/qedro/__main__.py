@@ -468,6 +468,9 @@ def _status(directory: str) -> int:
         except UsageError:
             passed_over += 1
             continue
+        if payload["qedro"].get("projection") == "status":
+            # `qedro status --format json` written into the directory it reads.
+            continue
         if signoff.kind(payload) not in signoff.COVERED:
             # A comparison is a record qedro wrote but not one anybody signs.
             passed_over += 1
@@ -500,13 +503,15 @@ SIGNED = frozenset({"approved", "published"})
 def _currency(
     directory: str,
     *,
-    source: str,
-    config_path: str | None,
-    vocabulary_path: str | None,
-    activities_path: str | None,
-    since: datetime | None,
-    until: datetime | None,
+    source: str | None,
+    config_path: str | None = None,
+    vocabulary_path: str | None = None,
+    activities_path: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
     regenerate_as: str | None = None,
+    fmt: str = "text",
+    out: str | None = None,
 ) -> int:
     """Whether each signed Art. 30 record still describes what runs (#42).
 
@@ -515,12 +520,15 @@ def _currency(
     activity. A fresh run that cannot be built blocks every signed record, with
     the reason; it does not stop the command, since *we could not check* is a
     finding a reader needs as much as any other.
+
+    With no *source*, only for `--format json`: every record and where its
+    sign-off stands, compared with nothing — what the text `qedro status` prints.
     """
     root = Path(directory)
     if not root.is_dir():
         raise UsageError(f"no directory at {directory}")
-    signed: list[tuple[Path, str, dict, str]] = []
-    unsigned = other = 0
+    listed: list[tuple[Path, str, dict, signoff.Standing]] = []
+    other = 0
     for path in sorted(root.rglob("*.json")):
         if path.name.endswith(".signoff.json"):
             continue
@@ -528,21 +536,23 @@ def _currency(
             payload = signoff.read_record(path)
         except UsageError:
             continue
-        if signoff.kind(payload) != "ropa/art30":
+        if payload["qedro"].get("projection") == "status":
+            # This command's own output, written into the directory it reads.
+            continue
+        kind = signoff.kind(payload)
+        if kind not in signoff.COVERED or (source and kind != "ropa/art30"):
             # Only an Art. 30 record has activities a fresh run can be compared
             # with; the others are counted so the summary does not undersell.
             other += 1
             continue
         standing = signoff.load(signoff.sidecar(path)).standing(payload)
-        if standing.state not in SIGNED:
-            unsigned += 1
-            continue
-        signed.append((path, str(path.relative_to(root)), dict(payload), standing.describe()))
+        listed.append((path, str(path.relative_to(root)), dict(payload), standing))
+    signed = [row for row in listed if source and row[3].state in SIGNED]
 
     fresh: dict | None = None
     fresh_text = ""
     reason = ""
-    if signed:
+    if signed and source:
         try:
             settings = config_module.load(config_module.find(config_path))
             terms = vocabulary.load(vocabulary_path or settings.vocabulary or None)
@@ -570,7 +580,9 @@ def _currency(
         except QedroError as exc:
             reason = f"the fresh run from {source} could not be built: {exc}"
 
+    text = fmt != "json"
     totals = dict.fromkeys(staleness.STATES, 0)
+    results: dict[str, tuple[staleness.RecordCheck, str | None]] = {}
     for path, origin, payload, standing in signed:
         result = (
             staleness.check(payload, fresh, origin=origin)
@@ -579,14 +591,55 @@ def _currency(
         )
         for state, n in result.counts().items():
             totals[state] += n
-        print(f"  {origin}  {standing}")
-        if result.blocked:
-            print(f"    blocked: {result.blocked}")
-        for caution in result.cautions:
-            print(f"    ! {caution}")
-        _print_states(result)
+        regenerated = None
         if regenerate_as and fresh is not None:
-            _regenerate(path, result, fresh, fresh_text, by=regenerate_as, source=source)
+            regenerated = _regenerate(
+                path, result, fresh, fresh_text, by=regenerate_as, source=source or "", echo=text
+            )
+        results[origin] = (result, regenerated)
+        if text:
+            print(f"  {origin}  {standing.describe()}")
+            if result.blocked:
+                print(f"    blocked: {result.blocked}")
+            for caution in result.cautions:
+                print(f"    ! {caution}")
+            _print_states(result)
+
+    if not text:
+        document = {
+            "qedro": render._document("status"),
+            "directory": directory,
+            # The fresh run's own scope rather than a timestamp: what it read,
+            # over which window, is what says how current the comparison is.
+            "against": None
+            if not source
+            else {
+                "source": source,
+                "window": (fresh or {}).get("scope", {}).get("window"),
+                "blocked": reason or None,
+            },
+            "records": [
+                {
+                    "file": origin,
+                    "projection": payload["qedro"].get("projection"),
+                    "view": payload["qedro"].get("view"),
+                    "complete": bool(payload.get("complete")),
+                    "signoff": {"state": standing.state, "describe": standing.describe()},
+                    "check": staleness.check_json(results[origin][0])
+                    if origin in results
+                    else None,
+                    "regenerated": results[origin][1] if origin in results else None,
+                }
+                for _, origin, payload, standing in listed
+            ],
+            "counts": totals if source else None,
+            "not_compared": len(listed) - len(signed) if source else None,
+            "other": other,
+        }
+        _deliver(json.dumps(document, indent=2, ensure_ascii=False) + "\n", out)
+        if out:
+            print(f"  wrote {out}")
+        return 0
 
     if not signed:
         print(f"  no signed Art. 30 records under {directory}")
@@ -595,6 +648,7 @@ def _currency(
         print(f"\n  {words.count(len(signed), 'signed record')}: {counts}")
         if totals[staleness.STALE] or totals[staleness.NEW]:
             print("  the stale and new activities are the ones to send for sign-off again")
+    unsigned = len(listed) - len(signed)
     if unsigned:
         print(f"  {words.count(unsigned, 'record')} not signed off, so not compared")
     if other:
@@ -613,7 +667,8 @@ def _regenerate(
     *,
     by: str,
     source: str,
-) -> None:
+    echo: bool = True,
+) -> str | None:
     """Write the fresh record beside a signed one that changed, and send it for
     sign-off naming what changed (#55).
 
@@ -625,16 +680,18 @@ def _regenerate(
     stale = [a.key for a in result.activities if a.state == staleness.STALE]
     new = [a.key for a in result.activities if a.state == staleness.NEW]
     if result.blocked or not (stale or new):
-        print("    not regenerated: " + ("blocked" if result.blocked else "up to date"))
-        return
+        if echo:
+            print("    not regenerated: " + ("blocked" if result.blocked else "up to date"))
+        return None
     target = signoff.next_version(signed)
     target.write_text(fresh_text, encoding="utf-8")
     already = signoff.load(signoff.sidecar(target)).state(fresh)
     if already != "draft":
         # The same version was sent before, by this command or by hand; a
         # second identical entry would say nothing new.
-        print(f"    wrote {target.name}; this version is already {already}")
-        return
+        if echo:
+            print(f"    wrote {target.name}; this version is already {already}")
+        return target.name
     parts = []
     if stale:
         n = len(stale)
@@ -645,7 +702,9 @@ def _regenerate(
         parts.append(f"{len(new)} new ({', '.join(new)})")
     note = f"regenerated by qedro status --against {source}: {'; '.join(parts)}"
     signoff.sign(target, state="for sign-off", by=by, at=datetime.now(UTC), note=note)
-    print(f"    wrote {target.name}, sent for sign-off by {by}")
+    if echo:
+        print(f"    wrote {target.name}, sent for sign-off by {by}")
+    return target.name
 
 
 def _print_states(result: staleness.RecordCheck) -> None:
@@ -1026,6 +1085,15 @@ def main(argv: list[str] | None = None) -> int:
     status_cmd.add_argument(
         "--as", dest="by", metavar="NAME", help="who is regenerating, for the sign-off entry"
     )
+    status_cmd.add_argument(
+        "--format",
+        dest="fmt",
+        choices=["text", "json"],
+        default="text",
+        help="json writes every record, its sign-off and, with --against, each activity's "
+        "state, for a reader such as the console",
+    )
+    status_cmd.add_argument("--out", help="write to this file instead of standard output")
     status_cmd.add_argument("--since", type=_instant, help="the fresh run ignores events before")
     status_cmd.add_argument("--until", type=_instant, help="the fresh run ignores events after")
 
@@ -1101,7 +1169,11 @@ def main(argv: list[str] | None = None) -> int:
                     since=args.since,
                     until=args.until,
                     regenerate_as=args.by.strip() if args.regenerate else None,
+                    fmt=args.fmt,
+                    out=args.out,
                 )
+            if args.fmt == "json":
+                return _currency(args.directory, source=None, fmt="json", out=args.out)
             return _status(args.directory)
         if args.command == "diff":
             return _diff(args.before, args.after, fmt=args.fmt, out=args.out)

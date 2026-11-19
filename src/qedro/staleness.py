@@ -94,3 +94,45 @@ def blocked(origin: str, signed: dict[str, Any], reason: str) -> RecordCheck:
     return RecordCheck(
         origin, tuple(ActivityState(k, BLOCKED) for k in sorted(keys)), blocked=reason
     )
+
+
+def _value_json(value: compare.Value | None) -> dict[str, str] | None:
+    if value is None:
+        return None
+    return {"value": value.value, "provenance": str(value.provenance)}
+
+
+def change_json(change: Change) -> dict[str, Any]:
+    """One finding, with the words the text prints for it, so a reader such as
+    the console says it as qedro does."""
+    from . import render
+
+    if change.kind == compare.REMOVED:
+        says, costs = "not in the fresh run", "it may not have run in the window"
+    else:
+        says, costs = render._finding(change)
+    return {
+        "field": change.label or None,
+        "kind": change.kind,
+        "before": _value_json(change.before),
+        "after": _value_json(change.after),
+        "says": says,
+        "costs": costs or None,
+    }
+
+
+def check_json(result: RecordCheck) -> dict[str, Any]:
+    """A record's comparison with the fresh run, for `qedro status --format json`."""
+    return {
+        "blocked": result.blocked or None,
+        "cautions": list(result.cautions),
+        "counts": result.counts(),
+        "activities": [
+            {
+                "key": a.key,
+                "state": a.state,
+                "changes": [change_json(c) for c in a.changes],
+            }
+            for a in result.activities
+        ],
+    }

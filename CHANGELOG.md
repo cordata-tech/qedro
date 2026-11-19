@@ -6,6 +6,16 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro status --format json`** writes what the text prints as a document a reader
+  such as the console can use: every record with its verdict and where its sign-off
+  stands, and, with `--against`, each activity's state and every change, with the
+  words the text says it in. `"projection": "status"` in its `qedro` block. It names
+  the fresh run's source and window rather than a time, so two runs over the same
+  lineage write the same bytes. `--out` writes it to a file; `qedro status` reading
+  the directory again passes over a status document rather than counting it.
+
 ## 0.23.0 — 2026-11-19
 
 A stale signed record can be rebuilt and sent back for sign-off in one step, with what

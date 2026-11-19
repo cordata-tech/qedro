@@ -180,3 +180,58 @@ class TestRegenerate:
         assert self.regenerate(signed.parent) != 0
         assert "--as" in capsys.readouterr().err
         assert not signoff.next_version(signed).exists()
+
+
+class TestTheJson:
+    @pytest.fixture
+    def signed(self, tmp_path):
+        path = tmp_path / "fraud.json"
+        assert main(["ropa", "demo/lineage-declared", "--config", "demo/qedro.yaml", "--out",
+                     str(path)]) == 0  # fmt: skip
+        signoff.sign(path, by="A Person", state="for sign-off", at=datetime.now(UTC))
+        signoff.sign(path, by="Another Person", state="approved", at=datetime.now(UTC))
+        return path
+
+    def status(self, directory, *args) -> dict:
+        out = directory / "status.json"
+        assert main(["status", str(directory), *args, "--format", "json", "--out", str(out)]) == 0
+        return json.loads(out.read_text())
+
+    def test_each_activity_has_its_state_and_qedros_words_for_each_change(self, signed):
+        doc = self.status(signed.parent, "--against", "demo/lineage", "--config",
+                          "demo/qedro.yaml")  # fmt: skip
+        assert doc["qedro"]["projection"] == "status"
+        assert doc["against"]["source"] == "demo/lineage" and doc["against"]["blocked"] is None
+        (record,) = doc["records"]
+        assert record["file"] == "fraud.json"
+        assert record["signoff"]["state"] == "approved"
+        dunning = next(
+            a for a in record["check"]["activities"] if a["key"] == "acme.billing/dunning-weekly"
+        )
+        assert dunning["state"] == "stale"
+        purpose = next(c for c in dunning["changes"] if c["field"] == "purpose")
+        assert purpose["kind"] == "regressed"
+        assert purpose["before"] == {"value": "debt-collection", "provenance": "facet"}
+        assert purpose["says"] == "debt-collection, unchanged"
+        assert purpose["costs"].startswith("evidence lost")
+        assert doc["counts"] == {"up to date": 0, "stale": 7, "new": 0, "blocked": 0}
+
+    def test_without_against_it_lists_sign_offs_and_compares_nothing(self, signed):
+        doc = self.status(signed.parent)
+        assert doc["against"] is None and doc["counts"] is None
+        assert [r["check"] for r in doc["records"]] == [None]
+
+    def test_a_blocked_run_says_why_in_the_json_too(self, signed, tmp_path):
+        doc = self.status(signed.parent, "--against", str(tmp_path / "nothing"), "--config",
+                          "demo/qedro.yaml")  # fmt: skip
+        assert "could not be built" in doc["against"]["blocked"]
+        assert "could not be built" in doc["records"][0]["check"]["blocked"]
+
+    def test_the_status_file_is_never_read_back_as_a_record(self, signed, capsys):
+        self.status(signed.parent)
+        capsys.readouterr()
+        assert main(["status", str(signed.parent)]) == 0
+        out = capsys.readouterr().out
+        assert "status.json" not in out and "passed over" not in out
+        doc = self.status(signed.parent)
+        assert [r["file"] for r in doc["records"]] == ["fraud.json"]

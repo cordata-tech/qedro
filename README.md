@@ -550,6 +550,11 @@ $ qedro status records --against ./lineage --config qedro.yaml --regenerate --as
 $ qedro sign records/fraud.next.json --as "Erika Mustermann" --state approved
 ```
 
+`--format json --out records/status.json` writes the same as a document: each record,
+its verdict and sign-off, and with `--against` each activity's state and what changed,
+in the words the text uses, for a reader such as a console that shows which signed
+records have gone stale.
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and
