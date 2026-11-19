@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.21.0 — 2026-11-19
+
+Every format of the Art. 30 record can now say where each value came from: the PDF as
+footnotes, the workbook on a sheet of its own, text and Markdown with `--explain`. This
+completes #48. The workbook gains two sheets; nothing else changes shape.
 
 - **The PDF and the workbook print the explanations** (#48). The PDF puts a numbered
   marker in each row's source column and the sentence as a footnote under that
