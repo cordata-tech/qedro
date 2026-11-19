@@ -6,7 +6,10 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.24.0 — 2026-11-19
+
+`qedro status` can write what it finds as JSON, for a console that shows which signed
+records have gone stale. A new document; nothing existing changes shape.
 
 - **`qedro status --format json`** writes what the text prints as a document a reader
   such as the console can use: every record with its verdict and where its sign-off
