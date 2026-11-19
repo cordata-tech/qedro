@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.23.0 — 2026-11-19
+
+A stale signed record can be rebuilt and sent back for sign-off in one step, with what
+changed named, and its new version keeps the same sign-off history. The sign-off file's
+`record` field now always names the record.
 
 - **`qedro status --against … --regenerate --as NAME`** (#55) writes, for each signed
   Art. 30 record with a stale or new activity, the fresh record beside it as
