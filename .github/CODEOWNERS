@@ -35,3 +35,15 @@
 /.github/workflows/             @lhadhazy
 /pyproject.toml                 @lhadhazy
 /CHANGELOG.md                   @lhadhazy
+
+# What each field answers in the regulation, quoted character for character from
+# the EUR-Lex text. A tidied quote is no longer a quote.
+/src/qedro/regulations/         @lhadhazy
+
+# What a sign-off covers. Moving a field into or out of `COVERED` reopens every
+# existing approval, which is right only when it is meant.
+/src/qedro/signoff.py           @lhadhazy
+
+# The rules every contributor and agent works to.
+/AGENTS.md                      @lhadhazy
+/CONTRIBUTING.md                @lhadhazy

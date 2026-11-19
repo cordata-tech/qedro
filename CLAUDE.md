@@ -1,5 +1,11 @@
 # Qedro — working notes
 
+@AGENTS.md
+
+The rules above bind every contributor and agent. What follows is the maintainer's
+working context: planning, the reasons behind those rules, the other repositories,
+and how this repository is released.
+
 Turns emitted evidence into the artefacts an auditor asks for. Reads OpenLineage,
 produces a GDPR (DSGVO) Art. 30 record of processing activities, an assertion history,
 the provenance chain from a published number back to the signed commit that authorised
@@ -23,55 +29,29 @@ repo: **platform#29** (which LF-tag ontology is authoritative), **platform#30** 
 naming search) and **platform#26** (`catalog-mcp`, since built as
 [`cordata-tech/catalog-mcp`](https://github.com/cordata-tech/catalog-mcp)).
 
-## Four commitments that must not erode
+## Why the commitments are what they are
 
-These are the ones that get quietly simplified away. Each has a reason that is not
-obvious from the code.
+The rules themselves are in `AGENTS.md`, imported above, for every contributor and
+every agent alike. What follows is the maintainer's reasoning behind them, which is
+easy to lose when a commitment starts to look like an unnecessary constraint.
 
-**Classification is source-neutral. Never `lf_tags`.** LakeFormation is one adapter
-beside GCP Data Catalog policy tags, Purview classifications and OpenMetadata terms.
-The whole reason projections were sequenced ahead of the control plane is that they
-work against infrastructure people already run; a tool requiring LakeFormation has
-re-acquired the precondition that inversion removed. **Naming is where the coupling
-sneaks back in.** Acceptance test: `qedro ropa` must run against a Marquez instance
-with no AWS anywhere.
+**Source-neutral classification** is why projections were sequenced ahead of the
+control plane at all: they work against infrastructure people already run, and a tool
+requiring LakeFormation has re-acquired the precondition that inversion removed.
+**Naming is where the coupling sneaks back in.**
 
-**The vocabulary is data the tool loads, never types it is compiled against.** Three
-separate requirements land on this one decision — source-neutrality, organisations
-authoring their own ontologies through a UI later, and shipping recommended starter
-ontologies. All three are free if a vocabulary document is loaded at runtime; all
-three need a rewrite of everything touching a tag if `sensitivity` is an enum.
+**The vocabulary as data** carries three requirements at once — source-neutrality,
+organisations authoring their own ontologies through a UI later, and shipping
+recommended starter ontologies. All three are free if a vocabulary document is loaded
+at runtime; all three need a rewrite of everything touching a tag if `sensitivity` is
+an enum. The regulation references (#48) are data for the same reason.
 
-**The tombstone is earned, not printed.** `∎` means *this artefact stands on its own
-evidence*. It is withheld whenever a job's `purpose` or `legal_basis` came from the
-mapping fallback rather than an emitted facet, or a domain in scope produced no
-lineage in the window. The run still succeeds and still writes the file — it simply
-does not claim to be a proof. **Withholding is the signal**; a mark printed on every
-success says nothing. This is also the answer to a problem the published post raises
-and does not solve: a compliance artefact with holes is worse than none *because the
-holes are invisible*. See `qedro/mark.py`, and do not make it unconditional.
+**The earned tombstone** answers a problem the published post raises and does not
+solve: a compliance artefact with holes is worse than none *because the holes are
+invisible*.
 
-**Read-only by construction.** No write path in any handler, and no credential that
-could acquire one. Not a policy — a property of what the code is able to reach.
-
-## Facets, and why the model is shallow
-
-**Three kinds of facet, and the difference matters.** Job and run facets describe
-what ran. Dataset facets describe the dataset and are true whoever is looking.
-**Input and output facets describe one run's use of a dataset** — `dataQualityAssertions`
-lives there, which is why `quality` can speak in dates and why the parser dropped it
-until that projection needed it. Do not merge the two: *this table has a unique key*
-is a claim, *the run on the 10th checked it and it held* is evidence.
-
-Core event fields are typed; **facets stay raw dictionaries**. OpenLineage has a long
-tail of facets and every emitter populates a different subset, so modelling them all
-means breaking whenever one moves. A projection asks for the facet it wants and copes
-with absence.
-
-Related: **parsing never raises.** Production lineage contains events from emitters
-that disagree with the spec. Bad records are skipped and *counted*, and the count
-reaches `ReadReport` → the summary line → the completeness decision. That chain is
-relied on downstream, not diagnostics.
+**Parsing never raises** because the skipped-and-counted chain — `ReadReport` → the
+summary line → the completeness decision — is relied on downstream, not diagnostics.
 
 ## The other four repos
 
