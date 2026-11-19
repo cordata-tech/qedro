@@ -6,6 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro status --against SOURCE` says whether each signed record still describes
+  what runs** (#42). It builds a fresh Art. 30 record from the lineage, with the same
+  `--config`, `--activities`, `--vocabulary`, `--since` and `--until` as `qedro ropa`,
+  and compares every approved or published Art. 30 record under the directory with it,
+  one activity at a time: *up to date*, *stale* with what changed named, *new*, or
+  *blocked* with the reason. A value unchanged on weaker evidence is stale; a job that
+  only ran again is not. A fresh run that read no events blocks every signed record
+  instead of reporting each activity as gone. Without `--against`, `qedro status` is
+  as before.
+
 ## 0.21.0 — 2026-11-19
 
 Every format of the Art. 30 record can now say where each value came from: the PDF as

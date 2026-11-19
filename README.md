@@ -507,6 +507,34 @@ stands, under the verdict, in every format. **A sign-off is a person's acceptanc
 the record, not evidence:** it never earns or withholds the mark, and every format says
 so beside it.
 
+### Whether a signed record still describes what runs
+
+A signed record describes the pipelines on the day it was signed. `qedro status
+--against` builds a fresh record from the lineage, as `qedro ropa` would, and compares
+every signed Art. 30 record with it, one activity at a time
+([#42](https://github.com/cordata-tech/qedro/issues/42)):
+
+```console
+$ qedro status records --against ./lineage --config qedro.yaml
+  fraud.json  approved by Max Muster on 2026-11-19
+    stale       acme.billing/dunning-weekly
+                  purpose: debt-collection, unchanged — evidence lost: emitted facet → mapping file
+    new         payroll-run
+    up to date  acme.billing/invoices-nightly, acme.crm/consent-sync, …
+
+  1 signed record: 6 up to date, 1 stale, 1 new, 0 blocked
+```
+
+*Stale* means something the record states has changed since it was signed, and names
+it, including a value that is the same string resting on weaker evidence. *New* is an
+activity the fresh run has and the signed record does not. A job that only ran again
+is up to date: the comparison is `qedro diff`'s, over what a record states, never its
+run counts or timestamps. *Blocked* means no comparison could be made, and the reason
+is always printed: a fresh run that read no events blocks every signed record rather
+than reading as a platform where every job stopped. A fresh run over a different source
+or window says so above its findings, since an activity missing from one may never
+have been in it.
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and

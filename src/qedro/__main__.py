@@ -33,6 +33,7 @@ from . import (
     render,
     ropa,
     signoff,
+    staleness,
     vocabulary,
     words,
 )
@@ -492,6 +493,130 @@ def _status(directory: str) -> int:
     return 0
 
 
+#: The sign-off states a record counts as signed in, for `status --against`.
+SIGNED = frozenset({"approved", "published"})
+
+
+def _currency(
+    directory: str,
+    *,
+    source: str,
+    config_path: str | None,
+    vocabulary_path: str | None,
+    activities_path: str | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> int:
+    """Whether each signed Art. 30 record still describes what runs (#42).
+
+    One fresh record is built from *source*, as `qedro ropa` builds it, and
+    every signed record under *directory* is compared with it activity by
+    activity. A fresh run that cannot be built blocks every signed record, with
+    the reason; it does not stop the command, since *we could not check* is a
+    finding a reader needs as much as any other.
+    """
+    root = Path(directory)
+    if not root.is_dir():
+        raise UsageError(f"no directory at {directory}")
+    signed: list[tuple[str, dict, str]] = []
+    unsigned = other = 0
+    for path in sorted(root.rglob("*.json")):
+        if path.name.endswith(".signoff.json"):
+            continue
+        try:
+            payload = signoff.read_record(path)
+        except UsageError:
+            continue
+        if signoff.kind(payload) != "ropa/art30":
+            # Only an Art. 30 record has activities a fresh run can be compared
+            # with; the others are counted so the summary does not undersell.
+            other += 1
+            continue
+        standing = signoff.load(signoff.sidecar(path)).standing(payload)
+        if standing.state not in SIGNED:
+            unsigned += 1
+            continue
+        signed.append((str(path.relative_to(root)), dict(payload), standing.describe()))
+
+    fresh: dict | None = None
+    reason = ""
+    if signed:
+        try:
+            settings = config_module.load(config_module.find(config_path))
+            terms = vocabulary.load(vocabulary_path or settings.vocabulary or None)
+            uses = declared.load(activities_path, vocabulary=terms) if activities_path else ()
+            events, report = read(source, since=since, until=until)
+            # An empty or unreadable source is not a platform where every job
+            # stopped: compared with it, every activity would read as stale.
+            # It is a comparison that could not be made, as `qedro ropa`
+            # treats it.
+            if not events:
+                problems = "; ".join(report.reasons()) or "no events in it"
+                raise UsageError(f"it read no events ({problems})")
+            record = ropa.build(
+                events,
+                config=settings,
+                vocabulary=terms,
+                report=report,
+                since=since,
+                until=until,
+                declared=uses,
+                references=references_module.load(settings.references or None),
+            )
+            fresh = json.loads(render.FORMATS["json"](record))
+        except QedroError as exc:
+            reason = f"the fresh run from {source} could not be built: {exc}"
+
+    totals = dict.fromkeys(staleness.STATES, 0)
+    for origin, payload, standing in signed:
+        result = (
+            staleness.check(payload, fresh, origin=origin)
+            if fresh is not None
+            else staleness.blocked(origin, payload, reason)
+        )
+        for state, n in result.counts().items():
+            totals[state] += n
+        print(f"  {origin}  {standing}")
+        if result.blocked:
+            print(f"    blocked: {result.blocked}")
+        for caution in result.cautions:
+            print(f"    ! {caution}")
+        _print_states(result)
+
+    if not signed:
+        print(f"  no signed Art. 30 records under {directory}")
+    else:
+        counts = ", ".join(f"{totals[s]} {s}" for s in staleness.STATES)
+        print(f"\n  {words.count(len(signed), 'signed record')}: {counts}")
+        if totals[staleness.STALE] or totals[staleness.NEW]:
+            print("  the stale and new activities are the ones to send for sign-off again")
+    if unsigned:
+        print(f"  {words.count(unsigned, 'record')} not signed off, so not compared")
+    if other:
+        print(
+            f"  {words.count(other, 'other record')} not compared: only an Art. 30 "
+            "record has activities to compare"
+        )
+    return 0
+
+
+def _print_states(result: staleness.RecordCheck) -> None:
+    """Stale, new and blocked activities by name with what changed; up to date as one line."""
+    current = [a.key for a in result.activities if a.state == staleness.UP_TO_DATE]
+    for a in result.activities:
+        if a.state == staleness.UP_TO_DATE:
+            continue
+        print(f"    {a.state:<10}  {a.key}")
+        for change in a.changes:
+            if change.kind == compare.REMOVED:
+                print("                  not in the fresh run — it may not have run in the window")
+                continue
+            said, cost = render._finding(change)
+            print(f"                  {change.label}: {said}" + (f" — {cost}" if cost else ""))
+    if current:
+        print(f"    {staleness.UP_TO_DATE:<10}  {', '.join(current)}")
+
+
 def _emit(
     record,
     *,
@@ -833,6 +958,19 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     status_cmd.add_argument("directory", nargs="?", default=".", help="where the records are")
+    status_cmd.add_argument(
+        "--against",
+        metavar="SOURCE",
+        help="also build a fresh record from this lineage source and say, for each activity "
+        "of every signed Art. 30 record, whether it is up to date, stale, new or blocked",
+    )
+    status_cmd.add_argument("--config", help="qedro.yaml for the fresh run")
+    status_cmd.add_argument("--vocabulary", help="a vocabulary document for the fresh run")
+    status_cmd.add_argument(
+        "--activities", metavar="PATH", help="declared activities for the fresh run"
+    )
+    status_cmd.add_argument("--since", type=_instant, help="the fresh run ignores events before")
+    status_cmd.add_argument("--until", type=_instant, help="the fresh run ignores events after")
 
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
@@ -889,6 +1027,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "sign":
             return _sign(args.record, state=args.state, by=args.by, note=args.note)
         if args.command == "status":
+            if args.against:
+                return _currency(
+                    args.directory,
+                    source=args.against,
+                    config_path=args.config,
+                    vocabulary_path=args.vocabulary,
+                    activities_path=args.activities,
+                    since=args.since,
+                    until=args.until,
+                )
             return _status(args.directory)
         if args.command == "diff":
             return _diff(args.before, args.after, fmt=args.fmt, out=args.out)
