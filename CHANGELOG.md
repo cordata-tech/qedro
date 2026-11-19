@@ -6,6 +6,18 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro status --against … --regenerate --as NAME`** (#55) writes, for each signed
+  Art. 30 record with a stale or new activity, the fresh record beside it as
+  `record.next.json`, and adds a *for sign-off* entry for that version by NAME, naming
+  what changed. Records that are up to date or blocked are left alone, and running it
+  again adds no second entry. The signed record and its entries are unchanged.
+- **A `record.next.json` shares its record's sign-off file**: `qedro sign` and `qedro
+  status` read and write `record.signoff.json` for it, so approving the new version and
+  then replacing the record with it keeps one history. The sign-off file's `record`
+  field always names the record, not the version an entry was added for.
+
 ## 0.22.0 — 2026-11-19
 
 `qedro status --against` says, for every signed Art. 30 record, which activities still

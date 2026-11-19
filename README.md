@@ -535,6 +535,21 @@ than reading as a platform where every job stopped. A fresh run over a different
 or window says so above its findings, since an activity missing from one may never
 have been in it.
 
+`--regenerate --as NAME` turns the stale and new activities into a version to review
+([#55](https://github.com/cordata-tech/qedro/issues/55)): for each signed record that
+changed, it writes the fresh record beside it as `record.next.json` and adds a *for
+sign-off* entry for that version, by NAME, naming what changed. The signed record and
+its entries are left exactly as they were. `record.next.json` shares the record's
+sign-off file, so `qedro sign record.next.json --state approved` adds to the same
+history, and replacing `record.json` with it afterwards keeps the approval:
+
+```console
+$ qedro status records --against ./lineage --config qedro.yaml --regenerate --as "Laszlo"
+  ...
+    wrote fraud.next.json, sent for sign-off by Laszlo
+$ qedro sign records/fraud.next.json --as "Erika Mustermann" --state approved
+```
+
 ## The assertion history
 
 `qedro quality` reports what was actually checked about each dataset, and when — and

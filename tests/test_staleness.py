@@ -117,3 +117,66 @@ class TestTheCommand:
         out = capsys.readouterr().out
         assert "no signed Art. 30 records" in out
         assert "1 record not signed off, so not compared" in out
+
+
+class TestRegenerate:
+    @pytest.fixture
+    def signed(self, tmp_path):
+        path = tmp_path / "fraud.json"
+        assert main(["ropa", "demo/lineage-declared", "--config", "demo/qedro.yaml", "--out",
+                     str(path)]) == 0  # fmt: skip
+        signoff.sign(path, by="A Person", state="for sign-off", at=datetime.now(UTC))
+        signoff.sign(path, by="Another Person", state="approved", at=datetime.now(UTC))
+        return path
+
+    def regenerate(self, directory, *extra):
+        return main(["status", str(directory), "--against", "demo/lineage", "--config",
+                     "demo/qedro.yaml", "--regenerate", *extra])  # fmt: skip
+
+    def test_a_stale_record_gets_a_next_version_sent_for_sign_off(self, signed, capsys):
+        record_before = signed.read_bytes()
+        entries_before = json.loads(signoff.sidecar(signed).read_text())["entries"]
+        assert self.regenerate(signed.parent, "--as", "Laszlo") == 0
+        target = signoff.next_version(signed)
+        assert target.name == "fraud.next.json"
+        # The signed version is untouched and still approved.
+        assert signed.read_bytes() == record_before
+        file = json.loads(signoff.sidecar(signed).read_text())
+        assert file["entries"][: len(entries_before)] == entries_before
+        assert file["record"] == "fraud.json"
+        assert signoff.standing_of(signoff.read_record(signed), signoff.sidecar(signed)).state == (
+            "approved"
+        )
+        # The new version waits for sign-off, naming who and what changed.
+        (added,) = file["entries"][len(entries_before) :]
+        assert added["state"] == "for sign-off" and added["by"] == "Laszlo"
+        assert "7 stale activities (acme.billing/dunning-weekly" in added["note"]
+
+    def test_it_shares_the_sign_off_file_so_approving_it_keeps_one_history(self, signed):
+        assert self.regenerate(signed.parent, "--as", "Laszlo") == 0
+        target = signoff.next_version(signed)
+        path, _ = signoff.sign(target, by="Another Person", state="approved", at=datetime.now(UTC))
+        assert path == signoff.sidecar(signed)
+        # Replacing the record with its approved next version keeps the approval.
+        signed.write_bytes(target.read_bytes())
+        standing = signoff.standing_of(signoff.read_record(signed), signoff.sidecar(signed))
+        assert standing.state == "approved" and standing.latest.by == "Another Person"
+
+    def test_running_it_again_adds_no_second_entry(self, signed, capsys):
+        assert self.regenerate(signed.parent, "--as", "Laszlo") == 0
+        count = len(json.loads(signoff.sidecar(signed).read_text())["entries"])
+        assert self.regenerate(signed.parent, "--as", "Laszlo") == 0
+        assert len(json.loads(signoff.sidecar(signed).read_text())["entries"]) == count
+        assert "this version is already for sign-off" in capsys.readouterr().out
+
+    def test_an_up_to_date_record_is_left_alone(self, signed, capsys):
+        args = ["status", str(signed.parent), "--against", "demo/lineage-declared", "--config",
+                "demo/qedro.yaml", "--regenerate", "--as", "Laszlo"]  # fmt: skip
+        assert main(args) == 0
+        assert not signoff.next_version(signed).exists()
+        assert "not regenerated: up to date" in capsys.readouterr().out
+
+    def test_it_is_refused_without_a_name(self, signed, capsys):
+        assert self.regenerate(signed.parent) != 0
+        assert "--as" in capsys.readouterr().err
+        assert not signoff.next_version(signed).exists()

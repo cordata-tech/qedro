@@ -274,11 +274,27 @@ def digest(payload: Mapping[str, Any], *, coverage: int = COVERAGE) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+#: The suffix of a regenerated record waiting for sign-off beside the signed one
+#: (#55). It shares that record's sign-off file, so one file holds the history
+#: of every version and replacing the record with it after approval loses none.
+NEXT_SUFFIX = ".next.json"
+
+
+def _stem(record: str | Path) -> str:
+    name = Path(record).name
+    return (
+        name.removesuffix(NEXT_SUFFIX) if name.endswith(NEXT_SUFFIX) else name.removesuffix(".json")
+    )
+
+
 def sidecar(record: str | Path) -> Path:
-    """`record.json` → `record.signoff.json`, beside it."""
-    path = Path(record)
-    stem = path.name.removesuffix(".json")
-    return path.with_name(f"{stem}.signoff.json")
+    """`record.json` → `record.signoff.json`, beside it; `record.next.json` too."""
+    return Path(record).with_name(f"{_stem(record)}.signoff.json")
+
+
+def next_version(record: str | Path) -> Path:
+    """Where a regenerated version of *record* is written: `record.next.json`."""
+    return Path(record).with_name(f"{_stem(record)}{NEXT_SUFFIX}")
 
 
 def read_record(path: str | Path) -> Mapping[str, Any]:
@@ -357,7 +373,9 @@ def sign(
         json.dumps(
             {
                 "qedro_signoff": FORMAT,
-                "record": Path(record).name,
+                # The record the file belongs to, also when the entry is for its
+                # regenerated version: one file, one record.
+                "record": f"{_stem(record)}.json",
                 "entries": [
                     {
                         "record_sha256": e.record_sha256,
