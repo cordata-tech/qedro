@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.25.0 — 2026-11-20
 
 Four eyes on sign-off (#47): the person who sent a record for sign-off can no longer
 approve it, unless `qedro.yaml` says one person does both.
