@@ -482,12 +482,12 @@ JSON:
 
 ```console
 $ qedro ropa ./lineage --out record.json
-$ qedro sign record.json --as "Erika Mustermann" --state "for sign-off"
-  record.json: waiting for sign-off, requested by Erika Mustermann on 2026-11-17
+$ qedro sign record.json --as "Max Mustermann" --state "for sign-off"
+  record.json: waiting for sign-off, requested by Max Mustermann on 2026-11-17
 $ qedro sign record.json --as "Erika Mustermann" --state approved --note "reviewed with the data team"
-  record.json: approved by Erika Mustermann on 2026-11-17 — reviewed with the data team
+  record.json: approved by Erika Mustermann on 2026-11-17, prepared by Max Mustermann on 2026-11-17 — reviewed with the data team
 $ qedro status .
-  record.json  ropa        mark earned    approved by Erika Mustermann on 2026-11-17 — reviewed with the data team
+  record.json  ropa        mark earned    approved by Erika Mustermann on 2026-11-17, prepared by Max Mustermann on 2026-11-17 — reviewed with the data team
 ```
 
 The states are *draft*, *for sign-off*, *approved* and *published*, one step forward at
@@ -506,6 +506,35 @@ the file's history is the audit trail.
 stands, under the verdict, in every format. **A sign-off is a person's acceptance of
 the record, not evidence:** it never earns or withholds the mark, and every format says
 so beside it.
+
+### Four eyes: a second person approves
+
+The person who sends a version for sign-off is its preparer, and `qedro sign --state
+approved` refuses when the approver's name is the preparer's, in a sentence naming
+both. Names are compared ignoring case and spacing. Every format prints both names
+beside the verdict, and the JSON carries `prepared_by`, `approved_by` and
+`second_person`. A team where one person does both says so once, where the records
+live:
+
+```yaml
+# qedro.yaml
+signoff:
+  four_eyes: false
+```
+
+The approval then stands and says *with no second person: Erika Mustermann also
+prepared it*, and `qedro status` counts such approvals, in its text and as
+`approved_without_second_person` in its JSON. Approvals made before 0.25 are read the
+same way, so one where a single person did both is counted rather than hidden.
+
+What this can prove is limited by where the names come from. `--as` is whatever the
+person running the command types, so four eyes here catches a mistake — the preparer
+approving their own record out of habit — and does not stop someone typing a
+colleague's name. The signed Git commit that added an entry identifies its signer by
+key, and an identity provider would identify them by login; either could stand behind
+these names later, and which one is a question for
+[#19](https://github.com/cordata-tech/qedro/issues/19). Until then the sign-off file's
+Git history, with signed commits, is the stronger record of who did what.
 
 ### Whether a signed record still describes what runs
 

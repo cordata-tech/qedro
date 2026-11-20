@@ -6,6 +6,26 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+Four eyes on sign-off (#47): the person who sent a record for sign-off can no longer
+approve it, unless `qedro.yaml` says one person does both.
+
+- `qedro sign --state approved` refuses an approval by the preparer, in a sentence
+  naming both, comparing names without regard to case or spacing. **This changes what
+  an existing workflow can do**: a script that sends for sign-off and approves under
+  one name now stops at the approval. Use a second name, or set
+  `signoff: {four_eyes: false}` in qedro.yaml; `qedro sign --config` points at one
+  elsewhere.
+- Every format prints the preparer beside the approver — *approved by B on …,
+  prepared by A on …* — or *with no second person: A also prepared it*.
+- The record JSON's `signoff` gains `prepared_by` and `second_person` (`null` until
+  approved), beside the covered fields, so no existing approval is reopened. `qedro
+  status` counts approvals with no second person, and its JSON gains
+  `approved_without_second_person` and the same two fields per record.
+- The names are typed with `--as`, not authenticated; the README says what that can
+  and cannot prove.
+
 ## 0.24.0 — 2026-11-19
 
 `qedro status` can write what it finds as JSON, for a console that shows which signed

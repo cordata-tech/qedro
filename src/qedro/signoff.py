@@ -146,14 +146,15 @@ class Entry:
     #: The `COVERED` version the hash was made under; 1 hashed the whole record.
     coverage: int = 1
 
-    def describe(self) -> str:
+    def describe(self, aside: str = "") -> str:
+        """One line for this entry; *aside* goes after the date and before the note."""
         when = self.at.date().isoformat()
         said = f" — {self.note}" if self.note else ""
         if self.state == "for sign-off":
             return f"waiting for sign-off, requested by {self.by} on {when}{said}"
         if self.state == "draft":
             return f"returned to draft by {self.by} on {when}{said}"
-        return f"{self.state} by {self.by} on {when}{said}"
+        return f"{self.state} by {self.by} on {when}{aside}{said}"
 
     def covers(self, payload: Mapping[str, Any]) -> bool:
         return self.record_sha256 == digest(payload, coverage=self.coverage)
@@ -177,15 +178,30 @@ class SignOff:
         own = self.for_record(payload)
         earlier = tuple(e for e in self.entries if e not in own)
         latest = own[-1] if own else None
+        approved = next((e for e in reversed(own) if e.state == "approved"), None)
         return Standing(
             state=latest.state if latest else "draft",
             latest=latest,
-            approved=next((e for e in reversed(own) if e.state == "approved"), None),
+            approved=approved,
+            prepared=preparer(own, before=approved),
             earlier=next(
                 (e for e in reversed(earlier) if e.state in ("approved", "published")), None
             ),
             narrower=latest is not None and latest.state != "draft" and latest.coverage < COVERAGE,
         )
+
+
+def preparer(own: Sequence[Entry], *, before: Entry | None = None) -> Entry | None:
+    """Who sent this version for sign-off: the last *for sign-off* entry before
+    *before*, or the last one of all when nothing has been approved yet (#47)."""
+    end = own.index(before) if before is not None and before in own else len(own)
+    return next((e for e in reversed(own[:end]) if e.state == "for sign-off"), None)
+
+
+def same_person(a: str, b: str) -> bool:
+    """Whether two typed names are one person's, ignoring case and spacing. Typed,
+    not authenticated: this catches a mistake, not a lie."""
+    return " ".join(a.split()).casefold() == " ".join(b.split()).casefold()
 
 
 @dataclass(frozen=True)
@@ -201,12 +217,33 @@ class Standing:
     #: The approval stands, made when a sign-off covered less of the record than
     #: this qedro's does; signing again would cover the rest.
     narrower: bool = False
+    #: Who sent this version for sign-off, the preparer, beside its approver (#47).
+    prepared: Entry | None = None
+
+    @property
+    def second_person(self) -> bool | None:
+        """Whether a different person approved this version than prepared it, or
+        `None` while nothing is approved. Compared as typed with `--as`."""
+        if self.approved is None or self.prepared is None:
+            return None
+        return not same_person(self.approved.by, self.prepared.by)
+
+    def _four_eyes(self) -> str:
+        if self.second_person is None:
+            return ""
+        assert self.prepared is not None
+        if self.second_person:
+            return f", prepared by {self.prepared.by} on {self.prepared.at.date()}"
+        return f", with no second person: {self.prepared.by} also prepared it"
 
     def describe(self) -> str:
         if self.latest is not None and self.state != "draft":
-            line = self.latest.describe()
+            line = self.latest.describe(self._four_eyes() if self.state == "approved" else "")
             if self.state == "published" and self.approved is not None:
-                line += f" (approved by {self.approved.by} on {self.approved.at.date()})"
+                line += (
+                    f" (approved by {self.approved.by} on {self.approved.at.date()}"
+                    f"{self._four_eyes()})"
+                )
             if self.narrower:
                 line += (
                     " — signed when a sign-off covered less of the record than this "
@@ -339,9 +376,19 @@ def load(path: str | Path) -> SignOff:
 
 
 def sign(
-    record: str | Path, *, state: str, by: str, at: datetime, note: str = ""
+    record: str | Path,
+    *,
+    state: str,
+    by: str,
+    at: datetime,
+    note: str = "",
+    four_eyes: bool = True,
 ) -> tuple[Path, Entry]:
     """Add one entry to a record's sign-off file, after checking the step is allowed.
+
+    With *four_eyes*, the default (#47), the person who sent a version for
+    sign-off cannot approve it; `signoff: {four_eyes: false}` in qedro.yaml is
+    for a team where one person does both, and the sign-off then says so.
 
     Returns the file written and the entry added. Nothing already in the file is
     changed: an entry is only ever appended.
@@ -360,6 +407,15 @@ def sign(
             f"this version of {Path(record).name} is {now}; from there it can go to {allowed}, "
             f"not {state}"
         )
+    if state == "approved" and four_eyes:
+        prepared = preparer(current.for_record(payload))
+        if prepared is not None and same_person(prepared.by, by):
+            raise UsageError(
+                f"{by.strip()} sent this version of {Path(record).name} for sign-off, so "
+                f"cannot approve it too: four eyes asks for a second person. Have someone "
+                f"else approve it, or set `signoff: {{four_eyes: false}}` in qedro.yaml where "
+                f"one person does both."
+            )
     entry = Entry(
         record_sha256=digest(payload),
         state=state,

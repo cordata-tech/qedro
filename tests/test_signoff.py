@@ -29,8 +29,8 @@ def written(tmp_path, projection="ropa", name="record.json"):
     return path
 
 
-def approved(path, by="Erika Mustermann"):
-    signoff.sign(path, state="for sign-off", by=by, at=AT)
+def approved(path, by="Erika Mustermann", prepared_by="Max Mustermann"):
+    signoff.sign(path, state="for sign-off", by=prepared_by, at=AT)
     signoff.sign(path, state="approved", by=by, at=AT)
     return signoff.sidecar(path)
 
@@ -166,8 +166,11 @@ class TestTheStates:
 
     def test_the_whole_way_and_back_to_draft(self, tmp_path):
         path = written(tmp_path)
-        for state in ("for sign-off", "approved", "published", "draft", "for sign-off"):
-            signoff.sign(path, state=state, by="Erika Mustermann", at=AT)
+        steps = [("for sign-off", "Max Mustermann"), ("approved", "Erika Mustermann"),
+                 ("published", "Erika Mustermann"), ("draft", "Erika Mustermann"),
+                 ("for sign-off", "Max Mustermann")]  # fmt: skip
+        for state, by in steps:
+            signoff.sign(path, state=state, by=by, at=AT)
         payload = signoff.read_record(path)
         assert signoff.load(signoff.sidecar(path)).state(payload) == "for sign-off"
 
@@ -247,7 +250,7 @@ class TestEveryFormat:
 class TestTheCommands:
     def test_sign_then_status(self, tmp_path, capsys):
         path = written(tmp_path)
-        assert main(["sign", str(path), "--as", "Erika Mustermann", "--state", "for sign-off"]) == 0
+        assert main(["sign", str(path), "--as", "Max Mustermann", "--state", "for sign-off"]) == 0
         assert main(["sign", str(path), "--as", "Erika Mustermann", "--state", "approved"]) == 0
         capsys.readouterr()
         assert main(["status", str(tmp_path)]) == 0
@@ -285,3 +288,84 @@ class TestTheCommands:
         capsys.readouterr()
         assert main([*base, "--signoff", str(sidecar)]) == 0
         assert "sign-off: approved by Erika Mustermann" in capsys.readouterr().out
+
+
+class TestFourEyes:
+    """The person who sent a version for sign-off cannot approve it (#47)."""
+
+    def test_an_approval_by_the_preparer_is_refused_naming_both(self, tmp_path):
+        path = written(tmp_path)
+        signoff.sign(path, state="for sign-off", by="Erika Mustermann", at=AT)
+        with pytest.raises(UsageError, match="Erika Mustermann sent this version .* for sign-off"):
+            signoff.sign(path, state="approved", by="Erika Mustermann", at=AT)
+        assert signoff.load(signoff.sidecar(path)).state(signoff.read_record(path)) == (
+            "for sign-off"
+        )
+
+    def test_the_same_name_typed_differently_is_the_same_person(self, tmp_path):
+        path = written(tmp_path)
+        signoff.sign(path, state="for sign-off", by="Erika Mustermann", at=AT)
+        with pytest.raises(UsageError, match="four eyes"):
+            signoff.sign(path, state="approved", by="  erika   MUSTERMANN ", at=AT)
+
+    def test_both_names_are_printed_in_every_format(self, tmp_path):
+        path = written(tmp_path)
+        approved(path, by="Erika Mustermann", prepared_by="Max Mustermann")
+        standing = signoff.standing_of(signoff.read_record(path), signoff.sidecar(path))
+        line = standing.describe()
+        assert "approved by Erika Mustermann" in line
+        assert "prepared by Max Mustermann" in line
+        assert standing.second_person is True
+        record = PROJECTIONS["ropa"]()
+        record.signoff = standing
+        for fmt in formats_for(type(record)):
+            assert "prepared by Max Mustermann" in as_text(render.FORMATS[fmt](record))
+        payload = json.loads(render.json(record))["signoff"]
+        assert payload["prepared_by"] == "Max Mustermann" and payload["second_person"] is True
+
+    def test_qedro_yaml_can_let_one_person_do_both_and_the_record_says_so(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        path = written(tmp_path)
+        (tmp_path / "qedro.yaml").write_text("signoff:\n  four_eyes: false\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        assert main(["sign", str(path), "--as", "Erika Mustermann", "--state", "for sign-off"]) == 0
+        assert main(["sign", str(path), "--as", "Erika Mustermann", "--state", "approved"]) == 0
+        out = capsys.readouterr().out
+        assert "with no second person: Erika Mustermann also prepared it" in out
+        standing = signoff.standing_of(signoff.read_record(path), signoff.sidecar(path))
+        assert standing.second_person is False
+
+    def test_status_counts_approvals_without_a_second_person(self, tmp_path, monkeypatch, capsys):
+        alone, checked = written(tmp_path, name="alone.json"), written(tmp_path, name="two.json")
+        (tmp_path / "qedro.yaml").write_text("signoff:\n  four_eyes: false\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        signoff.sign(alone, state="for sign-off", by="Erika", at=AT)
+        signoff.sign(alone, state="approved", by="Erika", at=AT, four_eyes=False)
+        approved(checked)
+        capsys.readouterr()
+        assert main(["status", str(tmp_path)]) == 0
+        assert "1 approval with no second person" in capsys.readouterr().out
+        out = tmp_path / "status-out" / "status.json"
+        out.parent.mkdir()
+        assert main(["status", str(tmp_path), "--format", "json", "--out", str(out)]) == 0
+        doc = json.loads(out.read_text())
+        assert doc["approved_without_second_person"] == 1
+        by_file = {r["file"]: r["signoff"] for r in doc["records"]}
+        assert by_file["alone.json"]["second_person"] is False
+        assert by_file["two.json"]["second_person"] is True
+
+    @pytest.mark.parametrize(
+        ("yaml", "message"),
+        [
+            ("signoff: yes\n", "should be a mapping"),
+            ("signoff:\n  four_eyes: 'no'\n", "should be true or false"),
+            ("signoff:\n  four_eye: false\n", "unknown keys: four_eye"),
+        ],
+    )
+    def test_a_mistyped_setting_is_refused_rather_than_read_as_off(self, yaml, message):
+        from qedro import config
+        from qedro.errors import ConfigError
+
+        with pytest.raises(ConfigError, match=message):
+            config.parse(yaml)

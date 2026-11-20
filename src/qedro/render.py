@@ -442,6 +442,11 @@ def _dumps(payload: dict[str, object], record: object, indent: int) -> str:
             "at": standing.latest.at.isoformat() if standing.latest else None,
             "note": (standing.latest.note or None) if standing.latest else None,
             "approved_by": standing.approved.by if standing.approved else None,
+            # Who sent this version for sign-off, and whether its approver was
+            # someone else: `null` until approved, `false` when one person did
+            # both (#47). Names as typed with `--as`, not authenticated.
+            "prepared_by": standing.prepared.by if standing.prepared else None,
+            "second_person": standing.second_person,
             "earlier_version_signed": standing.earlier is not None,
             "describe": standing.describe(),
             "caveat": standing.CAVEAT,

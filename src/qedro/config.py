@@ -119,6 +119,9 @@ class Config:
     #: The references document: what each field answers in the regulation
     #: (#48). Empty for the shipped GDPR one.
     references: str = ""
+    #: Whether the person who sends a version for sign-off may also approve it
+    #: (#47). On unless `signoff: {four_eyes: false}` says one person does both.
+    four_eyes: bool = True
     #: Labels for integrations and namespace schemes, merged over
     #: `stack.LABELS`. A label says what the events already named; it never
     #: supplies a platform the events did not.
@@ -231,6 +234,7 @@ def _build(
         rules=_rules(raw.get("jobs"), origin, lines or {}),
         vocabulary=_str(raw.get("vocabulary")),
         references=_str(raw.get("references")),
+        four_eyes=_four_eyes(raw.get("signoff"), origin),
         platforms=(platforms := _platforms(raw.get("platforms"), origin))[0],
         platform_kinds=platforms[1],
         origin=origin,
@@ -353,3 +357,20 @@ def _list(value: Any, what: str) -> tuple[str, ...]:
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         return tuple(item.strip() for item in value if item.strip())
     raise ConfigError(f"{what} should be a string or a list of strings")
+
+
+def _four_eyes(raw: Any, origin: str) -> bool:
+    """`signoff: {four_eyes: false}`, for a team where one person prepares and
+    approves. Anything but a true or false is refused: a typo that silently left
+    four eyes off would be the mistake this setting exists to prevent."""
+    if raw is None:
+        return True
+    if not isinstance(raw, Mapping):
+        raise ConfigError(f"`signoff` in {origin} should be a mapping, such as {{four_eyes: true}}")
+    unknown = sorted(set(raw) - {"four_eyes"})
+    if unknown:
+        raise ConfigError(f"`signoff` in {origin} has unknown keys: {', '.join(unknown)}")
+    value = raw.get("four_eyes", True)
+    if not isinstance(value, bool):
+        raise ConfigError(f"`signoff: four_eyes` in {origin} should be true or false")
+    return value

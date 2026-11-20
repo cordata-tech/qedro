@@ -436,12 +436,22 @@ def _demo(target: str) -> int:
     return 0
 
 
-def _sign(record: str, *, state: str, by: str, note: str) -> int:
-    """Add one sign-off entry beside a record's JSON (#40)."""
+def _sign(record: str, *, state: str, by: str, note: str, config_path: str | None = None) -> int:
+    """Add one sign-off entry beside a record's JSON (#40), with four eyes as
+    qedro.yaml sets it (#47)."""
+    settings = config_module.load(config_module.find(config_path))
     path, entry = signoff.sign(
-        record, state=state, by=by, at=datetime.now(UTC).replace(microsecond=0), note=note
+        record,
+        state=state,
+        by=by,
+        at=datetime.now(UTC).replace(microsecond=0),
+        note=note,
+        four_eyes=settings.four_eyes,
     )
-    print(f"  {Path(record).name}: {entry.describe()}")
+    standing = signoff.load(path).standing(signoff.read_record(record))
+    print(
+        f"  {Path(record).name}: {standing.describe() if state == 'approved' else entry.describe()}"
+    )
     print(f"  wrote {path}")
     return 0
 
@@ -460,6 +470,7 @@ def _status(directory: str) -> int:
     rows: list[tuple[str, str, str, str]] = []
     states: Counter[str] = Counter()
     passed_over = 0
+    alone = 0
     for path in sorted(root.rglob("*.json")):
         if path.name.endswith(".signoff.json"):
             continue
@@ -477,6 +488,8 @@ def _status(directory: str) -> int:
             continue
         standing = signoff.load(signoff.sidecar(path)).standing(payload)
         states[standing.state] += 1
+        if standing.second_person is False:
+            alone += 1
         verdict = "mark earned" if payload.get("complete") else "mark withheld"
         rows.append(
             (str(path.relative_to(root)), str(payload["qedro"].get("projection", "")), verdict,
@@ -490,6 +503,11 @@ def _status(directory: str) -> int:
     if rows:
         counts = ", ".join(f"{states[s]} {s}" for s in signoff.STATES)
         print(f"\n  {words.count(len(rows), 'record')}: {counts}")
+        if alone:
+            print(
+                f"  {words.count(alone, 'approval')} with no second person: the record was "
+                "prepared and approved by the same person"
+            )
         print(f"  a sign-off is {signoff.Standing.CAVEAT}")
     if passed_over:
         print(f"  {words.count(passed_over, 'JSON file')} passed over: not a record qedro wrote")
@@ -624,7 +642,14 @@ def _currency(
                     "projection": payload["qedro"].get("projection"),
                     "view": payload["qedro"].get("view"),
                     "complete": bool(payload.get("complete")),
-                    "signoff": {"state": standing.state, "describe": standing.describe()},
+                    "signoff": {
+                        "state": standing.state,
+                        "describe": standing.describe(),
+                        "prepared_by": standing.prepared.by if standing.prepared else None,
+                        "approved_by": standing.approved.by if standing.approved else None,
+                        # `null` until approved; false when one person did both (#47).
+                        "second_person": standing.second_person,
+                    },
                     "check": staleness.check_json(results[origin][0])
                     if origin in results
                     else None,
@@ -635,6 +660,9 @@ def _currency(
             "counts": totals if source else None,
             "not_compared": len(listed) - len(signed) if source else None,
             "other": other,
+            "approved_without_second_person": sum(
+                1 for *_, standing in listed if standing.second_person is False
+            ),
         }
         _deliver(json.dumps(document, indent=2, ensure_ascii=False) + "\n", out)
         if out:
@@ -1053,6 +1081,11 @@ def main(argv: list[str] | None = None) -> int:
         "--state", required=True, choices=list(signoff.STATES), help="the state to move to"
     )
     sign_cmd.add_argument("--note", default="", help="a sentence kept with the entry")
+    sign_cmd.add_argument(
+        "--config",
+        help="qedro.yaml, for `signoff: {four_eyes: false}`. Defaults to one beside the working "
+        "directory; without one, four eyes is on",
+    )
 
     status_cmd = sub.add_parser(
         "status",
@@ -1150,7 +1183,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "demo":
             return _demo(args.directory)
         if args.command == "sign":
-            return _sign(args.record, state=args.state, by=args.by, note=args.note)
+            return _sign(
+                args.record, state=args.state, by=args.by, note=args.note, config_path=args.config
+            )
         if args.command == "status":
             if args.regenerate and not args.against:
                 raise UsageError("--regenerate needs --against: a record is rebuilt from a source")
