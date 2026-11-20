@@ -1,0 +1,84 @@
+name: Bug report
+description: Qedro printed, counted, read or wrote something wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The most valuable report this project can get is a run where the
+        tombstone ∎ is printed and should not be: a failing example is worth more than a fix.
+
+        **Lineage can be sensitive.** Dataset and column names alone can say a lot about
+        the data behind them. Share the smallest set of events that shows the problem,
+        and rename anything you would not publish. A security problem goes to a private
+        advisory instead — see SECURITY.md.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - The tombstone ∎ was printed and should not have been
+        - The tombstone was withheld and should not have been
+        - A value, count or provenance in an artefact is wrong
+        - Lineage from an emitter was misread, or records were skipped
+        - A crash, or an error message that did not say what to do
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: qedro version
+      description: The output of `qedro --version`.
+      placeholder: qedro 0.24.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: The command you ran
+      description: Paths may be shortened; keep every option.
+      render: shell
+      placeholder: qedro ropa ./lineage --config qedro.yaml --out record.pdf
+    validations:
+      required: true
+
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened, and what you expected instead
+      description: The output, or the part of the artefact that is wrong, and what it should have said.
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Where the lineage came from
+      description: The emitter and its version (dbt-ol, the Airflow or Spark integration, your own), and whether qedro read a directory, a bucket or a Marquez-compatible API.
+      placeholder: openlineage-dbt 1.23 into a directory of .json files
+
+  - type: textarea
+    id: events
+    attributes:
+      label: The smallest set of events that shows it
+      description: Optional, and the fastest route to a fix. Redacted is fine. Attach a file if it is long.
+      render: json
+
+  - type: input
+    id: environment
+    attributes:
+      label: Python and operating system
+      placeholder: Python 3.13 on macOS 15
+
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Did a coding agent help find or write this up? (optional)
+      description: Welcome either way; it tells us how to read the report.
+      options:
+        - "No"
+        - "Yes"

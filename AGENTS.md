@@ -33,12 +33,29 @@ CLI that reads evidence and writes files, and nothing else.
   that you may contribute the change under the Apache-2.0 licence; the DCO check fails a
   pull request where a commit lacks one matching its author. **Sign the commit** too, with
   an SSH or GPG key, and explain the reasoning in the message rather than the diff.
-- **Say when an agent helped.** Name the tool in a trailer, `Assisted-by: <tool>` or
-  `Co-Authored-By: <tool> <address>`, and say in the pull request description what it did
-  and what you checked yourself. Agents are welcome here; the person opening the pull
-  request is responsible for every line, has read every line, and answers review on it.
+- **Agents are welcome, and saying so is welcome too, not required.** If one helped, a
+  line in the pull request on what it did and what you checked yourself helps a reviewer
+  know where to look; a trailer such as `Assisted-by: <tool>` is fine as well. Either way,
+  the person opening the pull request is responsible for every line, has read every
+  line, and answers review on it.
 - **A pull request that touches a path listed separately in `.github/CODEOWNERS`** says in
   its description which commitment below it keeps.
+
+## Ask before changing these
+
+An agent asks the person it works for before modifying any of these, naming the path and
+what the change would do to what a record claims — for example: *"This changes which
+fields a sign-off covers, which reopens every existing approval. Do you want that?"* A
+small edit here changes what every user's artefacts say.
+
+- `src/qedro/mark.py` — when the tombstone is earned.
+- `src/qedro/scope.py` — the scope statement every artefact prints.
+- `src/qedro/regulations/` — the regulation's wording, quoted exactly.
+- `src/qedro/vocabularies/` — the terms a record may use; some sets are closed by law.
+- `COVERED` and `COVERAGE` in `src/qedro/signoff.py` — what a sign-off covers.
+- `schemas/` and `tools/facet_schema.py` — the published facet other people's emitters
+  implement.
+- `.github/workflows/` — `release.yml` publishes to PyPI.
 
 ## Never
 

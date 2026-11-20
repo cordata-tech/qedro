@@ -138,12 +138,12 @@ does not match its author; `git rebase --signoff main` adds the missing ones. Si
 signing off are different things: the signature proves who made the commit, the sign-off
 is what they certify about it.
 
-**Say when a coding agent helped.** Agents are welcome. Name the tool in a commit
-trailer — `Assisted-by: <tool>`, as Fedora and LLVM ask, or the `Co-Authored-By:` line
-many tools add on their own — and say in the pull request what it did and what you
-checked yourself. Disclosure is not a mark against a change; it tells a reviewer where
-to look harder, and a project whose subject is provenance should know its own. Whoever
-opens the pull request is responsible for every line in it, whatever wrote it.
+**Coding agents are welcome.** Saying that one helped is welcome too, though not
+required: a line in the pull request on what it did and what you checked yourself tells
+a reviewer where to look harder, and a commit trailer such as `Assisted-by: <tool>`, as
+Fedora and LLVM suggest, or the `Co-Authored-By:` line many tools add on their own, is
+fine. Whoever opens the pull request is responsible for every line in it, whatever
+wrote it, and has read every one.
 
 **Tests that read as sentences.** Test names in this repository describe the
 behaviour being protected, not the function being called, and the ones guarding a

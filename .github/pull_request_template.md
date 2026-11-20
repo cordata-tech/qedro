@@ -15,11 +15,9 @@ schema or the release workflow. Otherwise delete this section. -->
 - [ ] A line under `## Unreleased` in `CHANGELOG.md`, and the README or `docs/compatibility.md` if they describe what changed
 - [ ] Every commit is signed off (`git commit -s`) and signed
 
-## Did a coding agent help?
+## Did a coding agent help? (optional)
 
-<!-- Agents are welcome. If one helped: which tool, what it did, and what you checked
-yourself. Name it in a commit trailer too (`Assisted-by: <tool>` or `Co-Authored-By:`).
-You are responsible for every line, whatever wrote it. -->
+<!-- Agents are welcome, and telling us is welcome, not required. If one helped, a line on
+what it did and what you checked yourself tells a reviewer where to look. Either way, you
+are responsible for every line and have read every one. -->
 
-- [ ] No
-- [ ] Yes:
