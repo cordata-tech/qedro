@@ -28,7 +28,15 @@ CLI that reads evidence and writes files, and nothing else.
 - **Add a test for the behaviour you change**, named for what it protects ("the tombstone
   is withheld when a facet came from the mapping file"), not for the function it calls.
 - **Add a line under `## Unreleased` in `CHANGELOG.md`**, saying what a user would notice.
-- **Sign your commits**, and explain the reasoning in the message rather than the diff.
+- **Sign off every commit** with `git commit -s`. The `Signed-off-by:` line is your
+  statement under the [Developer Certificate of Origin](https://developercertificate.org)
+  that you may contribute the change under the Apache-2.0 licence; the DCO check fails a
+  pull request where a commit lacks one matching its author. **Sign the commit** too, with
+  an SSH or GPG key, and explain the reasoning in the message rather than the diff.
+- **Say when an agent helped.** Name the tool in a trailer, `Assisted-by: <tool>` or
+  `Co-Authored-By: <tool> <address>`, and say in the pull request description what it did
+  and what you checked yourself. Agents are welcome here; the person opening the pull
+  request is responsible for every line, has read every line, and answers review on it.
 - **A pull request that touches a path listed separately in `.github/CODEOWNERS`** says in
   its description which commitment below it keeps.
 
@@ -76,6 +84,27 @@ And, from how the code is built:
   of fields per projection (`COVERED` in `src/qedro/signoff.py`). A new JSON field goes
   beside those paths, not inside one, unless the change means to reopen every existing
   approval — in which case `COVERAGE` moves up and the changelog says so.
+
+## How to work here
+
+What has caught real defects in this repository, rather than general advice:
+
+- **A bug fix starts with a failing test**, and you check it fails without the fix. Then
+  break the behaviour on purpose and watch the test go red: a test that passes either way
+  protects nothing.
+- **Run the projections against the real captures** in `tests/fixtures/`, not only
+  synthetic events. The dbt, Airflow and Spark captures there produced five issues and
+  four bugs between them.
+- **Check an OpenLineage facet or field name against the spec** before you use it, rather
+  than writing the name it seems it should have. A plausible name that does not exist is
+  the error that looks most like work.
+- **One concern per pull request.** No reformatting, renaming or tidying along the way;
+  they hide the change a reviewer needs to see.
+- **No new runtime dependency without an issue first.** The base install is two packages
+  on purpose, and each one more is a supply-chain path into a tool that holds evidence.
+- **Documentation moves with behaviour**: the README when a command or output changes,
+  `docs/compatibility.md` when what Qedro runs against changes, the changelog always.
+- **Security problems go to [SECURITY.md](SECURITY.md)**, never a public issue.
 
 ## Every artefact, every format
 

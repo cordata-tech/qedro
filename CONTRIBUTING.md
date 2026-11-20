@@ -128,6 +128,23 @@ thing and it was wrong*.
 A project about provenance that accepts unsigned commits is making a point it
 would rather not.
 
+**Sign off every commit, too** — `git commit -s`, which adds `Signed-off-by: Your Name
+<you@example.com>`. It certifies, under the [Developer Certificate of
+Origin](https://developercertificate.org), that you wrote the change or otherwise have the
+right to submit it under Apache-2.0. It is the lightweight alternative to a contributor
+licence agreement that the Linux kernel and the Linux Foundation's projects use,
+OpenLineage among them. The DCO check fails a pull request with a commit whose sign-off
+does not match its author; `git rebase --signoff main` adds the missing ones. Signing and
+signing off are different things: the signature proves who made the commit, the sign-off
+is what they certify about it.
+
+**Say when a coding agent helped.** Agents are welcome. Name the tool in a commit
+trailer — `Assisted-by: <tool>`, as Fedora and LLVM ask, or the `Co-Authored-By:` line
+many tools add on their own — and say in the pull request what it did and what you
+checked yourself. Disclosure is not a mark against a change; it tells a reviewer where
+to look harder, and a project whose subject is provenance should know its own. Whoever
+opens the pull request is responsible for every line in it, whatever wrote it.
+
 **Tests that read as sentences.** Test names in this repository describe the
 behaviour being protected, not the function being called, and the ones guarding a
 commitment say which commitment. Follow that; it is why the suite is readable.

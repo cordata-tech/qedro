@@ -47,3 +47,4 @@
 # The rules every contributor and agent works to.
 /AGENTS.md                      @lhadhazy
 /CONTRIBUTING.md                @lhadhazy
+/.github/pull_request_template.md @lhadhazy
