@@ -97,12 +97,13 @@ worked until the next regeneration reverts it.
 ```bash
 pip install -e ".[dev]"
 pytest -q
-ruff check . && ruff format --check .
+ruff check . && ruff format --check . && codespell
 python tools/facet_schema.py --check
 python tools/seed.py --check
 ```
 
-Python 3.12 is the floor; CI runs 3.12, 3.13 and 3.14.
+Python 3.12 is the floor; CI runs 3.12, 3.13 and 3.14. `pre-commit install` (or
+`prek install`) runs ruff and codespell before each commit, at the versions CI uses.
 
 Two test modules import `pipeline_runtime` — the Art. 30 facet schema is
 generated from its `Processing` model and a test fails when the two diverge. It is

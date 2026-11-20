@@ -49,6 +49,7 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
+          codespell
 
       - name: Test
         run: pytest -q

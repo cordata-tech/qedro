@@ -63,6 +63,8 @@ dev = [
     # an existing `noqa` into an error and failed `main` with no change in this
     # repository. Bump it on purpose, with the fixes in the same commit.
     "ruff==0.17.2",
+    # Pinned for the same reason: a new dictionary flags new words.
+    "codespell==2.4.3",
     "mypy>=1.11",
     # `tools/facet_schema.py` generates the Art. 30 facet schema from
     # `pipeline_runtime.descriptor.Processing`, and a test fails when the two
@@ -100,6 +102,13 @@ qedro = ["vocabularies/*.yaml", "regulations/*.yaml", "demo/*.yaml"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests", "tools"]
+
+[tool.codespell]
+# Run by CI and the pre-commit hook. Fixtures are real captures and stay as
+# their emitters wrote them; the binary and generated outputs are not prose.
+skip = "./.venv,./.git,./.jj,./build,./dist,./tests/fixtures,*.json,*.ndjson,*.jsonl,*.pdf,*.xlsx,*.png,*.svg,*.gif,*.cast,*.mp4"
+# Correct as written: an accepted spelling, used consistently in test names.
+ignore-words-list = "unparseable"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

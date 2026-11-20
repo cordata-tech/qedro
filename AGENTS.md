@@ -20,7 +20,8 @@ CLI that reads evidence and writes files, and nothing else.
   pip install -e ".[dev]"
   pip install --no-deps "cordata-pipeline-runtime @ git+https://github.com/cordata-tech/pipeline-runtime@main"
   pytest -q
-  ruff check . && ruff format --check .
+  ruff check . && ruff format --check . && codespell
+  # or once: pre-commit install, to run ruff and codespell before each commit
   python tools/facet_schema.py --check
   python tools/seed.py --check
   ```
