@@ -152,6 +152,25 @@ class TestReadingATopic:
         _, report = read_kafka("kafka://kafka:9092/nope", consumer=two_partitions())
         assert report.unreadable == ("nope (no such topic on kafka:9092)",)
 
+    def test_a_broker_that_cannot_be_reached_is_named_rather_than_raised(self):
+        # Found from PyPI 0.27.0: an unreachable broker ended `qedro events` with a
+        # KafkaException traceback, where an unreachable HTTP backend gets a sentence.
+        class KafkaError:
+            def str(self):
+                return "Failed to get metadata: Local: Broker transport failure"
+
+        class Down(Broker):
+            def list_topics(self, topic, timeout):
+                raise RuntimeError(KafkaError())
+
+        broker = Down({})
+        events, report = read_kafka(ADDRESS, consumer=broker)
+        assert events == [] and not report.clean
+        assert report.unreadable == (
+            "kafka:9092 (Failed to get metadata: Local: Broker transport failure)",
+        )
+        assert broker.closed
+
     def test_a_read_stops_at_the_event_limit_and_says_so(self):
         broker = Broker({0: [(ms(d), payload("a", d)) for d in range(1, 9)]})
         events, report = read_kafka(ADDRESS, max_events=3, consumer=broker)
@@ -207,6 +226,9 @@ class TestSettings:
             }
         )
         assert settings == {"security.protocol": "SASL_SSL", "sasl.mechanisms": "SCRAM-SHA-512"}
+
+    def test_log_level_keeps_librdkafkas_underscore(self):
+        assert kafka_settings({"QEDRO_KAFKA_LOG_LEVEL": "7"}) == {"log_level": "7"}
 
     @pytest.mark.parametrize("name", ["QEDRO_KAFKA_GROUP_ID", "QEDRO_KAFKA_ENABLE_AUTO_COMMIT"])
     def test_a_setting_that_would_move_offsets_is_refused(self, name):

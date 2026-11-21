@@ -6,6 +6,14 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **A Kafka broker that cannot be reached is named, not raised.** In 0.27.0 it ended
+  `qedro events kafka://…` with a `KafkaException` traceback under some 550 lines of
+  librdkafka's own reconnect log. It now reads *could not read broker:9092 (Failed to
+  get metadata: …)* and exits 1, as an HTTP backend that is down does, and the client's
+  logging is off unless `QEDRO_KAFKA_LOG_LEVEL` turns it on.
+
 ## 0.27.0 — 2026-11-21
 
 A Kafka topic is a source, and the JSON carries the scope statement a reader can show.

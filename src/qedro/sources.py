@@ -896,6 +896,11 @@ _KAFKA_FIXED = {
 }
 
 
+#: librdkafka's few property names that keep an underscore, which the dotted
+#: spelling of a variable name would otherwise get wrong.
+_KAFKA_UNDERSCORED = {"log.level": "log_level"}
+
+
 def kafka_settings(environ: Mapping[str, str] | None = None) -> dict[str, str]:
     """librdkafka settings from `QEDRO_KAFKA_*`, for authentication and TLS.
 
@@ -909,6 +914,7 @@ def kafka_settings(environ: Mapping[str, str] | None = None) -> dict[str, str]:
         if not name.startswith("QEDRO_KAFKA_"):
             continue
         key = name.removeprefix("QEDRO_KAFKA_").lower().replace("_", ".")
+        key = _KAFKA_UNDERSCORED.get(key, key)
         if key in _KAFKA_FIXED:
             raise ConfigError(
                 f"{name} is not settable: a qedro read never joins a consumer group or commits "
@@ -959,6 +965,10 @@ def read_kafka(
             ) from None
         consumer = Consumer(
             {
+                # librdkafka logs every reconnect to stderr, 549 lines in 30 seconds
+                # against a broker that is down, burying the one sentence qedro prints
+                # about it. Silent unless QEDRO_KAFKA_LOG_LEVEL asks, which overrides this.
+                "log_level": 0,
                 **kafka_settings(),
                 "bootstrap.servers": servers,
                 # A group id librdkafka requires; with assign() and no commits it
@@ -1007,6 +1017,8 @@ def read_kafka(
                 report.truncated = True
                 break
         report.retained_from = oldest
+    except Exception as exc:  # noqa: BLE001 — a broker that cannot be reached is counted, not raised
+        report.unreadable += (f"{servers} ({_kafka_error(exc)})",)
     finally:
         consumer.close()
     report.events = len(events)
@@ -1052,6 +1064,19 @@ class _TopicPartition:
     topic: str
     partition: int
     offset: int = -1001
+
+
+def _kafka_error(exc: Exception) -> str:
+    """The client's own description of a failure, as the summary line shows it.
+
+    confluent-kafka raises a `KafkaException` whose first argument is a `KafkaError`
+    with a sentence of its own, such as *Failed to get metadata: Local: Broker
+    transport failure*; anything else is named by its type, as the HTTP reader does.
+    """
+    detail = exc.args[0] if exc.args else None
+    if hasattr(detail, "str"):
+        return str(detail.str())
+    return type(exc).__name__
 
 
 def _kafka_time(message: Any) -> datetime | None:

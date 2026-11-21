@@ -814,7 +814,9 @@ so when the window starts before the oldest event it still holds, the record say
 when it holds them and does not claim to be a proof. Authentication and TLS settings
 come from `QEDRO_KAFKA_*` variables in librdkafka's own names —
 `QEDRO_KAFKA_SECURITY_PROTOCOL=SASL_SSL` is `security.protocol` — and a setting that
-would commit or join a group is refused.
+would commit or join a group is refused. The client's own logging is off unless
+`QEDRO_KAFKA_LOG_LEVEL=7` turns it on; a broker that cannot be reached is named in
+qedro's summary either way.
 
 If anything was unusable the tombstone is withheld and the reason goes to stderr:
 
