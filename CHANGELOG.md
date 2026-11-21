@@ -6,7 +6,14 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.26.0 — 2026-11-21
+
+What the read found, said in the JSON and counted correctly: an event a backend stored
+twice is counted once, and every projection's JSON says what the read found, for the
+console's Sources page. Tested against Airflow 3.4 under the scheduler with four
+emitters in one run. The JSON gains fields and changes none, and no approval reopens;
+one thing behaves differently on upgrade: a source holding two versions of one event
+now withholds the mark, with a reason saying how many.
 
 - **Every projection's JSON says what the read found** (#57), in `scope.read`: the
   source and whether it is a directory, a bucket or an API; files or pages read,
