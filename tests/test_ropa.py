@@ -471,26 +471,26 @@ class TestOrchestrationParents:
         } <= keys
 
     def test_against_an_orchestration_three_levels_deep(self):
-        # From qedro-lab, under Airflow's scheduler: the DAG run, the task that ran
-        # dbt-ol with OPENLINEAGE_PARENT_ID, and dbt's own invocation are each a
-        # parent, so none of the three is a processing activity.
+        # From qedro-lab, under Airflow's scheduler: the DAG run, the three tasks that
+        # launch an emitter with OPENLINEAGE_PARENT_ID — dbt-ol, art30-emit 0.2.0 and
+        # pipeline-runtime 0.2.13 — and dbt's own invocation are each a parent, so
+        # none of them is a processing activity, and every activity left has a purpose.
         out = real("qedro-lab-airflow-3.4")
         assert out.scope.parents == (
             "acme/acme_daily",
             "acme/acme_daily.dbt_run",
+            "acme/acme_daily.fraud_pipelines",
+            "acme/acme_daily.newsletter_export",
             "acme/dbt-run-acme",
         )
         keys = {a.key for a in out.activities}
         assert not keys & set(out.scope.parents)
+        assert len(keys) == 12
         assert {
             "acme/acme.marts.acme.crm_customers",
             "acme.crm/newsletter-export",
             "cordata.fraud/transactions-scored-daily",
         } <= keys
-        # The tasks that launch art30-emit and pipeline-runtime stay listed: neither
-        # emitter names its launcher as parent yet (art30-emit#1, pipeline-runtime#19).
-        # When both do, these two leave the record and this assertion should flip.
-        assert {"acme/acme_daily.newsletter_export", "acme/acme_daily.fraud_pipelines"} <= keys
 
 
 def real(fixture):
