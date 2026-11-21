@@ -6,7 +6,11 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.27.0 — 2026-11-21
+
+A Kafka topic is a source, and the JSON carries the scope statement a reader can show.
+New fields and a new extra; nothing existing changes shape or behaviour, and no approval
+reopens.
 
 - **Read OpenLineage from a Kafka topic** (#59): `qedro events kafka://broker:9092/topic`,
   and every projection, with the new `qedro[kafka]` extra. The read assigns partitions,
