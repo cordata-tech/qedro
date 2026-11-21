@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from qedro import config, deployer, erasure, provenance, quality, render, ropa, signoff, vocabulary
-from qedro.sources import ReadReport, read_dir, read_facts
+from qedro.sources import ReadReport, read, read_dir, read_facts
 
 DBT = Path(__file__).parent / "fixtures" / "dbt-1.53"
 DATASET = "duckdb://probe.duckdb/probe.main.orders_explicit"
@@ -80,3 +80,53 @@ def test_the_read_block_is_outside_what_a_sign_off_covers():
     before = signoff.digest(payload)
     payload["scope"]["read"] = {"events": 999, "domains": {"fraud": 7}}
     assert signoff.digest(payload) == before
+
+
+LAB = Path(__file__).parent / "fixtures" / "qedro-lab-airflow-3.4"
+
+
+def with_copies(tmp_path, copies=3):
+    """The lab's capture with its first *copies* events stored again, as Marquez did."""
+    lines = (LAB / "events.jsonl").read_text().splitlines()
+    (tmp_path / "events.jsonl").write_text("\n".join(lines + lines[:copies]) + "\n")
+    return tmp_path
+
+
+def lab_build(projection, source):
+    # read(), the one entry point every command uses, which is where copies are counted.
+    events, report = read(str(source))
+    if projection == "ropa":
+        return ropa.build(events, config=CFG, vocabulary=vocabulary.load(), report=report)
+    if projection == "quality":
+        return quality.build(events, config=CFG, report=report)
+    target = "postgres://warehouse:5432/acme.marts.crm_customers"
+    if projection == "provenance":
+        return provenance.build(events, dataset=target, config=CFG, report=report)
+    return erasure.build(events, dataset=target, config=CFG, report=report)
+
+
+@pytest.mark.parametrize("projection", ["ropa", "quality", "provenance", "erasure"])
+def test_copies_a_backend_stored_leave_every_artefact_as_it_was(projection, tmp_path):
+    # #58: the lab's Marquez held three events twice. Counted once, every projection
+    # says what it said without them, apart from the count of what was set aside.
+    clean = json.loads(render.json(lab_build(projection, LAB)))
+    copied = json.loads(render.json(lab_build(projection, with_copies(tmp_path))))
+    assert copied["scope"]["duplicates"] == 3
+    for payload in (clean, copied):
+        payload["scope"].pop("read")
+        payload["scope"].pop("duplicates")
+        payload["scope"].pop("source", None)
+        payload["scope"].pop("passed_over")  # the copy directory has no README to pass over
+    assert copied == clean
+
+
+@pytest.mark.parametrize("fmt", ["text", "markdown", "json", "pdf", "xlsx"])
+def test_every_format_names_the_copies_counted_once(fmt, tmp_path):
+    from .as_text import as_text
+
+    record = lab_build("ropa", with_copies(tmp_path))
+    out = as_text(render.FORMATS[fmt](record))
+    if fmt == "json":
+        assert json.loads(out)["scope"]["duplicates"] == 3
+    else:
+        assert "3 records identical to one already read, counted once" in out
