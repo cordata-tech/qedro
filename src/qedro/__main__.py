@@ -116,6 +116,8 @@ def _events(target: str, *, symbol: bool, since: datetime | None, until: datetim
     fetched = (
         words.count(report.pages, "page")
         if report.origin.startswith(("http://", "https://"))
+        else words.count(report.partitions, "partition")
+        if report.origin.startswith("kafka://")
         else words.count(report.files, "file")
     )
     summary = " · ".join(

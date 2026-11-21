@@ -26,6 +26,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -106,6 +107,12 @@ class ReadReport:
     #: differ in content. Both are kept, and the read is not clean: which one the emitter meant
     #: is not something qedro can know (#58).
     conflicting: int = 0
+    #: Kafka partitions read, the topic's counterpart of files and pages (#59).
+    partitions: int = 0
+    #: When a Kafka topic's retention had already deleted the start of the window:
+    #: the time of the oldest event it still held. The window is then not fully
+    #: covered, which is a reason, as a truncated read is (#59).
+    retained_from: datetime | None = None
 
     @property
     def clean(self) -> bool:
@@ -114,6 +121,7 @@ class ReadReport:
             and not self.unreadable
             and not self.truncated
             and not self.conflicting
+            and self.retained_from is None
         )
 
     def reasons(self) -> list[str]:
@@ -129,6 +137,12 @@ class ReadReport:
             out.append(
                 f"stopped after {MAX_EVENTS} events and the backend holds more, "
                 "so the window is not fully covered"
+            )
+        if self.retained_from is not None:
+            out.append(
+                f"the topic holds events only from {self.retained_from.isoformat()}, after the "
+                "window's start, because its retention deleted the rest, so the window is not "
+                "fully covered"
             )
         if self.conflicting:
             out.append(
@@ -150,10 +164,11 @@ class ReadFacts:
     """
 
     source: str
-    #: `directory`, `bucket` or `api`, decided by the address as :func:`read` decides it.
+    #: `directory`, `bucket`, `api` or `kafka`, decided by the address as :func:`read` does.
     kind: str
     files: int
     pages: int
+    partitions: int
     events: int
     skipped_records: int
     unreadable: tuple[str, ...]
@@ -165,6 +180,9 @@ class ReadFacts:
     #: that lineage stopped arriving on the 3rd. From the events, never the clock.
     earliest: datetime | None
     latest: datetime | None
+    #: For a Kafka topic whose retention deleted the start of the window, the time of
+    #: the oldest event it still held (#59); otherwise None.
+    retained_from: datetime | None
     #: Each domain in scope with the events its activities produced, a declared domain
     #: that produced none included at zero. An orchestration parent's events are not
     #: counted, as it is not an activity (#8). Only the Art. 30 record fills it.
@@ -183,12 +201,21 @@ def read_facts(
     times = [e.event_time for e in events if e.event_time is not None]
     origin = report.origin
     scheme = origin.split("://", 1)[0].lower() if _SCHEME.match(origin) else ""
-    kind = "api" if scheme in ("http", "https") else "bucket" if scheme in BUCKETS else "directory"
+    kind = (
+        "api"
+        if scheme in ("http", "https")
+        else "kafka"
+        if scheme == "kafka"
+        else "bucket"
+        if scheme in BUCKETS
+        else "directory"
+    )
     return ReadFacts(
         source=origin,
         kind=kind,
         files=report.files,
         pages=report.pages,
+        partitions=report.partitions,
         events=report.events,
         skipped_records=report.skipped_records,
         unreadable=report.unreadable,
@@ -198,6 +225,7 @@ def read_facts(
         truncated=report.truncated,
         earliest=min(times) if times else None,
         latest=max(times) if times else None,
+        retained_from=report.retained_from,
         domains=tuple(sorted((domains or {}).items())),
     )
 
@@ -826,11 +854,18 @@ def _read(
         report.events = len(events)
         return events, report
 
-    if scheme and scheme not in ("http", "https"):
+    if scheme and scheme not in ("http", "https", "kafka"):
         schemes = ", ".join(f"{s}://" for s in BUCKETS)
         raise ConfigError(
-            f"{source!r}: only a directory, an http:// address, or a bucket ({schemes}) can be read"
+            f"{source!r}: only a directory, an http:// address, a bucket ({schemes}) "
+            "or a kafka:// topic can be read"
         )
+
+    if scheme == "kafka":
+        events, report = read_kafka(source, since=since, max_events=max_events, timeout=timeout)
+        events = [e for e in events if in_window(e, since, until)]
+        report.events = len(events)
+        return events, report
 
     if source.startswith(("http://", "https://")):
         return read_api(
@@ -848,3 +883,192 @@ def _read(
     events = [e for e in events if in_window(e, since, until)]
     report.events = len(events)
     return events, report
+
+
+#: Settings that would make a Kafka read change something: a consumer group whose
+#: offsets move, or commits. Refused from the environment, because reading must not
+#: move anyone's position on the topic (#59).
+_KAFKA_FIXED = {
+    "group.id",
+    "enable.auto.commit",
+    "enable.auto.offset.store",
+    "auto.commit.interval.ms",
+}
+
+
+def kafka_settings(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """librdkafka settings from `QEDRO_KAFKA_*`, for authentication and TLS.
+
+    `QEDRO_KAFKA_SECURITY_PROTOCOL=SASL_SSL` becomes `security.protocol`. qedro adds
+    no credential handling of its own: the names are librdkafka's, read from the
+    environment the way the cloud readers take their credentials.
+    """
+    environ = os.environ if environ is None else environ
+    out: dict[str, str] = {}
+    for name, value in environ.items():
+        if not name.startswith("QEDRO_KAFKA_"):
+            continue
+        key = name.removeprefix("QEDRO_KAFKA_").lower().replace("_", ".")
+        if key in _KAFKA_FIXED:
+            raise ConfigError(
+                f"{name} is not settable: a qedro read never joins a consumer group or commits "
+                "an offset, so it moves nobody's position on the topic"
+            )
+        out[key] = value
+    return out
+
+
+def _kafka_address(address: str) -> tuple[str, str]:
+    """`kafka://broker:9092[,broker2:9092]/topic` as bootstrap servers and topic."""
+    rest = address.split("://", 1)[1]
+    servers, _, topic = rest.partition("/")
+    topic = topic.strip("/")
+    if not servers or not topic or "/" in topic:
+        raise ConfigError(f"{address!r}: a topic is read as kafka://broker:9092/topic")
+    return servers, topic
+
+
+def read_kafka(
+    address: str,
+    *,
+    since: datetime | None = None,
+    max_events: int = MAX_EVENTS,
+    timeout: float = TIMEOUT,
+    consumer: Any = None,
+) -> tuple[list[Event], ReadReport]:
+    """Read every event on a topic from *since*, without moving anyone's offsets (#59).
+
+    Partitions are assigned rather than subscribed, so the read joins no consumer
+    group, and nothing is ever committed. Each partition is read from the offset
+    the broker's timestamp index gives for *since*, or from its start, up to the end
+    it had when the read began, so a busy topic does not keep the read going.
+
+    When a partition's oldest retained event is later than *since*, retention has
+    deleted part of the window, and the report says from when the topic holds events.
+
+    *consumer* is for tests, in place of a `confluent_kafka.Consumer`.
+    """
+    servers, topic = _kafka_address(address)
+    report = ReadReport(origin=address)
+    if consumer is None:
+        try:
+            from confluent_kafka import Consumer
+        except ImportError:
+            raise ConfigError(
+                "reading kafka:// needs an optional dependency — pip install 'qedro[kafka]'"
+            ) from None
+        consumer = Consumer(
+            {
+                **kafka_settings(),
+                "bootstrap.servers": servers,
+                # A group id librdkafka requires; with assign() and no commits it
+                # never joins the group or stores an offset in it.
+                "group.id": f"qedro-read-{uuid.uuid4()}",
+                "enable.auto.commit": False,
+                "enable.auto.offset.store": False,
+                "auto.offset.reset": "earliest",
+            }
+        )
+    events: list[Event] = []
+    try:
+        metadata = consumer.list_topics(topic, timeout=timeout)
+        found = metadata.topics.get(topic)
+        if found is None or found.error is not None or not found.partitions:
+            report.unreadable += (f"{topic} (no such topic on {servers})",)
+            return events, report
+        assignments, ends = _kafka_starts(consumer, topic, sorted(found.partitions), since, timeout)
+        report.partitions = len(found.partitions)
+        if not assignments:
+            return events, report
+        consumer.assign(assignments)
+        remaining = {a.partition for a in assignments}
+        oldest: datetime | None = None
+        starts = {a.partition: a.offset for a in assignments}
+        while remaining:
+            message = consumer.poll(timeout)
+            if message is None:
+                report.unreadable += (f"{topic} (no message within {timeout:g}s before the end)",)
+                break
+            if message.error() is not None:
+                continue
+            partition, offset = message.partition(), message.offset()
+            low = ends[partition][0]
+            if since is not None and offset == starts.get(partition) == low and low > 0:
+                # The read starts at the oldest message the partition still holds, and
+                # older ones were deleted: if it is newer than the window's start, the
+                # window is cut. A read starting later, at the offset for --since, is not.
+                at = _kafka_time(message)
+                if at is not None and at > utc(since):
+                    oldest = at if oldest is None else min(oldest, at)
+            _take_kafka(message.value(), report, events)
+            if offset + 1 >= ends[partition][1]:
+                remaining.discard(partition)
+            if len(events) >= max_events and remaining:
+                report.truncated = True
+                break
+        report.retained_from = oldest
+    finally:
+        consumer.close()
+    report.events = len(events)
+    return events, report
+
+
+def _kafka_starts(
+    consumer: Any, topic: str, partitions: list[int], since: datetime | None, timeout: float
+) -> tuple[list[Any], dict[int, tuple[int, int]]]:
+    """Where to start each partition, and its (low, high) watermarks."""
+    from_time = None
+    if since is not None:
+        stamp = int(utc(since).timestamp() * 1000)
+        from_time = {
+            tp.partition: tp.offset
+            for tp in consumer.offsets_for_times(
+                [_partition(topic, p, stamp) for p in partitions], timeout=timeout
+            )
+        }
+    ends: dict[int, tuple[int, int]] = {}
+    assignments = []
+    for p in partitions:
+        low, high = consumer.get_watermark_offsets(_partition(topic, p), timeout=timeout)
+        ends[p] = (low, high)
+        start = low if from_time is None else from_time[p]
+        if start < 0 or start >= high:
+            continue  # nothing at or after the window's start in this partition
+        assignments.append(_partition(topic, p, max(start, low)))
+    return assignments, ends
+
+
+def _partition(topic: str, partition: int, offset: int = -1001) -> Any:
+    """A `confluent_kafka.TopicPartition`, imported only when Kafka is read."""
+    try:
+        from confluent_kafka import TopicPartition
+    except ImportError:  # a test's consumer, which takes plain tuples
+        return _TopicPartition(topic, partition, offset)
+    return TopicPartition(topic, partition, offset)
+
+
+@dataclass
+class _TopicPartition:
+    topic: str
+    partition: int
+    offset: int = -1001
+
+
+def _kafka_time(message: Any) -> datetime | None:
+    kind, millis = message.timestamp()
+    if kind == 0 or millis < 0:  # TIMESTAMP_NOT_AVAILABLE
+        return None
+    return datetime.fromtimestamp(millis / 1000, tz=UTC)
+
+
+def _take_kafka(value: bytes | None, report: ReadReport, events: list[Event]) -> None:
+    """One message as one event, counting into *report* what is not one."""
+    try:
+        record = json.loads(value) if value else None
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        record = None
+    event = parse_event(record) if record is not None else None
+    if event is None:
+        report.skipped_records += 1
+        return
+    events.append(event)

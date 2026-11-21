@@ -45,6 +45,8 @@ dependencies = ["pyyaml>=6", "openpyxl>=3.1"]
 s3 = ["fsspec>=2024.6.0", "s3fs>=2024.6.0"]
 gcs = ["fsspec>=2024.6.0", "gcsfs>=2024.6.0"]
 azure = ["fsspec>=2024.6.0", "adlfs>=2024.4.1"]
+# What the OpenLineage Python client's own kafka transport uses (#59).
+kafka = ["confluent-kafka>=2.4"]
 # PDF output (#37), for the people who receive a record rather than run qedro.
 # reportlab is BSD-licensed, pure Python with wheels for every platform, and
 # ships the font the documents use, so `pipx install 'qedro[pdf]'` needs no

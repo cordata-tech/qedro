@@ -8,6 +8,14 @@ before `1.0`.
 
 ## Unreleased
 
+- **Read OpenLineage from a Kafka topic** (#59): `qedro events kafka://broker:9092/topic`,
+  and every projection, with the new `qedro[kafka]` extra. The read assigns partitions,
+  joins no consumer group and commits nothing, so nobody's position on the topic moves.
+  `--since` starts at the broker's offset for that time; a window that starts before the
+  topic's retention is not fully covered, and the record withholds the mark with a reason
+  saying from when the topic holds events. Authentication comes from `QEDRO_KAFKA_*`
+  variables in librdkafka's names. The summary line counts partitions, and `scope.read`
+  gains `partitions`, `retained_from` and the kind `kafka`.
 - **The JSON carries the scope statement as rows a reader can show** (#61): each
   projection's `scope.statement` is every labelled row the text format prints in its
   scope — source, window, what each projection adds, files passed over, copies counted

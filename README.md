@@ -799,6 +799,23 @@ The HTTP source is read-only by construction: GET is the only verb the code can
 build. If the backend needs a token, it comes from `QEDRO_API_TOKEN` and never from
 the command line, where it would land in shell history and in `ps`.
 
+Or point it at a Kafka topic, once `pipx install 'qedro[kafka]'` has added the client
+the OpenLineage Python transport itself uses:
+
+```console
+$ qedro events kafka://broker:9092/openlineage.events --since 2026-11-01
+```
+
+Reading a topic moves nobody's position on it: qedro assigns partitions rather than
+joining a consumer group, and never commits an offset. `--since` starts each partition
+at the offset the broker's timestamp index gives for that time, and the read stops at
+the end the topic had when it began. A topic keeps events only as long as its retention,
+so when the window starts before the oldest event it still holds, the record says from
+when it holds them and does not claim to be a proof. Authentication and TLS settings
+come from `QEDRO_KAFKA_*` variables in librdkafka's own names —
+`QEDRO_KAFKA_SECURITY_PROTOCOL=SASL_SSL` is `security.protocol` — and a setting that
+would commit or join a group is refused.
+
 If anything was unusable the tombstone is withheld and the reason goes to stderr:
 
 ```console

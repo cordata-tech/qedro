@@ -130,7 +130,8 @@ def test_an_address_that_is_not_a_directory_or_http_says_so(capsys):
     # `ftp:/host does not exist` would send someone looking for a typo.
     assert main(["events", "ftp://host/lineage"]) == 2
     err = capsys.readouterr().err
-    assert "only a directory, an http:// address, or a bucket" in err and "s3://" in err
+    assert "only a directory, an http:// address, a bucket" in err and "s3://" in err
+    assert "or a kafka:// topic can be read" in err
 
 
 def test_a_bucket_reads_end_to_end(tmp_path, capsys, monkeypatch):

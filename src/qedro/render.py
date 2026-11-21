@@ -490,6 +490,7 @@ def _read_json(facts: ReadFacts | None) -> dict[str, Any] | None:
         "kind": facts.kind,
         "files": facts.files,
         "pages": facts.pages,
+        "partitions": facts.partitions,
         "events": facts.events,
         "skipped_records": facts.skipped_records,
         "unreadable": list(facts.unreadable),
@@ -499,6 +500,7 @@ def _read_json(facts: ReadFacts | None) -> dict[str, Any] | None:
         "truncated": facts.truncated,
         "earliest": facts.earliest.isoformat() if facts.earliest else None,
         "latest": facts.latest.isoformat() if facts.latest else None,
+        "retained_from": facts.retained_from.isoformat() if facts.retained_from else None,
         "domains": dict(facts.domains),
     }
 
