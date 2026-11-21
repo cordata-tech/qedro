@@ -99,9 +99,13 @@ reading, but the credentials it uses are whatever your environment provides, and
 narrow role keeps that true of the credentials as well as of the code.
 
 For Airflow, point the provider at the same file with `[openlineage] config_path`, or
-set `[openlineage] transport` to the same structure as JSON, and raise
-`[openlineage] execution_timeout` above the slowest your backend answers, so an
-emission is not stopped before the last destination. The Airflow documentation
+set `[openlineage] transport` to the same structure as JSON, and raise two limits
+above the slowest your destinations answer, so an emission is not stopped before the
+last of them: `[openlineage] execution_timeout`, 10 seconds by default, and from
+Airflow 2.10 `[core] task_success_overtime`, 20 seconds by default, which is how long a
+task that succeeded keeps its process for listeners. Under Airflow 3.4's scheduler in
+qedro-lab, a task's `COMPLETE` to six destinations outran the second one, and the
+supervisor ended it after the first three. The Airflow documentation
 has no composite example, and the key names above come from the Python client that the
 provider hands its configuration to. The filesystem packages have to be installed on
 every worker.
