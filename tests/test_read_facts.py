@@ -117,6 +117,7 @@ def test_copies_a_backend_stored_leave_every_artefact_as_it_was(projection, tmp_
         payload["scope"].pop("duplicates")
         payload["scope"].pop("source", None)
         payload["scope"].pop("passed_over")  # the copy directory has no README to pass over
+        payload["scope"].pop("statement")  # states the copies and the README, as it should
     assert copied == clean
 
 
@@ -130,3 +131,36 @@ def test_every_format_names_the_copies_counted_once(fmt, tmp_path):
         assert json.loads(out)["scope"]["duplicates"] == 3
     else:
         assert "3 records identical to one already read, counted once" in out
+
+
+class TestTheScopeStatementInTheJson:
+    """The rows the text format prints, carried in the JSON for a human reader (#61)."""
+
+    @pytest.mark.parametrize("projection", ["ropa", "deployer", "quality", "provenance", "erasure"])
+    def test_it_is_every_row_the_text_format_prints_in_its_order(self, projection):
+        record = build(projection)
+        rows = json.loads(render.json(record))["scope"]["statement"]
+        text = render.text(record)
+        assert rows[0] == {"label": "source", "text": str(DBT)}
+        assert rows[1]["label"] == "window"
+        section = text[text.rindex("  Scope of this") :]
+        positions = [section.index(f"    {row['label']} ") for row in rows]
+        assert positions == sorted(positions), "the JSON's order is the text format's"
+        for row in rows:
+            first_words = " ".join(row["text"].split()[:3])
+            assert first_words in " ".join(section.split()), row
+
+    def test_files_passed_over_a_guessed_domain_and_copies_each_have_a_row(self, tmp_path):
+        source = with_copies(tmp_path)
+        (source / "README.md").write_text("notes beside the events\n")
+        rows = json.loads(render.json(lab_build("ropa", source)))["scope"]["statement"]
+        labels = {row["label"]: row["text"] for row in rows}
+        assert labels["passed over"].startswith("1 file not read")
+        assert labels["duplicates"] == "3 records identical to one already read, counted once"
+        assert "guessed from the job namespace" in labels["domains"]
+
+    def test_it_is_outside_what_a_sign_off_covers(self):
+        payload = json.loads(render.json(build("ropa")))
+        before = signoff.digest(payload)
+        payload["scope"]["statement"] = [{"label": "anything", "text": "else"}]
+        assert signoff.digest(payload) == before

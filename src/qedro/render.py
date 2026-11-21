@@ -239,18 +239,29 @@ def _detail(label: str, value: str, *, width: int) -> list[str]:
     return [f"    {label:<{LABEL}} {wrapped[0]}"] + [f"{INDENT}{line}" for line in wrapped[1:]]
 
 
-def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record") -> list[str]:
-    """Shared by every projection. The labels come from the scope itself."""
-    out = [f"  {title}", f"    source        {scope.source or 'unknown'}"]
-    out.append(f"    window        {scope.window()}")
-    rows = list(scope.statement())
+def _scope_rows(scope: Scope) -> list[tuple[str, str]]:
+    """Every labelled row the text format prints in a record's scope, in its order.
+
+    One list for the text format and for the JSON's `scope.statement` (#61), so a
+    reader of the JSON — the console — shows the scope a terminal shows, worded by
+    qedro, without rebuilding a sentence of its own.
+    """
+    rows = [("source", scope.source or "unknown"), ("window", scope.window())]
+    rows += scope.statement()
     if scope.domains_source():
         rows.append(("domains", scope.domains_source()))
     if scope.domains_silent:
         rows.append(("silent", f"{', '.join(scope.domains_silent)} (in scope, no lineage)"))
+    return rows
+
+
+def _scope_text(scope: Scope, *, width: int, title: str = "Scope of this record") -> list[str]:
+    """Shared by every projection. The labels come from the scope itself."""
+    rows = _scope_rows(scope)
+    out = [f"  {title}", f"    source        {rows[0][1]}", f"    window        {rows[1][1]}"]
     # Wrapped under the value, not the label: the parents and Art. 30(1) lines
     # run far past a terminal's width otherwise.
-    for label, value in rows:
+    for label, value in rows[2:]:
         out += _detail(label, value, width=width)
     for line in _wrap(scope.OUT_OF_VIEW, width - 4):
         out.append(f"    {line}")
@@ -549,6 +560,9 @@ def _(record: Record, *, indent: int = 2) -> str:
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
             "read": _read_json(record.scope.read),
+            "statement": [
+                {"label": label, "text": text} for label, text in _scope_rows(record.scope)
+            ],
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -969,6 +983,9 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
             "read": _read_json(record.scope.read),
+            "statement": [
+                {"label": label, "text": text} for label, text in _scope_rows(record.scope)
+            ],
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1137,6 +1154,9 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
             "read": _read_json(record.scope.read),
+            "statement": [
+                {"label": label, "text": text} for label, text in _scope_rows(record.scope)
+            ],
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1345,6 +1365,9 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
             "read": _read_json(record.scope.read),
+            "statement": [
+                {"label": label, "text": text} for label, text in _scope_rows(record.scope)
+            ],
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1611,6 +1634,9 @@ def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
             "read": _read_json(record.scope.read),
+            "statement": [
+                {"label": label, "text": text} for label, text in _scope_rows(record.scope)
+            ],
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,

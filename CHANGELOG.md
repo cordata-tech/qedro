@@ -6,6 +6,16 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The JSON carries the scope statement as rows a reader can show** (#61): each
+  projection's `scope.statement` is every labelled row the text format prints in its
+  scope — source, window, what each projection adds, files passed over, copies counted
+  once, how domains were assigned, silent domains — as `{"label", "text"}` in the same
+  order and the same words. For the console, which shows a record's scope without
+  wording anything itself. Beside the numbers, which stay; outside every sign-off's
+  covered fields.
+
 ## 0.26.0 — 2026-11-21
 
 What the read found, said in the JSON and counted correctly: an event a backend stored
