@@ -50,14 +50,24 @@ and the copy can be removed when the pilot ends.
 transport:
   type: composite
   transports:
-    backend:                # what you send to today, unchanged
-      type: http
-      url: https://lineage.example.internal
-    archive:                # the copy qedro reads
+    archive:                # the copy qedro reads, listed first
       type: file
       log_file_path: /var/lib/openlineage/events
       append: false
+    backend:                # what you send to today, unchanged
+      type: http
+      url: https://lineage.example.internal
 ```
+
+**List the archive first.** The composite transport sends to its destinations in the
+order they are listed, and an emitter that stops an emission part-way stops it there.
+Airflow's provider does exactly that after `[openlineage] execution_timeout`, 10 seconds
+by default: in [qedro-lab](https://github.com/cordata-tech/qedro-lab), with
+openlineage-python 1.55.0 and provider 2.21.0, a Marquez that took 17 seconds to accept
+one event kept a task's `START` while the archive listed after it never received it,
+and nothing logged an error. With the archive first, a slow backend can only delay
+itself. Both defaults otherwise work in your favour: the composite sends to every
+destination and carries on past one that fails.
 
 With `append: false` every event becomes its own file, named
 `events-<time>.json`, which qedro reads as it is. With `append: true` the client
@@ -89,7 +99,9 @@ reading, but the credentials it uses are whatever your environment provides, and
 narrow role keeps that true of the credentials as well as of the code.
 
 For Airflow, point the provider at the same file with `[openlineage] config_path`, or
-set `[openlineage] transport` to the same structure as JSON. The Airflow documentation
+set `[openlineage] transport` to the same structure as JSON, and raise
+`[openlineage] execution_timeout` above the slowest your backend answers, so an
+emission is not stopped before the last destination. The Airflow documentation
 has no composite example, and the key names above come from the Python client that the
 provider hands its configuration to. The filesystem packages have to be installed on
 every worker.
