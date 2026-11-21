@@ -6,6 +6,17 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **Tested against Airflow 3.4.0 with provider 2.21.0, under the scheduler**: a capture
+  from [qedro-lab](https://github.com/cordata-tech/qedro-lab) with four emitters in one
+  run — Airflow, dbt-ol launched from a task as its child, art30-emit and
+  pipeline-runtime 0.2.12 — and an orchestration three levels deep (DAG run, task, dbt
+  invocation) that the record leaves out of the activities. No behaviour changed.
+- **The pilot guide names the two Airflow limits** an OpenLineage emission has to fit
+  inside, `[openlineage] execution_timeout` and `[core] task_success_overtime`, and
+  lists the archive first in its composite example: qedro-lab lost events to both.
+
 ## 0.25.0 — 2026-11-20
 
 Four eyes on sign-off (#47): the person who sent a record for sign-off can no longer

@@ -470,6 +470,28 @@ class TestOrchestrationParents:
             "default/orders_enrichment.adaptive_spark_plan.out_revenue_by_region",
         } <= keys
 
+    def test_against_an_orchestration_three_levels_deep(self):
+        # From qedro-lab, under Airflow's scheduler: the DAG run, the task that ran
+        # dbt-ol with OPENLINEAGE_PARENT_ID, and dbt's own invocation are each a
+        # parent, so none of the three is a processing activity.
+        out = real("qedro-lab-airflow-3.4")
+        assert out.scope.parents == (
+            "acme/acme_daily",
+            "acme/acme_daily.dbt_run",
+            "acme/dbt-run-acme",
+        )
+        keys = {a.key for a in out.activities}
+        assert not keys & set(out.scope.parents)
+        assert {
+            "acme/acme.marts.acme.crm_customers",
+            "acme.crm/newsletter-export",
+            "cordata.fraud/transactions-scored-daily",
+        } <= keys
+        # The tasks that launch art30-emit and pipeline-runtime stay listed: neither
+        # emitter names its launcher as parent yet (art30-emit#1, pipeline-runtime#19).
+        # When both do, these two leave the record and this assertion should flip.
+        assert {"acme/acme_daily.newsletter_export", "acme/acme_daily.fraud_pipelines"} <= keys
+
 
 def real(fixture):
     """A record from a captured fixture, which must read with nothing skipped."""
