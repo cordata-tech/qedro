@@ -26,7 +26,7 @@ exists to say so on every run — see cordata-tech/qedro#3.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -39,7 +39,7 @@ from .events import Event
 from .mark import Completeness
 from .references import References
 from .signoff import Standing
-from .sources import ReadReport
+from .sources import ReadReport, read_facts
 from .stack import Stack
 from .vocabulary import Vocabulary
 
@@ -475,6 +475,9 @@ def build(
         declared=len(declared),
         parents={key: grouped[key] for key in parents},
     )
+    scope = replace(
+        scope, read=read_facts(report, every, domains=_domain_events(activities, config))
+    )
     completeness = _completeness(
         activities,
         controller=config.controller,
@@ -730,6 +733,15 @@ def _parents(grouped: Mapping[str, Sequence[Event]]) -> tuple[str, ...]:
             continue
         out.append(key)
     return tuple(sorted(out))
+
+
+def _domain_events(activities: Sequence[Activity], config: Config) -> dict[str, int]:
+    """Events per domain from the activities, a declared domain that produced none at zero (#57)."""
+    counts = dict.fromkeys(config.domains, 0)
+    for activity in activities:
+        if activity.domain:
+            counts[activity.domain] = counts.get(activity.domain, 0) + activity.events
+    return counts
 
 
 def _scope(

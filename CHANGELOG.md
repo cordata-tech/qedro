@@ -8,6 +8,14 @@ before `1.0`.
 
 ## Unreleased
 
+- **Every projection's JSON says what the read found** (#57), in `scope.read`: the
+  source and whether it is a directory, a bucket or an API; files or pages read,
+  events, records skipped and each file that could not be read, with its reason; files
+  passed over; duplicates and conflicting records (#58); the earliest and latest event
+  time, so a reader can see that lineage stopped arriving; and in the Art. 30 record
+  each domain in scope with the events its activities produced, a declared domain with
+  none listed at zero. It is outside every sign-off's covered fields, so a record
+  rebuilt over more events reopens no approval. For the console's Sources page.
 - **An event a backend stored twice is counted once** (#58). Marquez keeps every
   attempt when the OpenLineage HTTP client retries after its timeout, and qedro counted
   each copy. A record identical to one already read is now set aside, whatever the

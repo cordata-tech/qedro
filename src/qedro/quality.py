@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from . import scope as scope_module
@@ -41,7 +41,7 @@ from .config import Config, Controller
 from .events import Dataset, Event
 from .mark import Completeness
 from .signoff import Standing
-from .sources import ReadReport
+from .sources import ReadReport, read_facts
 
 #: The standard OpenLineage facet. Not ours — this one the ecosystem already
 #: agreed on, which is why `quality` needs no schema published beside it.
@@ -204,6 +204,7 @@ def build(
     domains: Sequence[str] = (),
 ) -> Record:
     """Project events into an assertion history."""
+    events = list(events)
     checks: dict[str, list[Check]] = {}
     # Domain and whether it was guessed, per dataset. See #9.
     produced: dict[str, tuple[str, bool]] = {}
@@ -258,6 +259,7 @@ def build(
         domains_filter=tuple(domains),
         left_out=tuple((d, n, g) for (d, g), n in sorted(left_out.items())),
     )
+    scope = replace(scope, read=read_facts(report, events))
 
     return Record(
         controller=config.controller,

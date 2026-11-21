@@ -30,6 +30,7 @@ import json as _json
 from collections.abc import Iterable
 from datetime import datetime
 from functools import singledispatch
+from typing import Any
 
 from . import TOMBSTONE, __version__, explain, words
 from . import compare as compare_module
@@ -40,6 +41,7 @@ from . import quality as quality_module
 from .errors import UsageError
 from .ropa import ART30_ASSERTED_ONLY, ART30_COVERED, ART30_ITEMS, Activity, Record
 from .scope import Scope
+from .sources import ReadFacts
 
 #: The shape of the JSON documents, which `qedro diff` needs before it can
 #: compare two of them (#14). It changes only when a consumer that read the old
@@ -468,6 +470,28 @@ def json(record: object, *, indent: int = 2) -> str:
     raise TypeError(f"no json rendering for {type(record).__name__}")
 
 
+def _read_json(facts: ReadFacts | None) -> dict[str, Any] | None:
+    """What the read found (#57), with times in ISO form; None when nothing was read."""
+    if facts is None:
+        return None
+    return {
+        "source": facts.source,
+        "kind": facts.kind,
+        "files": facts.files,
+        "pages": facts.pages,
+        "events": facts.events,
+        "skipped_records": facts.skipped_records,
+        "unreadable": list(facts.unreadable),
+        "passed_over": list(facts.passed_over),
+        "duplicates": facts.duplicates,
+        "conflicting": facts.conflicting,
+        "truncated": facts.truncated,
+        "earliest": facts.earliest.isoformat() if facts.earliest else None,
+        "latest": facts.latest.isoformat() if facts.latest else None,
+        "domains": dict(facts.domains),
+    }
+
+
 @json.register
 def _(record: Record, *, indent: int = 2) -> str:
     payload = {
@@ -524,6 +548,7 @@ def _(record: Record, *, indent: int = 2) -> str:
             },
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
+            "read": _read_json(record.scope.read),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -943,6 +968,7 @@ def _(record: quality_module.Record, *, indent: int = 2) -> str:
             "domains_silent": list(record.scope.domains_silent),
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
+            "read": _read_json(record.scope.read),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1110,6 +1136,7 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
             "depth_limit": record.scope.depth_limit,
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
+            "read": _read_json(record.scope.read),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1317,6 +1344,7 @@ def _(record: erasure_module.Record, *, indent: int = 2) -> str:
             "depth_limit": record.scope.depth_limit,
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
+            "read": _read_json(record.scope.read),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,
@@ -1582,6 +1610,7 @@ def _(record: deployer_module.DeployerRecord, *, indent: int = 2) -> str:
             "runs": record.scope.runs,
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
+            "read": _read_json(record.scope.read),
             "out_of_view": record.scope.OUT_OF_VIEW,
         },
         "complete": record.complete,

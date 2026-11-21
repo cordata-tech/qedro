@@ -33,7 +33,7 @@ a CLI that reads a directory.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -44,7 +44,7 @@ from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
 from .signoff import Standing
-from .sources import ReadReport
+from .sources import ReadReport, read_facts
 from .words import count, plural
 
 #: The standard OpenLineage job facet naming the code that ran. dbt, Airflow
@@ -417,6 +417,7 @@ def build(
         until=until,
         depth=depth,
     )
+    scope = replace(scope, read=read_facts(report, events))
 
     return Record(
         controller=config.controller,

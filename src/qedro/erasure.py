@@ -30,7 +30,7 @@ statement, printed on every run including one that earns the mark.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
@@ -41,7 +41,7 @@ from .events import Event
 from .mark import Completeness
 from .ropa import Provenance
 from .signoff import Standing
-from .sources import ReadReport, utc
+from .sources import ReadReport, read_facts, utc
 from .words import count, plural
 
 #: How far downstream to walk before stopping and saying so. The same default as
@@ -470,6 +470,7 @@ def build(
         until=until,
         depth=depth,
     )
+    scope = replace(scope, read=read_facts(report, events))
     return Record(
         controller=config.controller,
         dataset=dataset,

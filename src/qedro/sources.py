@@ -26,7 +26,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -137,6 +137,69 @@ class ReadReport:
                 "versions of one event and both were kept"
             )
         return out
+
+
+@dataclass(frozen=True)
+class ReadFacts:
+    """What a read found, as the JSON's `scope.read` carries it (#57).
+
+    Everything a reader asks first in a pilot — is my lineage arriving, from where,
+    since when, and what was set aside — in one place, from :class:`ReadReport` and
+    the events themselves. Facts, not a verdict: whether any of it withholds the mark
+    is decided by the report's reasons, as before.
+    """
+
+    source: str
+    #: `directory`, `bucket` or `api`, decided by the address as :func:`read` decides it.
+    kind: str
+    files: int
+    pages: int
+    events: int
+    skipped_records: int
+    unreadable: tuple[str, ...]
+    passed_over: tuple[str, ...]
+    duplicates: int
+    conflicting: int
+    truncated: bool
+    #: The earliest and latest `eventTime` among the events read, so a reader can see
+    #: that lineage stopped arriving on the 3rd. From the events, never the clock.
+    earliest: datetime | None
+    latest: datetime | None
+    #: Each domain in scope with the events its activities produced, a declared domain
+    #: that produced none included at zero. An orchestration parent's events are not
+    #: counted, as it is not an activity (#8). Only the Art. 30 record fills it.
+    domains: tuple[tuple[str, int], ...] = ()
+
+
+def read_facts(
+    report: ReadReport | None,
+    events: Iterable[Event],
+    *,
+    domains: Mapping[str, int] | None = None,
+) -> ReadFacts | None:
+    """The facts of one read, or None when the events did not come from :func:`read`."""
+    if report is None:
+        return None
+    times = [e.event_time for e in events if e.event_time is not None]
+    origin = report.origin
+    scheme = origin.split("://", 1)[0].lower() if _SCHEME.match(origin) else ""
+    kind = "api" if scheme in ("http", "https") else "bucket" if scheme in BUCKETS else "directory"
+    return ReadFacts(
+        source=origin,
+        kind=kind,
+        files=report.files,
+        pages=report.pages,
+        events=report.events,
+        skipped_records=report.skipped_records,
+        unreadable=report.unreadable,
+        passed_over=report.passed_over,
+        duplicates=report.duplicates,
+        conflicting=report.conflicting,
+        truncated=report.truncated,
+        earliest=min(times) if times else None,
+        latest=max(times) if times else None,
+        domains=tuple(sorted((domains or {}).items())),
+    )
 
 
 def passed_over_text(paths: tuple[str, ...]) -> str:

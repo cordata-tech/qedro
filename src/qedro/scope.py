@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from . import words
-from .sources import passed_over_text
+from .sources import ReadFacts, passed_over_text
 
 
 @dataclass(frozen=True)
@@ -47,6 +47,9 @@ class Scope:
     #: rather than withholding the mark, as `passed_over` is: the record counts each
     #: event once, and the reader learns the source held copies (#58).
     duplicates: int = 0
+    #: What the read found, for the JSON's `scope.read` (#57). Not a row of the
+    #: statement: every count the statement needs is in the fields above already.
+    read: ReadFacts | None = None
 
     #: The standing sentence, overridden per projection. Deliberately factual
     #: about what was not examined rather than advisory about what that means

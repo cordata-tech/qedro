@@ -221,6 +221,7 @@ def build(
         source=record.scope.source,
         passed_over=record.scope.passed_over,
         duplicates=record.scope.duplicates,
+        read=record.scope.read,
         since=record.scope.since,
         until=record.scope.until,
         events=record.scope.events,
