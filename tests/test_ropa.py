@@ -1058,3 +1058,51 @@ class TestTheItemsNothingCanEvidence:
 
         with pytest.raises(ConfigError, match="recipients"):
             record([event()], cfg='jobs:\n  "*":\n    recipients: {a: b}\n')
+
+
+class TestAnEventStoredTwice:
+    """A backend that stores a retried POST again holds one event twice (#58).
+
+    Found in qedro-lab: the OpenLineage HTTP client retried after its 5-second
+    timeout, and Marquez kept every attempt, 12 events where the other sources held 10.
+    """
+
+    def test_an_identical_copy_is_counted_once_and_the_mark_stands(self):
+        from qedro.sources import count_once
+
+        events, report = count_once([event(facet=EVIDENCED), event(facet=EVIDENCED)], ReadReport())
+        assert (len(events), report.duplicates, report.events) == (1, 1, 1)
+        assert report.clean
+        out = record(events, report=report)
+        assert out.completeness.complete
+        assert ("duplicates", "1 record identical to one already read, counted once") in (
+            out.scope.statement()
+        )
+
+    def test_two_versions_of_one_event_are_both_kept_and_the_mark_is_withheld(self):
+        from qedro.sources import count_once
+
+        first = event(facet=EVIDENCED)
+        second = event(facet={**EVIDENCED, "purpose": "marketing"})
+        events, report = count_once([first, second], ReadReport())
+        assert (len(events), report.duplicates, report.conflicting) == (2, 0, 1)
+        assert not report.clean
+        out = record(events, report=report)
+        assert not out.completeness.complete
+        assert any("two versions of one event" in r for r in out.completeness.reasons)
+
+    def test_one_run_id_in_two_jobs_is_neither_a_copy_nor_a_conflict(self):
+        # The test backend gives every event the run id "r"; a run id names a run of
+        # one job, so the same id in another job is a different event.
+        from qedro.sources import count_once
+
+        events, report = count_once(
+            [event(name="a", facet=EVIDENCED), event(name="b", facet=EVIDENCED)], ReadReport()
+        )
+        assert (len(events), report.duplicates, report.conflicting) == (2, 0, 0)
+
+    def test_nothing_is_said_when_nothing_was_set_aside(self):
+        events, report = [event(facet=EVIDENCED)], ReadReport(events=1)
+        assert not any(
+            k == "duplicates" for k, _ in record(events, report=report).scope.statement()
+        )

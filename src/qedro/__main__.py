@@ -136,6 +136,10 @@ def _events(target: str, *, symbol: bool, since: datetime | None, until: datetim
     # were everything it was pointed at (#28).
     if passed := passed_over_text(report.passed_over):
         print(f"  {passed}")
+    # Not a reason either: each event is counted once, and the source held copies (#58).
+    if report.duplicates:
+        copies = words.count(report.duplicates, "record")
+        print(f"  {copies} identical to one already read, counted once")
 
     # Reasons are printed, not only counted. A reader who cannot see why the
     # mark is missing has been told nothing useful.

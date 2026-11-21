@@ -752,6 +752,7 @@ def _scope(
     return Scope(
         source=report.origin if report else "",
         passed_over=report.passed_over if report else (),
+        duplicates=report.duplicates if report else 0,
         # The resolved window, not the arguments as typed: with no `--since`,
         # what was actually covered starts at the earliest event that arrived.
         since=since if since is not None else (min(times) if times else None),

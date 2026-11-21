@@ -98,10 +98,23 @@ class ReadReport:
     #: and withholding the mark for it would teach people to ignore the reason.
     #: See cordata-tech/qedro#28.
     passed_over: tuple[str, ...] = ()
+    #: Records identical to one already read, which a backend stores when it keeps a
+    #: retried POST again. Counted once and stated, without withholding the mark:
+    #: after the copy is set aside the record says exactly what was emitted (#58).
+    duplicates: int = 0
+    #: Records that share a job, a run, an event type and a time with another but
+    #: differ in content. Both are kept, and the read is not clean: which one the emitter meant
+    #: is not something qedro can know (#58).
+    conflicting: int = 0
 
     @property
     def clean(self) -> bool:
-        return not self.skipped_records and not self.unreadable and not self.truncated
+        return (
+            not self.skipped_records
+            and not self.unreadable
+            and not self.truncated
+            and not self.conflicting
+        )
 
     def reasons(self) -> list[str]:
         """Phrasings fit for a CLI summary line, empty when the read was clean."""
@@ -116,6 +129,12 @@ class ReadReport:
             out.append(
                 f"stopped after {MAX_EVENTS} events and the backend holds more, "
                 "so the window is not fully covered"
+            )
+        if self.conflicting:
+            out.append(
+                f"{self.conflicting} records share a job, a run, an event type and a time "
+                "with another record but differ in content, so the source holds two "
+                "versions of one event and both were kept"
             )
         return out
 
@@ -683,7 +702,58 @@ def read(
     means a directory by ``ftp://host``, and *"ftp:/host does not exist"* sends
     them looking for a typo instead of at the sentence that says which
     addresses this reads.
+
+    Whatever the source, a record identical to one already read is counted once
+    and the copies are counted in :attr:`ReadReport.duplicates` (#58).
     """
+    events, report = _read(
+        source,
+        since=since,
+        until=until,
+        recursive=recursive,
+        page_size=page_size,
+        max_events=max_events,
+        timeout=timeout,
+    )
+    return count_once(events, report)
+
+
+def count_once(events: list[Event], report: ReadReport) -> tuple[list[Event], ReadReport]:
+    """Keep one of each identical record, and count what was set aside.
+
+    Identical means the whole parsed record is equal, not only the fields qedro
+    uses: an HTTP client that retries after its timeout makes a backend such as
+    Marquez store the same event again, and qedro-lab found exactly that (#58).
+    Two records with the same job, run, event type and time but different content
+    are not copies; both are kept and counted in :attr:`ReadReport.conflicting`. The
+    job is part of that key because a run id names a run of one job.
+    """
+    versions: dict[tuple[str, str, str, datetime | None], list[Mapping[str, Any]]] = {}
+    kept: list[Event] = []
+    for event in events:
+        key = (event.job.key, event.run.run_id, event.event_type, event.event_time)
+        seen = versions.setdefault(key, [])
+        if any(raw == event.raw for raw in seen):
+            report.duplicates += 1
+            continue
+        if seen:
+            report.conflicting += 1
+        seen.append(event.raw)
+        kept.append(event)
+    report.events = len(kept)
+    return kept, report
+
+
+def _read(
+    source: str,
+    *,
+    since: datetime | None,
+    until: datetime | None,
+    recursive: bool,
+    page_size: int,
+    max_events: int,
+    timeout: float,
+) -> tuple[list[Event], ReadReport]:
     scheme = source.split("://", 1)[0].lower() if _SCHEME.match(source) else ""
     if scheme in BUCKETS:
         events, report = read_bucket(source)

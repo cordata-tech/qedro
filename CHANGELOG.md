@@ -8,6 +8,15 @@ before `1.0`.
 
 ## Unreleased
 
+- **An event a backend stored twice is counted once** (#58). Marquez keeps every
+  attempt when the OpenLineage HTTP client retries after its timeout, and qedro counted
+  each copy. A record identical to one already read is now set aside, whatever the
+  source, and the summary line and every artefact's scope state how many: *1 record
+  identical to one already read, counted once*. The mark stands, because the record
+  then says exactly what was emitted. Two records with the same job, run, event type
+  and time but different content are both kept, and the mark is withheld with a reason
+  naming how many: which version the emitter meant is not something qedro can know.
+  Every format gains the line, and the JSON's `scope` gains `duplicates`.
 - **Tested against Airflow 3.4.0 with provider 2.21.0, under the scheduler**: a capture
   from [qedro-lab](https://github.com/cordata-tech/qedro-lab) with four emitters in one
   run — Airflow, and dbt-ol, art30-emit 0.2.0 and pipeline-runtime 0.2.13 each launched

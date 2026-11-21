@@ -585,6 +585,7 @@ def _scope(
     return Scope(
         source=report.origin if report else "",
         passed_over=report.passed_over if report else (),
+        duplicates=report.duplicates if report else 0,
         since=since,
         until=until,
         events=report.events if report else 0,

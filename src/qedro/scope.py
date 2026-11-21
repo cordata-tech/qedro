@@ -43,6 +43,10 @@ class Scope:
     #: `ReadReport.passed_over`. Stated rather than withholding the mark — see
     #: cordata-tech/qedro#28.
     passed_over: tuple[str, ...] = ()
+    #: Records identical to one already read, from `ReadReport.duplicates`. Stated
+    #: rather than withholding the mark, as `passed_over` is: the record counts each
+    #: event once, and the reader learns the source held copies (#58).
+    duplicates: int = 0
 
     #: The standing sentence, overridden per projection. Deliberately factual
     #: about what was not examined rather than advisory about what that means
@@ -133,4 +137,7 @@ class Scope:
         common = []
         if self.passed_over:
             common.append(("passed over", passed_over_text(self.passed_over)))
+        if self.duplicates:
+            copies = words.count(self.duplicates, "record")
+            common.append(("duplicates", f"{copies} identical to one already read, counted once"))
         return (*self.lines(), *common)

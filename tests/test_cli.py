@@ -180,6 +180,16 @@ class TestAgainstAnApi:
         assert "3 events" in out and "1 page" in out
         assert "∎" in out
 
+    def test_an_event_the_backend_stored_twice_is_counted_once_and_said(self, serve, capsys):
+        # What Marquez did in qedro-lab when the HTTP client retried after its
+        # timeout: the same event, stored twice (#58).
+        base = serve(Backend(events=[event("j0"), event("j0"), event("j1")]))
+        assert main(["events", base]) == 0
+        out = capsys.readouterr().out
+        assert "2 events" in out
+        assert "1 record identical to one already read, counted once" in out
+        assert "∎" in out
+
     def test_a_backend_that_is_down_fails_rather_than_reporting_nothing(self, serve, capsys):
         base = serve(Backend(status=503))
         assert main(["events", base]) == 1
