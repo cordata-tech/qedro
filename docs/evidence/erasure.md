@@ -1,6 +1,6 @@
 # Transcript: `qedro erasure`, evidenced, and across routine overwrites
 
-Captured by script from qedro 0.14.0, at commit `67a5c11` with a clean working tree,
+Captured by script from qedro 0.27.0, at commit `763d9ae` with a clean working tree,
 on Python 3.12.13. The output below is what each command printed, unedited. Run the
 same commands from the repository root to reproduce it.
 
@@ -129,10 +129,10 @@ Erasure of warehouse/crm_curated.contacts_snapshot
 
   Scope of this record
     source        docs/evidence/erasure-overwrites
-    window        2026-07-22T10:00:00+00:00 to the latest event available
+    window        all events available from the source
     erased        warehouse/crm_curated.contacts_snapshot
     tombstone     2026-07-23T02:13:10+00:00 — emitted overwrite, not a drop or truncate
-    in view       1 descendant, 10 events
+    in view       1 descendant, 25 events
     candidates    2 completed runs overwrote it; the first after --since was taken
     superseded    --since said 2026-07-22T10:00:00+00:00; the emitted event is what the
                   descendants were measured against
