@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.28.0 — 2026-11-22
 
 - **An erasure record names a descendant nothing wrote since the erasure, instead of
   leaving it out.** With `--since`, `qedro erasure` read only the events from that
