@@ -923,6 +923,11 @@ class TestTheProvenancePdf:
         text = as_text(render.pdf(provenance_signed()))
         assert "Every step ran under a signed commit." in text
 
+    def test_the_caption_says_what_a_line_joins_in_a_whole_sentence(self):
+        # It read "to one its producing run read", with the "that" missing.
+        text = " ".join(as_text(render.pdf(provenance_record())).split())
+        assert "Each line joins a dataset to one that its producing run read." in text
+
 
 class TestTheArt30Pdf:
     """#37: the record a DPO signs and a supervisory authority asks to see."""

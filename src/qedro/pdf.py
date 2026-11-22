@@ -764,7 +764,7 @@ def provenance_document(record: Any) -> bytes:
             KeepTogether(
                 _with_notes(
                     _provenance_nodes(record),
-                    edges="Each line joins a dataset to one its producing run read.",
+                    edges="Each line joins a dataset to one that its producing run read.",
                     tinted="Tinted boxes are steps that cannot show a signed commit. Each box "
                     "also says why in words; the tint adds nothing the label does not.",
                 )

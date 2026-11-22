@@ -6,6 +6,12 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **The provenance PDF's note under the tree reads as a sentence.** It said each line
+  joins a dataset "to one its producing run read"; it now says "to one that its
+  producing run read".
+
 ## 0.28.0 — 2026-11-22
 
 - **An erasure record names a descendant nothing wrote since the erasure, instead of
