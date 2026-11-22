@@ -76,6 +76,12 @@ is the difference between a record somebody asserts and a record that stands on 
 evidence. The same files are committed in [`demo/`](demo/), and
 [`demo/README.md`](demo/README.md) walks through them.
 
+The demo's events are written by a generator. To see qedro read events that real
+emitters sent, [qedro-lab](https://github.com/cordata-tech/qedro-lab) runs Airflow,
+dbt, pipeline-runtime and art30-emit in Docker Compose for the same fictional company,
+and delivers every event to Marquez, Kafka, S3, GCS, Azure and a directory at once, so
+each of the readers below can be tried against the same run.
+
 To run it on your own lineage, [`docs/pilot.md`](docs/pilot.md) covers what you need,
 how to keep a copy of your events when the place they go today cannot give them back,
 and what the first hour produces.
