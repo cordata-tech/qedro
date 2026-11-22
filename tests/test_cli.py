@@ -918,6 +918,42 @@ class TestTheErasureCommand:
         assert payload["qedro"]["projection"] == "erasure"
         assert payload["tombstone"]["evidenced"] is False
 
+    def test_a_descendant_nothing_wrote_since_the_erasure_is_named_not_lost(self, tmp_path, capsys):
+        # Found by qedro-lab's fortnight: a dbt run left one model out on the day of
+        # the erasure. The descendant is known only from runs before the erasure, so
+        # a graph read from --since on could not see it, and the one table the
+        # erasure missed was missing from the record instead of named as missed.
+        def write(name, day, reads, writes):
+            (tmp_path / f"{name}-{day}.json").write_text(
+                json.dumps(
+                    {
+                        "eventType": "COMPLETE",
+                        "eventTime": f"2026-03-0{day}T10:00:00+00:00",
+                        "run": {"runId": f"{name}-{day}"},
+                        "job": {"namespace": "acme", "name": name},
+                        "inputs": [{"namespace": "wh", "name": n} for n in reads],
+                        "outputs": [{"namespace": "wh", "name": n} for n in writes],
+                    }
+                )
+            )
+
+        write("curate", 1, ["raw.customers"], ["crm.customers"])
+        write("invoice", 1, ["crm.customers"], ["billing.invoices"])
+        # The erasure is on day 2; on day 3 only `curate` runs again.
+        write("curate", 3, ["raw.customers"], ["crm.customers"])
+        main(
+            ["erasure", str(tmp_path), "--dataset", "wh/raw.customers",
+             "--since", "2026-03-02", "--format", "json"]
+        )  # fmt: skip
+        payload = json.loads(capsys.readouterr().out)
+        # `written` is when a run last wrote it after the erasure, empty when none did.
+        written = {d["dataset"]: d["written"] for d in payload["descendants"]}
+        assert written == {
+            "wh/crm.customers": "2026-03-03T10:00:00+00:00",
+            "wh/billing.invoices": "",
+        }
+        assert not payload["complete"]
+
 
 class TestTheDemoCommand:
     """`qedro demo` exists so that `pip install qedro` is enough to see it work.

@@ -8,6 +8,16 @@ before `1.0`.
 
 ## Unreleased
 
+- **An erasure record names a descendant nothing wrote since the erasure, instead of
+  leaving it out.** With `--since`, `qedro erasure` read only the events from that
+  instant on, so a dataset derived from the erased one before the erasure, and not
+  written after it, was missing from the record rather than counted as not reached:
+  the one descendant the erasure had missed. It now reads everything up to `--until`,
+  and `--since` is the erasure instant alone; the record's window starts with the
+  earliest event read. Erasure records built with `--since` can list more
+  descendants than before, and withhold the mark where one of them was missed.
+  Found by qedro-lab's scripted fortnight, where a dbt run left one model out on the
+  day of the erasure.
 - **A Kafka broker that cannot be reached is named, not raised.** In 0.27.0 it ended
   `qedro events kafka://…` with a `KafkaException` traceback under some 550 lines of
   librdkafka's own reconnect log. It now reads *could not read broker:9092 (Failed to

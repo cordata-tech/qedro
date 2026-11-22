@@ -312,7 +312,11 @@ def _erasure(
     fmt = _format(fmt, out)
     settings = config_module.load(config_module.find(config_path))
 
-    events, report = read(source, since=since, until=until)
+    # Everything up to --until, not from --since on: what descends from the erased
+    # dataset is known from runs before the erasure, and one nothing wrote since is
+    # the descendant the record most needs to name. Read from --since, it was missing
+    # instead. The tombstone and the writes measured against it take --since apart.
+    events, report = read(source, until=until)
     events = list(events)
 
     # The same resolution `provenance` does, and for the same reason: nobody
@@ -994,7 +998,8 @@ def main(argv: list[str] | None = None) -> int:
     erasure_cmd.add_argument(
         "--since",
         type=_instant,
-        help="when the erasure was requested, and the start of the window. The first "
+        help="when the erasure was requested. Events before it are still read, since "
+        "they say what descends from the erased dataset. The first "
         "completed run after it that emitted a lifecycleStateChange drop, truncate or "
         "overwrite supersedes it, as evidence rather than an assertion, with a drop or "
         "truncate preferred over an overwrite",

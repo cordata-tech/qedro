@@ -748,7 +748,9 @@ small set of events that branches and shows all of them; `--out erasure.pdf` dra
 and whose `ALTER`, `CREATE` and `RENAME` values are not. An erasure job that emits it
 gives an instant somebody proved. `--since` gives the same instant typed by hand, works
 against any lineage at all, and withholds the mark, because every write below is then
-measured against a date rather than an event.
+measured against a date rather than an event. It does not cut the read: what descends
+from the erased dataset is known from runs before the erasure, and a descendant nothing
+has written since is the one the record most needs to name.
 
 **An overwrite is weaker evidence than a drop or a truncate.** Spark reports
 `OVERWRITE` on every overwriting write, so on a table rewritten nightly most of those

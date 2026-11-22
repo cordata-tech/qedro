@@ -466,7 +466,9 @@ def build(
         dataset=dataset,
         tombstone=tombstone,
         report=report,
-        since=since,
+        # The read is not cut at --since, which is the erasure instant and has its
+        # own line in the scope: the window starts with the earliest event read.
+        since=None,
         until=until,
         depth=depth,
     )
