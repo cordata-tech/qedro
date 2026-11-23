@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.29.0 — 2026-11-23
 
 - **Each step of a provenance chain says what was checked on what it read.** For every
   input, the data quality assertions reported on it after it was last written and up to
@@ -24,6 +24,11 @@ before `1.0`.
 - **The provenance PDF's note under the tree reads as a sentence.** It said each line
   joins a dataset "to one its producing run read"; it now says "to one that its
   producing run read".
+- **The README is a landing page**: the four documents with a picture of each, the ways
+  in (OpenLineage, adapters such as art30-emit, declared activities) as a diagram, and
+  the name and the tombstone explained. The reference it held moved to `docs/`, one page
+  per document, with how events are read in `docs/sources.md` and the name and the
+  design commitments in `docs/about.md`.
 
 ## 0.28.0 — 2026-11-22
 
