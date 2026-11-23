@@ -1,20 +1,28 @@
 %% The README's "How it works" diagram. Draw it again with:
 %%   mmdc -i docs/images/how-it-works.mmd -o docs/images/how-it-works.png -c docs/images/how-it-works.json -b white -s 2
 flowchart LR
-    pipelines["<b>Your pipelines</b><br/>dbt · Airflow · Spark<br/>Flink · your own jobs"]
+    emitters["<b>Pipelines that emit lineage</b><br/>dbt · Airflow · Spark<br/>Flink · Dagster"]
+    wrapped["<b>Your own jobs</b><br/>wrapped by <i>art30-emit</i>,<br/>their code unchanged"]
+    adapters["<b>Other systems</b><br/>an adapter turns their logs<br/>or metadata into events"]
+    declared["<b>Processing with no pipeline</b><br/>SaaS tools, manual steps:<br/>declared in a file"]
     land["<b>Where the events land</b><br/>a directory · S3 · GCS · Azure<br/>Marquez · a Kafka topic"]
     qedro["<b>qedro</b><br/>reads, never writes"]
     docs["<b>Documents</b><br/>Art. 30 record · erasure<br/>provenance · data checks<br/><i>PDF · workbook · Markdown · JSON</i>"]
     mark(["∎ only where every part<br/>stands on evidence"])
 
-    pipelines -- "OpenLineage events" --> land
+    emitters -- "OpenLineage events" --> land
+    wrapped --> land
+    adapters -.-> land
     land -- "read" --> qedro
+    declared -- "marked as declared" --> qedro
     qedro --> docs
     docs -.- mark
 
     classDef box fill:#ffffff,stroke:#1f2933,stroke-width:1.5px,color:#1f2933
+    classDef planned fill:#ffffff,stroke:#7b8794,stroke-width:1.5px,color:#1f2933,stroke-dasharray:4 3
     classDef core fill:#1f2933,stroke:#1f2933,color:#ffffff
     classDef note fill:#f3f5f7,stroke:#9aa5b1,color:#1f2933,stroke-dasharray:3 3
-    class pipelines,land,docs box
+    class emitters,wrapped,declared,land,docs box
+    class adapters planned
     class qedro core
     class mark note

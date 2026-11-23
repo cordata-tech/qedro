@@ -8,7 +8,7 @@
     "edgeLabelBackground": "#ffffff"
   },
   "flowchart": {
-    "curve": "basis",
+    "curve": "linear",
     "padding": 16,
     "nodeSpacing": 40,
     "rankSpacing": 60,

@@ -54,15 +54,28 @@ place qedro reads from.
 
 ## How it works
 
-![Your pipelines, such as dbt, Airflow, Spark, Flink or your own jobs, send OpenLineage events to wherever the events land: a directory, S3, GCS, Azure, Marquez or a Kafka topic. qedro reads them there and never writes. It produces the documents: the Art. 30 record, the erasure record, provenance and data checks, as PDF, workbook, Markdown and JSON, each ending with the mark only where every part stands on evidence.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/how-it-works.png)
+![Four ways into qedro. Pipelines that emit lineage, such as dbt, Airflow, Spark, Flink and Dagster, send OpenLineage events; your own jobs, wrapped by art30-emit with their code unchanged, send them too; and for other systems, an adapter turns their logs or metadata into events. The events land in a directory, S3, GCS, Azure, Marquez or a Kafka topic, where qedro reads them and never writes. Processing with no pipeline, such as SaaS tools or manual steps, is declared in a file that qedro reads and marks as declared. qedro writes the documents: the Art. 30 record, the erasure record, provenance and data checks, as PDF, workbook, Markdown and JSON, each ending with the mark only where every part stands on evidence.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/how-it-works.png)
 
-qedro reads the [OpenLineage](https://openlineage.io) events your pipelines emit, from
-wherever they land, and needs no server of its own. Each value in a document says where
-it came from: an emitted facet, your `qedro.yaml` mapping, or a declaration for
-processing that emits no lineage. Pipelines that say why they process, with the
-`processing` facet ([`art30-emit`](https://github.com/cordata-tech/art30-emit) adds it
-to a job without changing its code), produce a record that stands on evidence.
-[docs/sources.md](docs/sources.md) covers each source.
+You do not need OpenLineage in place already. qedro reads
+[OpenLineage](https://openlineage.io) events, the open standard for what a pipeline
+ran, read and wrote, and there are several ways to get them:
+
+- **Pipelines that already emit them**: dbt, Airflow, Spark, Flink and Dagster do, once
+  their OpenLineage integration is switched on.
+- **Your own jobs**, which emit nothing today:
+  [`art30-emit`](https://github.com/cordata-tech/art30-emit) wraps a job's command and
+  emits what it read and wrote, why it processes, and which code it ran, without
+  changing the job.
+- **Other systems**: an adapter turns their logs or metadata, such as a warehouse's
+  query history, into the same events. Tell us which system you need, in an
+  [issue](https://github.com/cordata-tech/qedro/issues).
+- **Processing with no pipeline at all**, such as a SaaS tool or a manual step: you
+  declare it in a file, and every document marks it as declared rather than evidenced.
+
+The events can land as files in a directory or a bucket you own; qedro needs no server
+of its own, and reads without writing anything back. Each value in a document says
+where it came from, so you can see what rests on evidence and what does not.
+[docs/sources.md](docs/sources.md) covers each place qedro reads from.
 
 ## The mark ∎
 
