@@ -1,13 +1,17 @@
-"""Draw the two images in the README, into `docs/images/`.
+"""Draw the images in the README and `docs/erasure.md`, into `docs/images/`.
 
+- `documents.png`: the first pages of three documents qedro writes, side by side:
+  the Art. 30 record, the provenance of a published dataset and the erasure
+  record, so the top of the README shows what the tool produces before any text.
+  The assertion history has no PDF yet, so it is not among them.
 - `art30-pdf.png`: the first page of two Art. 30 PDFs side by side. The demo's
   two sets of lineage are the same pipelines, identical apart from the
   `processing` facet, so one record earns the mark and the other says why it
   does not — a difference the picture shows faster than a paragraph can.
 - `erasure-tree.png`: the tree the erasure PDF draws, for the example lineage in
-  `docs/examples/erasure`, which `tools/erasure_example.py` writes. It is drawn
-  by the same function the PDF uses, so the README cannot show a diagram the
-  tool does not produce.
+  `docs/examples/erasure`, which `tools/erasure_example.py` writes, at the top of
+  `docs/erasure.md`. It is drawn by the same function the PDF uses, so the docs
+  cannot show a diagram the tool does not produce.
 
     python tools/readme_image.py
 
@@ -33,7 +37,7 @@ from PIL import Image, ImageDraw
 from reportlab.graphics import renderPDF
 
 from qedro import config as config_module
-from qedro import declared, erasure, pdf, render, ropa, vocabulary
+from qedro import declared, erasure, pdf, provenance, render, ropa, vocabulary
 from qedro.sources import read
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -61,6 +65,31 @@ def art30(lineage: str, *, activities: bool) -> bytes:
     entries = declared.load("demo/activities.yaml", vocabulary=words) if activities else ()
     events, report = read(f"demo/{lineage}")
     built = ropa.build(events, config=settings, vocabulary=words, report=report, declared=entries)
+    return render.pdf(built)
+
+
+def provenance_pdf() -> bytes:
+    """The provenance of the demo's dunning cases, as `qedro provenance` writes it."""
+    settings = config_module.load("demo/qedro.yaml")
+    events, report = read("demo/lineage-declared")
+    built = provenance.build(
+        events,
+        dataset="warehouse/billing_curated.dunning_cases",
+        config=settings,
+        report=report,
+    )
+    return render.pdf(built)
+
+
+def erasure_pdf() -> bytes:
+    """The erasure record for the README's example lineage, as a PDF."""
+    events, report = read("docs/examples/erasure")
+    built = erasure.build(
+        events,
+        dataset="warehouse/crm_raw.contacts",
+        config=config_module.parse("controller: ACME Finanz GmbH\n"),
+        report=report,
+    )
     return render.pdf(built)
 
 
@@ -140,6 +169,16 @@ def save(image: Image.Image, name: str) -> None:
 def main() -> int:
     os.chdir(ROOT)
     IMAGES.mkdir(parents=True, exist_ok=True)
+    save(
+        side_by_side(
+            [
+                first_page(art30("lineage-declared", activities=False)),
+                first_page(provenance_pdf()),
+                first_page(erasure_pdf()),
+            ]
+        ),
+        "documents.png",
+    )
     save(
         side_by_side(
             [

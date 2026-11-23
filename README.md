@@ -5,63 +5,33 @@
 [![Python versions qedro runs on](https://img.shields.io/pypi/pyversions/qedro)](https://pypi.org/project/qedro/)
 [![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
-**Turns emitted evidence into the artefacts an auditor asks for.**
+**The GDPR documents an auditor asks for, built from the lineage your pipelines already
+emit, and saying plainly what each one cannot prove.**
 
-Point it at OpenLineage events you already emit. Get back a GDPR Art. 30 record of
-processing activities, an assertion history, the provenance chain from a published
-number to the signed commit that authorised it, and the datasets an erasure had to
-reach, with whether it did.
+Point qedro at your OpenLineage events. It writes your Art. 30 record of processing
+activities, a record of how far an erasure reached, the provenance of a published
+figure, and the history of every data check, as PDF, workbook, Markdown and JSON.
 
-![The first page of two Art. 30 records of the same pipelines, side by side. The left one ends its verdict with the mark; the right one lists three reasons it does not claim to be a proof and tints every activity row whose purpose and legal basis came from a mapping file or a declaration.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/art30-pdf.png)
+![The first pages of three documents qedro writes, side by side. An Art. 30 record of processing activities whose verdict ends with the mark, listing seven activities with purpose, legal basis and where each came from. The provenance of a published dataset, a tree from the dataset back through the runs that produced it, each box naming the job, its commit and the platform, with two reasons the chain is not a proof. An erasure record, a tree of the datasets derived from the erased one, saying in each box whether the erasure reached it, with two tinted boxes it did not reach.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/documents.png)
 
-*The same three weeks of demo lineage, recorded twice with
-`qedro ropa … --out record.pdf`. On the left, the pipelines emitted why they process,
-so every purpose and legal basis is evidence and the record ends with the mark. On the
-right they did not, so those values came from a mapping file and a list of declared
-activities, and the record says it is not a proof and tints each row that is part of
-why. ACME Finanz GmbH, its address and its data protection officer are fictitious, as
-is everything `qedro demo` writes.*
+*Three of the four documents, as `qedro demo`'s lineage produces them: the Art. 30
+record, the provenance of a published dataset, and what an erasure reached.*
 
-![A tree of six datasets descended from warehouse/crm_raw.contacts, erased on 22 July. Each box names its dataset, its state, and what ran it and where it lives, such as dbt on Snowflake or Spark on S3, with an icon for each kind and a legend below: two rebuilt since the erasure, two written without saying how, and two tinted — marketing.audiences, only appended to, and billing_curated.dunning_cases, not written since the erasure. Each edge names the job that derived the dataset below it.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/erasure-tree.png)
+## What you get
 
-*What an erasure reached, from the erasure record's PDF
-(`qedro erasure docs/examples/erasure --dataset crm_raw.contacts --out erasure.pdf`).
-Every dataset derived from the erased one is a box saying, in words, whether a job
-has replaced it since, and, with an icon for each kind, what ran that job and where
-the data lives, as the events
-report it; the tinted ones still hold what the erasure removed upstream.*
+| Document | The question it answers | Command | More |
+|---|---|---|---|
+| **Art. 30 record** | What processing happens, for what purpose, on what legal basis, and how we know | `qedro ropa` | [docs/art30-record.md](docs/art30-record.md) |
+| **Erasure record** | Did an erasure reach every dataset derived from the erased one? | `qedro erasure` | [docs/erasure.md](docs/erasure.md) |
+| **Provenance chain** | Where did this published figure come from, which code made it, which checks ran on its inputs? | `qedro provenance` | [docs/provenance.md](docs/provenance.md) |
+| **Assertion history** | Which data checks ran, on what, and when did they fail? | `qedro quality` | [docs/quality.md](docs/quality.md) |
 
-The GDPR is the EU's data protection regulation, [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj),
-known in German as the *DSGVO*. Its Article 30 requires an organisation that processes
-personal data, or processes it on another's behalf, to keep a written record of its
-processing activities: who is responsible, for what purposes, which categories of people
-and data, who receives it, and more. Supervisory authorities can ask to see that record,
-and Qedro generates the parts of it that lineage can evidence.
-
-```console
-$ qedro ropa ./lineage --since 2026-01-01 --out ropa.xlsx
-  wrote ropa.xlsx                                                              ∎
-```
-
-> [!NOTE]
-> Early development. All four projections work, in five output formats, and the test
-> suite runs against real lineage captured from dbt, Airflow, Spark, Flink and
-> `art30-emit`. `0.x`
-> interfaces may still move between releases, and [`CHANGELOG.md`](CHANGELOG.md) says
-> which.
+Around them: `qedro diff` compares two records, `qedro sign` records who prepared and
+who approved one, with four eyes, and `qedro status --against` says whether a signed
+record still describes what runs ([docs/review.md](docs/review.md)). The AI Act's
+deployer questions are a view of the Art. 30 record, `qedro ropa --view deployer`.
 
 ## Try it
-
-`qedro demo` writes three weeks of dbt, Airflow and Spark lineage from a company that
-does not exist, with no AWS anywhere in it, and prints the commands that run each
-projection against it. It needs nothing but the package, and refuses a directory that
-already has anything in it.
-
-![A 40-second terminal recording. pip installs qedro with the pdf extra into an empty virtual environment; qedro demo writes the fictitious company ACME Finanz GmbH and lists the commands to try; qedro ropa writes the Art. 30 record twice, once from the plain lineage, which prints two reasons it is not a proof, and once from the lineage that declares its purposes, which ends with the mark; qedro erasure writes the erasure record and names the one descendant not written since. The recording ends on the first page of the two Art. 30 PDFs side by side, then the erasure PDF with its tree.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/demo.gif)
-
-*Every command in it runs for real, against qedro as published on PyPI, and the
-pages at the end are the PDFs those commands wrote. `vhs tools/readme_recording.tape`
-and `python tools/readme_recording.py` record it again.*
 
 ```console
 $ pipx install qedro
@@ -70,901 +40,94 @@ $ qedro ropa demo/lineage --config demo/qedro.yaml            # asserted, no mar
 $ qedro ropa demo/lineage-declared --config demo/qedro.yaml   # evidenced      ∎
 ```
 
-The two directories hold the same jobs and the same runs over the same three weeks,
-and differ only in whether the pipelines declare their purpose and lawful basis. That
-is the difference between a record somebody asserts and a record that stands on its own
-evidence. The same files are committed in [`demo/`](demo/), and
-[`demo/README.md`](demo/README.md) walks through them.
+`qedro demo` writes three weeks of dbt, Airflow and Spark lineage from a company that
+does not exist. The two directories hold the same runs and differ only in whether the
+pipelines declare why they process, which is the difference between a record somebody
+asserts and one that stands on its own evidence.
+[`demo/README.md`](demo/README.md) walks through it.
 
-The demo's events are written by a generator. To see qedro read events that real
-emitters sent, [qedro-lab](https://github.com/cordata-tech/qedro-lab) runs Airflow,
-dbt, pipeline-runtime and art30-emit in Docker Compose for the same fictional company,
-and delivers every event to Marquez, Kafka, S3, GCS, Azure and a directory at once, so
-each of the readers below can be tried against the same run.
+![A 40-second terminal recording: pip installs qedro, qedro demo writes the fictitious company ACME Finanz GmbH, qedro ropa writes the Art. 30 record from the plain lineage with two reasons it is not a proof and from the declaring lineage with the mark, and qedro erasure names the one descendant not written since. It ends on the first pages of the PDFs.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/demo.gif)
 
-To run it on your own lineage, [`docs/pilot.md`](docs/pilot.md) covers what you need,
-how to keep a copy of your events when the place they go today cannot give them back,
-and what the first hour produces.
+To see it read events that real emitters sent, [qedro-lab](https://github.com/cordata-tech/qedro-lab)
+runs Airflow, dbt and other emitters in Docker Compose and delivers every event to each
+place qedro reads from.
 
-## The Art. 30 record
+## How it works
 
-`qedro ropa` produces one activity per job, with the purpose and lawful basis that
-job declared — and **where each field came from**. That last part is the difference
-between this and a register somebody maintains by hand:
+```text
+your pipelines      dbt · Airflow · Spark · Flink · your own jobs
+      │  OpenLineage events
+      ▼
+where they land     a directory · S3 · GCS · Azure · Marquez · a Kafka topic
+      │  read only
+      ▼
+qedro           ──▶ PDF · workbook · Markdown · JSON
+```
+
+qedro reads the [OpenLineage](https://openlineage.io) events your pipelines emit, from
+wherever they land, and needs no server of its own. Each value in a document says where
+it came from: an emitted facet, your `qedro.yaml` mapping, or a declaration for
+processing that emits no lineage. Pipelines that say why they process, with the
+`processing` facet ([`art30-emit`](https://github.com/cordata-tech/art30-emit) adds it
+to a job without changing its code), produce a record that stands on evidence.
+[docs/sources.md](docs/sources.md) covers each source.
+
+## The mark ∎
+
+**Q.E.D.**, *that which was to be demonstrated*: Art. 5(2) GDPR obliges a controller to
+be able to **demonstrate** compliance. qedro ends a document with **∎** only when it
+stands on its own evidence, and withholds it, with the reasons, wherever any part rests
+on assertion: a purpose from a mapping file, a domain that produced no lineage, a step
+whose code nobody named. The run still writes the document. Withholding is the signal,
+because a record with invisible holes is worse than none. More in
+[docs/about.md](docs/about.md).
+
+![The first page of two Art. 30 records of the same pipelines, side by side. The left one ends its verdict with the mark; the right one lists three reasons it does not claim to be a proof and tints every activity row whose purpose and legal basis came from a mapping file or a declaration.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/art30-pdf.png)
+
+*The same three weeks of demo lineage, recorded twice. On the left, the pipelines
+emitted why they process, so the record ends with ∎. On the right, the purposes came
+from a mapping file, so the record says it is not a proof and tints each row that is
+part of why.*
+
+## Run it on your lineage
 
 ```console
-$ qedro ropa ./lineage
-Record of processing activities — ACME Finanz GmbH
-  contact: dpo@acme.example
-
-  acme.fraud/transactions-scored-daily
-    purpose       fraud-detection
-    legal basis   legitimate-interest
-    reads         wh/fraud_raw.transactions
-    writes        wh/fraud_curated.scores
-    runs          14 in window, last 2026-03-01T02:15:00+00:00
-
-  acme.fraud/transactions-scored-daily.validate
-    purpose       data-quality-validation (mapping)
-    legal basis   legitimate-interest (mapping)
-    ...
+$ pipx install 'qedro[pdf]'
+$ qedro ropa s3://your-bucket/lineage/ --config qedro.yaml --out ropa.pdf
 ```
 
-A value marked `(mapping)` came from `qedro.yaml` rather than from an emitted facet.
-It is an assertion by whoever wrote the file, not evidence produced by the thing that
-ran, and the tombstone is withheld for the whole record when any entry relies on one.
-
-**Every run states its own scope**, including a run that earns the mark:
-
-```console
-  Scope of this record
-    source        ./lineage
-    window        2026-01-01T00:00:00+00:00 to 2026-03-01T02:15:00+00:00
-    in view       47 jobs, 112 datasets, 1,284 events
-    provenance    41 evidenced, 6 from the mapping file, 0 undeclared
-    Art. 30(1)    this record has fields for (a) the controller and (b) the purposes,
-                  and none for (c) categories of data subjects and of personal data, (d)
-                  categories of recipients, (e) transfers to third countries, (f) time
-                  limits for erasure and (g) security measures
-    domains       fraud, billing guessed from the job namespace
-    silent        marketing (in scope, no lineage)
-    This record covers processing performed by pipelines that emit lineage, and any
-    activities declared with no lineage. Systems that do not emit lineage — CRM, HR,
-    ticketing, marketing tools, anything on paper — are not represented here unless
-    they are declared, a declared activity is an assertion rather than evidence, and
-    the absence of anything else from this record is not evidence of its absence
-    from the organisation.
-```
-
-That paragraph is not boilerplate. Art. 30 covers everything a controller processes,
-and pipelines are a subset of that — so what this produces is a complete record of
-the **pipeline-borne subset** plus whatever has been declared, never the whole thing.
-Printing it only when something went wrong would teach a reader that its absence means
-full coverage.
-
-The `Art. 30(1)` line is the same kind of statement about fields rather than systems.
-Art. 30(1) GDPR lists seven items a controller's record contains, and this record has
-fields for two of them. A record whose every activity is evidenced still earns `∎`,
-because the mark says the record stands on its own evidence, not that it holds every
-item, so the line is printed on every run instead. It states what the record contains
-and does not judge whether that is sufficient. The legal basis the record also prints is
-not one of the seven items. Deriving (c) to (f) from classification is planned for
-v0.3 ([#13](https://github.com/cordata-tech/qedro/issues/13)).
-
-### Orchestration parents are not activities
-
-dbt emits a job for each invocation as well as one per model, and Airflow and Spark
-emit a job for a DAG run or an application run in the same way. When a job's run is
-named as the parent of other runs in view, through the standard OpenLineage
-`ParentRunFacet`, and the job itself read and wrote nothing and declares no purpose,
-it is left out of the activity list and named in the scope statement instead:
-
-```console
-    in view       5 jobs, 4 datasets, 10 events
-    parents       1 job not listed as an activity — a parent run with no datasets and no
-                  processing facet: dbt/dbt-run-dbtprobe
-```
-
-A parent that has datasets of its own, or declares purpose and legal basis, stays
-listed. The match is on the parent's run id, not on the job's name, so nothing depends
-on dbt's naming. A backend that drops the `parent` facet, as Snowflake's external
-lineage does, leaves the invocation listed. The reasoning is on
-[#8](https://github.com/cordata-tech/qedro/issues/8).
-
-A job that read datasets and wrote none stays listed, and is named on its own line.
-Spark's integration emits one such job for each action it runs to infer a schema, and
-the events do not tell those apart from a real job that only reads, such as an export
-or a monitoring count. Which of them is a processing activity is left to the reader:
-
-```console
-    read only     3 activities read datasets and wrote none:
-                  default/orders_enrichment.collect_limit,
-                  default/orders_enrichment.deserialize_to_object,
-                  default/orders_enrichment.map_partitions_parallel_collection
-```
-
-### What the data is
-
-Art. 30(1) asks for more than the purpose. Where the datasets an activity touched carry
-the standard OpenLineage `tags` facet, the record reports what that says: categories of
-personal data, categories of data subjects, where the data sits, and the erasure period
-declared for it.
-
-```console
-  acme.fraud/transactions-scored-daily
-    purpose       fraud-detection
-    legal basis   legitimate-interest
-    categories    financial, behavioural
-    subjects      customer
-    residency     eu
-    retention     7y
-    unclassified  1 of 3 datasets carry no classification: wh/vendor_feed
-```
-
-Three rules make that reportable rather than guessed:
-
-- **Nothing is inferred from a column name.** A column called `email` is not evidence
-  of anything; a category is reported only where something declared it.
-- **A classification is never carried from one dataset to another.** What an activity
-  wrote is the controller's declaration about its own output. The table it read belongs
-  to somebody else, and asserting a category for it would invent evidence.
-- **Unclassified is counted and named.** A dataset nobody classified is *nobody said*,
-  never *no personal data* — the same distinction `quality` keeps between *not checked*
-  and *passed*.
-
-A value outside a closed term is reported and withholds the mark, which is how
-`special_category` works: Art. 9(1) lists exactly eight kinds of data, and an invented
-ninth reaching a record is a defect that looks like data. A *missing* classification
-does not withhold the mark, because that would fire on nearly every run and a mark
-that is always withheld says nothing.
-
-**No OpenLineage integration emits that facet yet**, although the spec has carried it
-since `1-0-0` and both clients generate it. `pipeline-runtime` emits it from the LF-tags
-it resolves, and anything else that can attach a dataset facet can too.
-
-### What only a person can say
-
-Two of the seven Art. 30(1) items are not in any event and never will be: (d) the
-categories of recipients, and (g) the security measures. A recipient is who receives
-data outside the platform, and a security measure is an arrangement rather than
-something that runs. Both can be asserted, in the mapping file for a job that emits
-lineage or in the declared-activities document for one that does not:
-
-```yaml
-jobs:
-  "acme.fraud/transactions-*":
-    recipients:
-      - the group's fraud bureau
-      - the card scheme, for disputed transactions
-    security_measures:
-      - pseudonymised card numbers at rest
-```
-
-Every format marks them `declared`, because there is no evidenced case to tell them
-apart from and an unmarked value would read like the columns beside it. **Asserting
-them does not withhold the mark**: there is no evidence to fall short of, and
-withholding would punish a controller for filling the field in.
-
-The scope statement says the same thing once, for the record as a whole: it has a field
-for all seven items, and *(d) and (g) can only be declared*.
-
-### Declared activities
-
-Processing that emits no lineage — a payroll SaaS, staff using a vendor's assistant,
-anything on paper — can be written into a separate document and passed with
-`--activities`:
-
-```console
-$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --activities demo/activities.yaml
-  payroll-run  (hr)  — declared, no lineage
-    purpose       payroll (declared)
-    legal basis   legal-obligation (declared)
-    reads         no lineage — declared: employee master data, working time records
-    writes        no lineage
-    runs          no lineage
-```
-
-Every field of a declared activity is an assertion, since nothing in the events shows
-the processing happened. Where the events would have supplied a value, the output
-says `no lineage` rather than leaving a blank or printing `0`: a blank reads as
-*touches no data*, and `0` as *ran zero times*, and neither is known. Declared
-activities are counted on their own line in the scope statement and leave the
-evidenced counts unchanged. Any declared activity withholds the mark. The reasoning
-behind each of those choices is recorded on
-[#6](https://github.com/cordata-tech/qedro/issues/6).
-
-### Where each value came from
-
-Every field of an Art. 30 record can say where its value came from in a sentence, built
-only from what the record holds, and which requirement of the regulation the field
-answers ([#48](https://github.com/cordata-tech/qedro/issues/48)):
-
-```console
-$ qedro ropa demo/lineage --config demo/qedro.yaml --explain
-  ...
-Where each value came from
-
-  ...
-  acme.fraud/transactions-scored-daily
-    Purpose: fraud-detection
-      Asserted in demo/qedro.yaml (line 37), rule acme.fraud/transactions-*, because acme.fraud/transactions-scored-daily emitted no purpose in a processing facet. (Art. 30(1)(b) GDPR)
-```
-
-An explanation names the run whose event carried a value, or the mapping rule and its
-line, or the declaration, and never judges whether the value is the right one. Text
-and Markdown add them with `--explain`, to stay readable without. JSON carries them
-under `explain`, the PDF as footnotes under each activity, and the workbook on an
-Explanations sheet; all three quote the regulation's wording once. The requirements
-are a document, `regulations/gdpr.yaml`, loaded at runtime like the vocabulary, and
-`references:` in qedro.yaml points at another one.
-
-### Output
-
-`--format text|markdown|json|xlsx|pdf`, and `--out` to write a file. The format follows
-the filename when you do not say — `--out ropa.xlsx` is a workbook, `--out ropa.md`
-is markdown — and an explicit `--format` always wins.
-
-**xlsx is the one an auditor asks for**, and it is the only output that has to
-survive being forwarded. Two sheets: the activities, and the scope. The verdict
-sits above the table on the first sheet rather than behind it, because a caveat
-below the data is a caveat nobody reads — the same failure this tool exists to
-prevent, reproduced in its own output. Where a value came from is a column of
-words; the tint on a cell is reinforcement and never carries the meaning alone.
-
-**PDF is the version somebody files, prints and signs**, so far for the Art. 30
-record, the erasure record and the provenance chain: `qedro ropa … --out record.pdf`,
-after `pipx install 'qedro[pdf]'`. The verdict comes first. The Art. 30 record then
-lists its activities, and gives each one a table of the Art. 30(1) items with where
-every value came from. The erasure record and the provenance chain draw a tree with
-each box's state written in it — everything descended from the erased dataset, or
-every step back from the published one with its commit and whether that commit was
-signed — and a table of the same rows. Each ends with the scope statement, and the
-same events give the same bytes. The deployer view and the quality history refuse
-`--out *.pdf` with a sentence until their PDFs exist (#37).
-
-### Configuration
-
-`qedro.yaml` beside the working directory, or `--config`. **YAML, JSON and TOML all
-work** — nothing in the tool depends on which you chose.
-
-```yaml
-controller:
-  name: ACME Finanz GmbH
-  contact: dpo@acme.example
-
-domains:            # named here, so a domain that emitted nothing is visible
-  - fraud           # in the output instead of silently absent
-  - marketing
-
-jobs:               # the fallback, for pipelines that emit no facet
-  "acme.fraud/*":
-    purpose: fraud-detection
-    legal_basis: legitimate-interest
-
-platforms:          # labels for the platform line, merged over qedro's own
-  s3: the export bucket
-  cordata:          # a namespace scheme qedro does not know, with the kind
-    label: AWS Glue # that picks its icon in a PDF tree
-    kind: database
-```
-
-Patterns are fnmatch against `namespace/name` and then the bare name, first match in
-file order winning. A facet always beats the file: a config cannot silently rewrite
-what a pipeline emitted.
-
-A job's domain is guessed from the last segment of its namespace, so `acme.fraud` is in
-`fraud`, unless a rule sets `domain:`. The guess fails for an integration that names its
-namespace after itself: openlineage-dbt defaults to `dbt`, which puts every model in a
-domain called `dbt` and makes a declared `orders` look silent. When `domains:` is set,
-the scope statement says which domains were guessed and which came from a rule, and
-the silent-domain reason names the guess, so a wrong guess can be told apart from a
-domain that emitted nothing:
-
-```yaml
-jobs:
-  "dbt/*orders*":
-    domain: orders
-```
-
-### The vocabulary is a document, not an enum
-
-The six Art. 6(1) bases live in a YAML file the tool loads at runtime, not in Python.
-Point `--vocabulary` at your own and the shipped one is replaced wholesale — which is
-what makes an organisation's own ontology possible later without a rewrite. A value
-outside a closed term is flagged and still reported; refusing to read what an emitter
-actually sent would hide the finding that matters.
-
-### The deployer view
-
-`--view deployer` shows the same record per AI use case, answering the questions the
-EU AI Act puts to a deployer — an organisation using a model somebody else built. For
-each activity whose runs reported a model version, it lists the purpose and legal
-basis, the model versions with their run counts, the inputs the latest run read, and
-the span of run records in view:
-
-```console
-$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --view deployer
-  acme.fraud/transactions-scored-daily  (fraud)
-    purpose                  fraud-detection
-    legal basis              legitimate-interest
-    model version            2026-07-fraud-v3    7 runs, 2026-07-20 to 2026-07-26
-                             2026-06-fraud-v2   14 runs, 2026-07-06 to 2026-07-19
-                             reported in the tags run facet
-    ...
-```
-
-The view is built from the Art. 30 record object rather than from the events a second
-time, so each use case holds the record's own purpose and legal basis, with the same
-provenance, and the two views cannot disagree about them. The events supply only what
-the Art. 30 record does not carry: the model version per run, and what each run read.
-The reasoning behind making this a view of `ropa` rather than a separate command is
-recorded on [#7](https://github.com/cordata-tech/qedro/issues/7).
-
-Three limits are stated in every format rather than left to the reader:
-
-- **Art. 26 is context, not a finding.** The inputs a run read are printed as context
-  for Art. 26(4), not as a check that input data is relevant and sufficiently
-  representative, which the view cannot make. The span of run records is printed as
-  context for Art. 26(6), not as a retention policy.
-- **Art. 26 is cited with its condition.** The deployer duties apply to high-risk
-  systems listed in Annex III from 2 December 2027, cited from the consolidated text
-  (CELEX 02024R1689-20260727). Nothing in the events says whether a system is
-  high-risk, so the view does not decide it.
-- **Retention is the span of run records in view**, not a retention policy, which the
-  events do not carry. Art. 26(6) sets a minimum period for logs, and GDPR storage
-  limitation pulls the other way for personal data, so the view reports the span and
-  resolves neither. A short span does not withhold the mark, because withholding it
-  would imply Art. 26(6) applies today.
-- **Declared use cases are marked as declared.** Most AI use outside engineering teams
-  emits no lineage, for example staff pasting text into a vendor's assistant.
-  The view takes declared activities from the Art. 30 record and lists the ones that
-  name a `model`; each is shown as `declared, no lineage` and withholds the mark. A
-  declared activity with no model, such as a payroll SaaS, stays in the Art. 30
-  record and is not an AI use case.
-
-The model version is read from two documented places: the standard OpenLineage `tags`
-run facet with key `model_version`, and `step_params.<step>.model_version` in the
-`cordata_provenance` facet that `pipeline-runtime` emits. An activity whose runs report
-neither is counted in the scope statement and not listed.
-
-## What changed between two records
-
-`qedro diff` compares two JSON records with no database between them — a before and
-an after a team keeps in Git. It reports the thing neither document shows on its own:
-
-```console
-$ qedro ropa ./lineage --format json --out records/2026-06.json
-$ qedro ropa ./lineage --format json --out records/2026-09.json
-$ qedro diff records/2026-06.json records/2026-09.json
-
-  acme.fraud/transactions-scored-daily
-    purpose       fraud-detection, unchanged
-                  evidence lost: emitted facet → mapping file
-```
-
-The purpose is the same string in both records, and the claim behind it is not. A
-pipeline that stopped emitting its facet still produces a record that reads
-correctly; what it stopped producing is the evidence, and only a comparison can say
-so. The same applies to a cloud migration: the before-and-after legal asks for is two
-records, not a database.
-
-**A diff prints no mark.** ∎ means *this artefact stands on its own evidence*, and a
-comparison's evidence is two documents it cannot verify — so it reports each record's
-own verdict and none of its own. It also says first whether the two records cover the
-same source and window, because a difference in coverage otherwise reads as a
-difference in processing.
-
-### Or a register against the record
-
-Hand one side a register instead of a record and the same command reports where the
-two disagree — which is the AI governance programme's spreadsheet checked against what
-the pipelines actually did:
-
-```console
-$ qedro diff demo/register.yaml record.json
-
-  acme.crm/customers-curated  — crm-enrichment, Customer Platform, S. Okafor
-    purpose       register: marketing · record: customer-administration
-                  the register contradicts the evidence
-```
-
-Which side rests on evidence is the finding. A register contradicting an emitted facet
-means the register is wrong or the pipeline is doing something nobody wrote down; two
-hand-maintained documents disagreeing means somebody has to decide; and a register
-naming a model no run ever reported is a claim nothing can check. Every finding carries
-the owner of the register row, because a report whose reader has to go and ask around
-for that has done half the job.
-
-A field the register does not carry is not a disagreement — a register is a partial
-document by nature, and reporting everything it omits would bury the findings that
-matter. See [`docs/evidence/register-drift.md`](docs/evidence/register-drift.md) for
-the whole thing, captured from a real run.
-
-## Signing a record off
-
-A record of processing activities is the controller's document, and a person signs it.
-`qedro sign` keeps who accepted which version, and when, in a file beside the record's
-JSON:
-
-```console
-$ qedro ropa ./lineage --out record.json
-$ qedro sign record.json --as "Max Mustermann" --state "for sign-off"
-  record.json: waiting for sign-off, requested by Max Mustermann on 2026-11-17
-$ qedro sign record.json --as "Erika Mustermann" --state approved --note "reviewed with the data team"
-  record.json: approved by Erika Mustermann on 2026-11-17, prepared by Max Mustermann on 2026-11-17 — reviewed with the data team
-$ qedro status .
-  record.json  ropa        mark earned    approved by Erika Mustermann on 2026-11-17, prepared by Max Mustermann on 2026-11-17 — reviewed with the data team
-```
-
-The states are *draft*, *for sign-off*, *approved* and *published*, one step forward at
-a time or back to draft, and `record.signoff.json` is only ever added to. Each entry
-names the SHA-256 of what the record *states*: the controller, each activity's purpose,
-legal basis, categories, recipients and the datasets it reads and writes, and the
-verdict with its reasons. Run counts, timestamps, the window, the qedro version and
-display fields are left out, so a record rebuilt tomorrow over new runs of the same
-pipelines, or by a newer qedro, is still covered, while one that states anything
-different is not: `qedro status` then reports it as not signed off, naming the earlier
-sign-off. The covered fields are an explicit list per projection with a version, which
-each entry records, so an upgrade never reopens an approval by accident. Kept in Git,
-the file's history is the audit trail.
-
-`--signoff record.signoff.json` on any projection prints where the record it builds
-stands, under the verdict, in every format. **A sign-off is a person's acceptance of
-the record, not evidence:** it never earns or withholds the mark, and every format says
-so beside it.
-
-### Four eyes: a second person approves
-
-The person who sends a version for sign-off is its preparer, and `qedro sign --state
-approved` refuses when the approver's name is the preparer's, in a sentence naming
-both. Names are compared ignoring case and spacing. Every format prints both names
-beside the verdict, and the JSON carries `prepared_by`, `approved_by` and
-`second_person`. A team where one person does both says so once, where the records
-live:
-
-```yaml
-# qedro.yaml
-signoff:
-  four_eyes: false
-```
-
-The approval then stands and says *with no second person: Erika Mustermann also
-prepared it*, and `qedro status` counts such approvals, in its text and as
-`approved_without_second_person` in its JSON. Approvals made before 0.25 are read the
-same way, so one where a single person did both is counted rather than hidden.
-
-What this can prove is limited by where the names come from. `--as` is whatever the
-person running the command types, so four eyes here catches a mistake — the preparer
-approving their own record out of habit — and does not stop someone typing a
-colleague's name. The signed Git commit that added an entry identifies its signer by
-key, and an identity provider would identify them by login; either could stand behind
-these names later, and which one is a question for
-[#19](https://github.com/cordata-tech/qedro/issues/19). Until then the sign-off file's
-Git history, with signed commits, is the stronger record of who did what.
-
-### Whether a signed record still describes what runs
-
-A signed record describes the pipelines on the day it was signed. `qedro status
---against` builds a fresh record from the lineage, as `qedro ropa` would, and compares
-every signed Art. 30 record with it, one activity at a time
-([#42](https://github.com/cordata-tech/qedro/issues/42)):
-
-```console
-$ qedro status records --against ./lineage --config qedro.yaml
-  fraud.json  approved by Max Muster on 2026-11-19
-    stale       acme.billing/dunning-weekly
-                  purpose: debt-collection, unchanged — evidence lost: emitted facet → mapping file
-    new         payroll-run
-    up to date  acme.billing/invoices-nightly, acme.crm/consent-sync, …
-
-  1 signed record: 6 up to date, 1 stale, 1 new, 0 blocked
-```
-
-*Stale* means something the record states has changed since it was signed, and names
-it, including a value that is the same string resting on weaker evidence. *New* is an
-activity the fresh run has and the signed record does not. A job that only ran again
-is up to date: the comparison is `qedro diff`'s, over what a record states, never its
-run counts or timestamps. *Blocked* means no comparison could be made, and the reason
-is always printed: a fresh run that read no events blocks every signed record rather
-than reading as a platform where every job stopped. A fresh run over a different source
-or window says so above its findings, since an activity missing from one may never
-have been in it.
-
-`--regenerate --as NAME` turns the stale and new activities into a version to review
-([#55](https://github.com/cordata-tech/qedro/issues/55)): for each signed record that
-changed, it writes the fresh record beside it as `record.next.json` and adds a *for
-sign-off* entry for that version, by NAME, naming what changed. The signed record and
-its entries are left exactly as they were. `record.next.json` shares the record's
-sign-off file, so `qedro sign record.next.json --state approved` adds to the same
-history, and replacing `record.json` with it afterwards keeps the approval:
-
-```console
-$ qedro status records --against ./lineage --config qedro.yaml --regenerate --as "Laszlo"
-  ...
-    wrote fraud.next.json, sent for sign-off by Laszlo
-$ qedro sign records/fraud.next.json --as "Erika Mustermann" --state approved
-```
-
-`--format json --out records/status.json` writes the same as a document: each record,
-its verdict and sign-off, and with `--against` each activity's state and what changed,
-in the words the text uses, for a reader such as a console that shows which signed
-records have gone stale.
-
-## The assertion history
-
-`qedro quality` reports what was actually checked about each dataset, and when — and
-it gives equal weight to what was not:
-
-```console
-$ qedro quality demo/lineage --config demo/qedro.yaml
-  warehouse/fraud_curated.transactions_scored  (fraud)
-    asserted by   acme.fraud/scores-validated
-    runs          20 in window, last 2026-07-26T02:51:00+00:00
-    expectations  5 — 4 held, 1 failed
-      held    expect_column_values_to_be_unique on tx_id           20 runs
-      FAILED  expect_table_row_count_to_be_between                 20 runs, 2 failed, last 2026-07-15
-
-  Not checked — 10 datasets carry no assertions at all
-    warehouse/billing_raw.orders
-    ...
-```
-
-**A dataset with no failures and a dataset with no checks look identical in every
-summary anybody writes, and they are opposites.** So the unchecked list is half the
-artefact rather than a footnote, and it is a reason the mark is withheld.
-
-A *failing* expectation is not. The mark says this account of what was checked is
-complete, not that the data is good — and withholding it for a failure would give
-somebody a reason to stop emitting the assertion that fails.
-
-The evidence is the standard OpenLineage `dataQualityAssertions` facet, which Great
-Expectations already emits. Nothing Cordata-specific is involved.
-
-`--domain fraud` narrows it, repeatably, and `--days 90` is shorthand for the window.
-The scope statement names the filter and says how many datasets it left out and in
-which domains, because a dataset's domain is often guessed from the job namespace, and
-a dataset left out by a wrong guess would otherwise look like one that does not exist:
-
-```console
-    filter        --domain orders left out 4 datasets: 4 in dbt (guessed from the job
-                  namespace)
-```
-
-A filter that leaves some datasets out does not withhold the mark. One that leaves out
-every dataset says so, instead of reporting that nothing was found.
-
-## The provenance chain
-
-`qedro provenance` answers the question a published number provokes — where did this
-come from, and who authorised it? It walks backwards: the run that produced the
-dataset, the code that run executed, the commit it was at, and then the same for
-everything that run read.
-
-```console
-$ qedro provenance demo/lineage --dataset billing_curated.dunning_cases
-  warehouse/billing_curated.dunning_cases
-    produced by   acme.billing/dunning-weekly
-    platform      dbt · PostgreSQL
-    code          https://github.com/acme-finanz/data-platform at b7eb23bd289c
-                  main models/billing/dunning_cases.sql
-    signature     signature unknown — nothing reported it
-    source        publisher unknown — nothing reported it
-
-    warehouse/billing_curated.invoices
-      produced by   acme.billing/invoices-nightly
-      ...
-
-      warehouse/crm_raw.accounts
-        — nothing in the window produced it
-```
-
-**Unknown is not unsigned.** OpenLineage has a standard place for the code identity —
-`sourceCodeLocation`, which dbt, Airflow and Spark all emit — and no standard place at
-all for whether that commit was signed. So silence is reported as a third state. It
-withholds the mark exactly as a failed signature would, and it is never rendered as
-one: saying *this ran under an unsigned commit* when nobody reported either way would
-be inventing evidence.
-
-**A chain that ends is not a chain that is complete.** The walk stops for three
-different reasons — a genuine source dataset, a producing run outside the window, or
-the depth limit — and each is counted and named, because in the output they look
-identical.
-
-**The `source` line is one hop further out than the commit.** A published number
-usually depends on data somebody else's application wrote, and where the events say
-so, the step names the application release behind what the run read rather than only
-the commit behind the pipeline. Unknown there is counted in the scope statement and
-does not withhold the mark: the chain claims authorisation, and a missing publisher
-says nothing about that. There is no standard facet for it — `datasetVersion` says
-which version a run read without saying who published it — so today only
-`pipeline-runtime` reports it.
-
-**The `platform` line says what ran the step and where its output lives**, as the
-events say: the integration from the standard `jobType` facet, or from the `producer`
-URL, and the platform from the dataset's namespace (`snowflake://…`, `s3://…`) or its
-`dataSource` facet. Nothing is guessed from a name, so where the events say neither
-the line reads *not reported*. A namespace written as a URI is not always a platform
-— pipeline-runtime's `cordata://fraud` names a domain — so a scheme qedro has no label
-for is left out rather than printed; `platforms:` in `qedro.yaml` gives it one.
-
-**The `checks` line says what was checked on each input as the step read it**: the
-`dataQualityAssertions` reported on that input after it was last written and up to the
-end of the step's run, one result per check, whether a check job ran them before the
-step or the step ran them itself. An input nothing checked says so. A failed check is
-stated and does not withhold the mark, for the reason the assertion history gives: the
-chain's mark says where the figure came from rests on evidence, not that the data was
-good. The scope statement counts the inputs that carried checks.
-
-Nothing here calls a forge API to resolve a commit. Read-only is a property of what
-the code can reach.
-
-## Proving an erasure reached what was derived from it
-
-Art. 17 needs three things and this does one of them. Finding where a subject's data
-lives is a catalog's job; deleting it is an orchestrator's, and never this tool's.
-Proving it happened — and saying where the proof does not reach — is what lineage is
-actually for, because every failure mode is a derived dataset somebody forgot: the
-materialised view, the monthly rollup, the vector index that already ingested the row.
-
-`qedro erasure` walks the graph forwards from the erased dataset:
-
-```console
-$ qedro erasure demo/lineage-declared --dataset crm_raw.contacts
-Erasure of warehouse/crm_raw.contacts
-
-    tombstone     2026-07-22T09:18:00+00:00 — emitted overwrite, not a drop or truncate
-
-    warehouse/crm_curated.customers
-      platform      dbt · PostgreSQL
-      state         written 2026-07-26T01:36:00+00:00 — 4 runs since the tombstone
-      how           not reported, so not shown to have replaced the contents
-
-      warehouse/billing_curated.invoices
-        platform      Airflow · PostgreSQL
-        state         written 2026-07-26T04:06:00+00:00 — 4 runs since the tombstone
-        how           not reported, so not shown to have replaced the contents
-
-        warehouse/billing_curated.dunning_cases
-          platform      dbt · PostgreSQL
-          state         not written since the tombstone
-
-  this record does not claim to be a proof:
-    ! 1 of 3 descendants has not been written since the tombstone:
-      warehouse/billing_curated.dunning_cases
-```
-
-The weekly dunning job has not run since the erasure, so one branch of the closure is
-a place the proof does not reach. **That list is the output.** A record where
-everything had been written in time would be a record nobody needs.
-
-**A write is not necessarily a replacement.** An incremental model adds to a table on
-each run and leaves what it held before the erasure where it was. qedro counts a
-descendant as **rebuilt** where the event says the contents were replaced — an
-`OVERWRITE`, `TRUNCATE` or `DROP` lifecycle state, or dbt's `table` or `view`
-materialisation — and as **only appended to** where dbt says `incremental` or
-`snapshot`, which withholds the mark and names the dataset. Most emitters say neither,
-and then the descendant is counted as **written**, with a line saying how it was
-written was not reported. dbt does not report `--full-refresh`, so a full refresh of an
-incremental model reads as an append, which errs toward withholding.
-
-The demo's erasure is a straight chain, so it shows two of those states. The tree at
-the top of this page is the same projection run against `docs/examples/erasure`, a
-small set of events that branches and shows all of them; `--out erasure.pdf` draws it.
-
-**The tombstone is evidence or an assertion.** OpenLineage already has the facet —
-`lifecycleStateChange`, whose `DROP`, `TRUNCATE` and `OVERWRITE` values are erasures
-and whose `ALTER`, `CREATE` and `RENAME` values are not. An erasure job that emits it
-gives an instant somebody proved. `--since` gives the same instant typed by hand, works
-against any lineage at all, and withholds the mark, because every write below is then
-measured against a date rather than an event. It does not cut the read: what descends
-from the erased dataset is known from runs before the erasure, and a descendant nothing
-has written since is the one the record most needs to name.
-
-**An overwrite is weaker evidence than a drop or a truncate.** Spark reports
-`OVERWRITE` on every overwriting write, so on a table rewritten nightly most of those
-events are routine. qedro counts the completed runs that dropped, truncated or
-overwrote the dataset, prefers a drop or truncate where there is one, and with
-`--since` takes the first after it — the first run that could have carried out the
-request. Without `--since` it takes the latest, and withholds the mark when that is one
-of several overwrites, since nothing then says which run was the erasure.
-
-**It reports datasets, not rows.** It can show that a dataset descends from the erased
-one and that a job wrote it afterwards. It cannot show that a particular data
-subject's rows are gone, because no lineage event carries that — and a tool that blurred
-the two would be producing the artefact this project exists to argue against. The
-sentence is in the scope statement of every run, including one that earns the mark.
-
-## The reader
-
-Worth running on its own before anything else — it tells you whether your lineage is
-readable at all:
-
-```console
-$ qedro events ./lineage
-  1,284 events · 37 jobs · 112 datasets · 14 files                             ∎
-  complete 641, start 641, fail 2
-```
-
-Point it at a directory of `.json`, `.ndjson` or `.jsonl`. It reads newline-delimited
-events, JSON arrays and single objects without being told which, walks nested
-directories, and never stops on a bad record — malformed events are counted and
-reported rather than thrown.
-
-Or point it at a bucket. An `s3://`, `gs://` or `az://` prefix is read with the same
-rules as a directory, using the credentials your environment already has, once the
-extra for that cloud is installed — `pipx install 'qedro[s3]'`:
-
-```console
-$ qedro events s3://acme-lineage/openlineage/
-```
-
-Or point it at a Marquez-compatible API and it reads the same events over HTTP:
-
-```console
-$ qedro events https://marquez.internal --since 2026-01-01
-  4,102 events · 37 jobs · 112 datasets · 42 pages                             ∎
-```
-
-Any spelling of the address works — a bare host, `.../api/v1`, or the full endpoint.
-The window is passed to the backend as a query and **applied again to what comes
-back**, so a backend that ignores it still produces a correct result rather than a
-quietly wider one. Reading stops after 10,000 events, and says so, rather than
-returning a prefix of the history that looks like all of it.
-
-The HTTP source is read-only by construction: GET is the only verb the code can
-build. If the backend needs a token, it comes from `QEDRO_API_TOKEN` and never from
-the command line, where it would land in shell history and in `ps`.
-
-Or point it at a Kafka topic, once `pipx install 'qedro[kafka]'` has added the client
-the OpenLineage Python transport itself uses:
-
-```console
-$ qedro events kafka://broker:9092/openlineage.events --since 2026-11-01
-```
-
-Reading a topic moves nobody's position on it: qedro assigns partitions rather than
-joining a consumer group, and never commits an offset. `--since` starts each partition
-at the offset the broker's timestamp index gives for that time, and the read stops at
-the end the topic had when it began. A topic keeps events only as long as its retention,
-so when the window starts before the oldest event it still holds, the record says from
-when it holds them and does not claim to be a proof. Authentication and TLS settings
-come from `QEDRO_KAFKA_*` variables in librdkafka's own names —
-`QEDRO_KAFKA_SECURITY_PROTOCOL=SASL_SSL` is `security.protocol` — and a setting that
-would commit or join a group is refused. The client's own logging is off unless
-`QEDRO_KAFKA_LOG_LEVEL=7` turns it on; a broker that cannot be reached is named in
-qedro's summary either way.
-
-If anything was unusable the tombstone is withheld and the reason goes to stderr:
-
-```console
-$ qedro events ./lineage
-  1,282 events · 37 jobs · 112 datasets · 14 files
-  complete 640, start 641, fail 1
-  ! 2 records were not usable OpenLineage events
-```
-
-Use `--no-symbol`, or `QEDRO_NO_SYMBOL=1`, where U+220E has no glyph.
-
-## The Art. 30 facet
-
-Lineage answers *what happened*. Art. 30(1)(b) asks for the **purposes of the
-processing**, and no graph of jobs and datasets contains them — whether a customer
-table is processed under consent or under legitimate interest is not derivable, it has
-to be declared by someone who knows.
-
-So this repository publishes the declaration as an OpenLineage job facet:
-[`schemas/openlineage-art30-processing-facet.json`](schemas/openlineage-art30-processing-facet.json),
-documented in [docs/art30-facet.md](docs/art30-facet.md). Two fields, `purpose` and
-`legal_basis`, under the `processing` key. Nothing in it is Cordata-specific; any
-emitter that can attach a custom job facet can produce it.
-
-The schema is **generated** from `pipeline_runtime.descriptor.Processing` rather than
-written beside it, and a test fails when the two diverge. One governance model with
-several consumers is a claim this project makes in public, so a consumer that quietly
-restates the model would be a counterexample sitting in the repository the claim
-cites.
-
-## The name
-
-**Q.E.D.** — *quod erat demonstrandum*, "that which was to be demonstrated". The phrase
-that closes a proof.
-
-It is not decoration. [Art. 5(2) GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj)
-places a duty on the controller to be able to **demonstrate** compliance — not to
-achieve it quietly, but to show it on request. That is a *demonstrandum*, and producing
-it from evidence rather than from assertion is the entire job of this tool.
-
-Mathematicians stopped writing Q.E.D. some time ago. Paul Halmos borrowed a solid square
-from magazine typography instead, and it became standard — the **tombstone**, or *halmos*.
-It is [U+220E END OF PROOF](https://en.wikipedia.org/wiki/Q.E.D.#Typography), **∎**.
-
-The wordmark puts it where the final letter would go:
-
-```
-QEDR∎
-```
-
-And it means something at runtime. **The CLI prints `∎` only when the artefact stands on
-its own evidence** — never when a job fell back to a mapping file for its `purpose`, and
-never when a domain in scope produced no lineage in the window. The run still succeeds
-and still writes the file; it simply does not claim to be a proof.
-
-So a complete run finishes the product's name.
-
-## Why this exists
-
-A compliance artefact with holes in it is worse than none, because the holes are
-invisible. A RoPA assembled by hand from a wiki, a Confluence page and somebody's memory
-looks exactly like one derived from what the platform actually did.
-
-The argument is set out across four posts on [cordata.tech](https://cordata.tech):
-
-- [Fabric + Mesh on AWS](https://cordata.tech/en/blog/fabric-mesh-on-aws) — the account topology and the LF-tag ontology
-- [Behaviour-first governance in practice](https://cordata.tech/en/blog/behaviour-first-governance-in-practice) — governance artefacts as byproducts of behaviour
-- [A pipeline is a descriptor, not a program](https://cordata.tech/en/blog/pipelines-as-descriptors) and [part 2](https://cordata.tech/en/blog/pipeline-half-openlineage-gx) — the evidence a pipeline emits
-- [The catalog is the API](https://cordata.tech/en/blog/governed-mesh-over-mcp) — the read path over that evidence
-
-This is the part those posts stop short of: the code that reads the evidence and produces
-the artefact.
-
-## What this is not
-
-**It is not legal advice, and it does not decide compliance.** It reports what the
-events say and where each value came from. Whether the resulting record satisfies an
-obligation is a judgement for whoever is accountable for it — a data protection officer,
-legal counsel, a supervisory authority — and the artefact is written to support that
-judgement rather than to stand in for it. Where an article is named in the output, it
-says which field the record holds, never that the article is satisfied.
-
-**The record is the controller's, not the tool's.** Art. 30 puts the duty on the
-controller, and a generated record is a draft until somebody with that responsibility
-reviews and signs it. The tombstone means *this artefact stands on its own evidence*,
-which is a statement about provenance, not an approval.
-
-**It covers the processing that emits lineage.** Every record says so, and says which
-Art. 30(1) items it has fields for — today (a) the controller and (b) the purposes.
-Anything that emits no lineage appears only if it is declared, and a declared activity
-is an assertion rather than evidence.
-
-**It is early software.** `0.x` interfaces move between releases, the changelog says
-which, and [Apache-2.0](LICENSE) carries no warranty.
-
-## Design commitments
-
-**No adoption required.** It reads OpenLineage from a directory of JSON or a
-Marquez-compatible API. dbt, Airflow, Spark, Flink and Dagster already emit it. Nothing
-here needs Cordata's descriptor model, though richer facets produce richer output.
-
-**Not bound to one cloud.** Classification is a source-neutral vocabulary; LakeFormation
-LF-tags are one adapter alongside GCP Data Catalog policy tags and Purview
-classifications. If `qedro ropa` cannot run against a Marquez instance with no AWS
-anywhere in the picture, the neutrality is decorative — so that is an actual test
-(`tests/test_cli.py::TestRopaAgainstAnApi`), not an aspiration.
-
-**Flexible by construction, everywhere it is cheap to be.** Multi-cloud, multi-pipeline,
-multi-format. Sources are a directory, an S3, GCS or Azure prefix, or any
-Marquez-compatible API; config and
-vocabulary documents are YAML, JSON or TOML; facets stay raw dictionaries so an emitter
-nobody anticipated still arrives intact. Each of these was chosen at the point where
-picking one option would have cost nothing today and a rewrite later.
-
-**The vocabulary is data, not types.** Organisations define their own ontologies. Nothing
-is compiled against a fixed set of sensitivity levels.
-
-**Read-only by construction.** No write path, no credentials that could acquire one.
+[`docs/pilot.md`](docs/pilot.md) covers what you need, how to keep a copy of your events
+when the place they go today cannot give them back, and what the first hour produces.
+[`docs/compatibility.md`](docs/compatibility.md) lists what qedro runs against.
+
+## Commitments
+
+- **Read-only.** No write path, and no credential that could acquire one.
+- **Not bound to a cloud or a catalogue.** Classification sources are adapters; the
+  record runs against a Marquez instance with no cloud at all.
+- **Vocabularies and regulation texts are data**, loaded at runtime, so an organisation
+  can use its own.
+- **Not legal advice.** A document reports what the events say and where each value
+  came from; whether it meets an obligation is for the person accountable for it.
 
 ## Documentation
 
 | | |
 |---|---|
-| [`demo/README.md`](demo/README.md) | the three tiers, walked through against a real estate |
-| [`docs/art30-facet.md`](docs/art30-facet.md) | the Art. 30 facet, for anyone who wants to emit it |
-| [`docs/compatibility.md`](docs/compatibility.md) | what this runs against, and what it does not |
-| [`docs/pilot.md`](docs/pilot.md) | a first run against your own lineage, and keeping a copy of your events to run it on |
-| [`docs/evidence/`](docs/evidence/) | captured runs that published writing quotes, and how each was produced |
-| [`CHANGELOG.md`](CHANGELOG.md) | what changed, in the words of somebody deciding whether to upgrade |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | scope, and the four commitments that must not erode |
-| [`SECURITY.md`](SECURITY.md) | what the tool can reach, by construction |
+| [docs/art30-record.md](docs/art30-record.md) | the Art. 30 record: what it reads, what only a person can say, output and configuration, the deployer view |
+| [docs/review.md](docs/review.md) | comparing records, signing them off with four eyes, and whether a signed record still describes what runs |
+| [docs/provenance.md](docs/provenance.md) · [docs/quality.md](docs/quality.md) · [docs/erasure.md](docs/erasure.md) | the other three documents |
+| [docs/sources.md](docs/sources.md) | every place qedro reads OpenLineage from |
+| [docs/art30-facet.md](docs/art30-facet.md) | the `processing` facet, for anyone who wants to emit it |
+| [docs/pilot.md](docs/pilot.md) · [docs/compatibility.md](docs/compatibility.md) | a first run on your own lineage, and what it runs against |
+| [docs/about.md](docs/about.md) | the name, why qedro exists, what it is not, and the design commitments in full |
+| [docs/evidence/](docs/evidence/) | captured runs that published writing quotes |
+| [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) | changes, contributing, and what the tool can reach |
+
+Early development: every document is written as text, Markdown, JSON and a workbook,
+and all but the assertion history as PDF, and the tests run against lineage captured
+from real dbt, Airflow, Spark, Flink and `art30-emit` runs. `0.x` interfaces may still
+move, and the changelog says which.
 
 ## Licence
 

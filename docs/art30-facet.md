@@ -150,7 +150,7 @@ That is the path where the artefact stands on its own evidence, and it is the on
 path that earns the tombstone. Where the facet is absent, a purpose can be supplied by
 a mapping file instead — and the run then **withholds the mark**, because a purpose
 that came from a configuration file is an assertion rather than a proof. Withholding
-is the signal; see the [README](../README.md#the-name).
+is the signal; see the [README](about.md#the-name).
 
 Emitters that produce OpenLineage but not this facet — dbt, Airflow, Spark, Flink,
 Dagster — work either way. Richer facets produce a richer record, and the difference
