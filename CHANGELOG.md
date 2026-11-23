@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.30.0 — 2026-11-23
 
 - **A job that processes no personal data can be left out of the Art. 30 record.** A
   `jobs:` rule with `out_of_scope: <why>` leaves the jobs it matches out of the
