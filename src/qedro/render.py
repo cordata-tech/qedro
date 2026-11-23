@@ -1045,6 +1045,11 @@ def _step_text(step, indent: str) -> list[str]:
     # unknown, because a line that appears only when populated teaches a reader
     # that its absence means there was nothing to report. See #25.
     out.append(f"{indent}source        {p.published.describe()}")
+    # What was checked on each input as this run read it (#64), one line each,
+    # including an input nothing checked: an absent line would read as nothing to say.
+    for i, checked in enumerate(p.checks):
+        label = "checks" if i == 0 else ""
+        out.append(f"{indent}{label:<14}{checked.dataset}: {checked.describe()}")
     if step.also_produced_by:
         out.append(
             f"{indent}also          {words.count(step.also_produced_by, 'other run')} "
@@ -1059,8 +1064,11 @@ def _step_text(step, indent: str) -> list[str]:
 def _(record: provenance_module.Record) -> str:
     out = [f"# Provenance of `{record.dataset}`", ""]
     out += [
-        "| Depth | Dataset | Produced by | Platform | Commit | Signature | Source published by |",
-        "|---|---|---|---|---|---|---|",
+        (
+            "| Depth | Dataset | Produced by | Platform | Commit | Signature "
+            "| Source published by | Checks on what it read |"
+        ),
+        "|---|---|---|---|---|---|---|---|",
     ]
     for step in record.steps:
         if step.production:
@@ -1068,14 +1076,20 @@ def _(record: provenance_module.Record) -> str:
             out.append(
                 f"| {step.depth} | `{step.dataset}` | `{p.job}` | {_platform(p.stack)} "
                 f"| {p.code.short or '—'} | {p.signature.describe()} "
-                f"| {p.published.describe()} |"
+                f"| {p.published.describe()} | {_checks_markdown(p)} |"
             )
         else:
-            out.append(f"| {step.depth} | `{step.dataset}` | — | — | — | — | _{step.ended}_ |")
+            out.append(f"| {step.depth} | `{step.dataset}` | — | — | — | — | _{step.ended}_ | — |")
 
     out += _scope_markdown(record.scope)
     out += _verdict_markdown(record, "Every step ran under a signed commit.", withheld="chain")
     return "\n".join(out)
+
+
+def _checks_markdown(production) -> str:
+    if not production.checks:
+        return "—"
+    return "; ".join(f"`{c.dataset}`: {c.describe()}" for c in production.checks)
 
 
 @json.register
@@ -1137,6 +1151,26 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
                         "source": s.production.published.describe(),
                         "platform": s.production.stack.describe() or "not reported",
                     },
+                    # What was checked on each input as this run read it (#64):
+                    # beside the fields a sign-off covers, so no approval reopens.
+                    "checks": [
+                        {
+                            "dataset": c.dataset,
+                            "checks": [
+                                {
+                                    "assertion": k.assertion,
+                                    "column": k.column,
+                                    "success": k.success,
+                                    "job": k.job,
+                                    "run_id": k.run_id,
+                                    "when": _when(k.when),
+                                }
+                                for k in c.checks
+                            ],
+                            "describe": c.describe(),
+                        }
+                        for c in s.production.checks
+                    ],
                 },
             }
             for s in record.steps
@@ -1153,6 +1187,9 @@ def _(record: provenance_module.Record, *, indent: int = 2) -> str:
             "ends_unproduced": record.scope.ends_unproduced,
             "ends_at_depth": record.scope.ends_at_depth,
             "depth_limit": record.scope.depth_limit,
+            "inputs": record.scope.inputs,
+            "inputs_checked": record.scope.inputs_checked,
+            "inputs_failed": record.scope.inputs_failed,
             "passed_over": list(record.scope.passed_over),
             "duplicates": record.scope.duplicates,
             "read": _read_json(record.scope.read),

@@ -933,6 +933,8 @@ PROVENANCE_COLUMNS: tuple[tuple[str, int], ...] = (
     # One hop further out than the commit: the application release behind
     # the data the run read, rather than behind the pipeline itself.
     ("Source published by", 40),
+    # What was checked on each input as the run read it (#64).
+    ("Checks on what it read", 60),
     ("Chain ends", 44),
 )
 
@@ -999,6 +1001,7 @@ def _chain(sheet: Any, record: ProvenanceRecord) -> None:
             p.code.path if p else "",
             p.signature.describe() if p else "",
             p.published.describe() if p else "",
+            "; ".join(f"{c.dataset}: {c.describe()}" for c in p.checks) if p else "",
             step.ended,
         )
         for index, value in enumerate(values, start=1):

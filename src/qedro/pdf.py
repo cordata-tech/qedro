@@ -786,6 +786,8 @@ def provenance_document(record: Any) -> bytes:
                     f"source: {p.published.describe()}",
                     f"platform: {p.stack.describe() or 'not reported'}",
                 ]
+                # What was checked on each input as this run read it (#64).
+                lines += [f"checks on {c.dataset}: {c.describe()}" for c in p.checks]
                 if step.also_produced_by:
                     n = step.also_produced_by
                     lines.append(f"also: {n} other {'run' if n == 1 else 'runs'} wrote this")

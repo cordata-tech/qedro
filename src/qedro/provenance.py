@@ -43,8 +43,9 @@ from . import stack as stack_module
 from .config import Config, Controller
 from .events import Event
 from .mark import Completeness
+from .quality import Check, once_per_run, reported_checks
 from .signoff import Standing
-from .sources import ReadReport, read_facts
+from .sources import ReadReport, read_facts, utc
 from .words import count, plural
 
 #: The standard OpenLineage job facet naming the code that ran. dbt, Airflow
@@ -198,6 +199,38 @@ class Published:
 
 
 @dataclass(frozen=True)
+class InputChecks:
+    """The checks reported on one input of a run, as it was when the run read it.
+
+    Those reported after the input was last written and up to the end of the run,
+    one result per check: the latest. A check running as its own job before the
+    step, as a pipeline's data checks often do, counts as much as one the step ran
+    itself. A failed check is stated and never withholds the mark, for the reason
+    the assertion history gives: a failure is a finding, and the mark says the
+    account is complete, not that the data is good (#64).
+    """
+
+    dataset: str
+    checks: tuple[Check, ...] = ()
+
+    @property
+    def failed(self) -> tuple[Check, ...]:
+        return tuple(c for c in self.checks if not c.success)
+
+    def describe(self) -> str:
+        if not self.checks:
+            return "no checks reported"
+        failed = self.failed
+        held = len(self.checks) - len(failed)
+        text = f"{count(len(self.checks), 'check')}, {held} held"
+        if failed:
+            text += f", {len(failed)} failed: " + "; ".join(
+                f"{c.assertion} on {c.column}" if c.column else c.assertion for c in failed
+            )
+        return text
+
+
+@dataclass(frozen=True)
 class Production:
     """One run that wrote one dataset."""
 
@@ -211,6 +244,8 @@ class Production:
     published: Published = field(default_factory=Published)
     #: What ran the job and where its output lives, as the events say (#39).
     stack: stack_module.Stack = field(default_factory=stack_module.Stack)
+    #: What was checked on each input when this run read it, in `reads` order (#64).
+    checks: tuple[InputChecks, ...] = ()
 
     @property
     def authorised(self) -> bool:
@@ -252,6 +287,11 @@ class Scope(scope_module.Scope):
     ends_unproduced: int = 0
     ends_at_depth: int = 0
     depth_limit: int = DEPTH
+    #: Inputs the steps read, those with any check reported on them as read, and
+    #: those with a check that failed (#64). Stated, never a withholding reason.
+    inputs: int = 0
+    inputs_checked: int = 0
+    inputs_failed: int = 0
 
     OUT_OF_VIEW = (
         "This chain is built from lineage emitted inside the window. A step whose "
@@ -280,6 +320,11 @@ class Scope(scope_module.Scope):
             ends.append(f"{self.ends_at_depth} at the depth limit of {self.depth_limit}")
         if ends:
             out.append(("chain ends", "; ".join(ends)))
+        if self.inputs:
+            checked = f"{self.inputs_checked} of {count(self.inputs, 'input')} read carried checks"
+            if self.inputs_failed:
+                checked += f", {self.inputs_failed} with a check that failed"
+            out.append(("checks", checked))
         return tuple(out)
 
 
@@ -352,6 +397,11 @@ def build(
     for event in events:
         for output in event.outputs:
             producers.setdefault(output.key, []).append(event)
+    asserted = _asserted(events)
+    runs: dict[str, list[Event]] = {}
+    for event in events:
+        if event.run.run_id:
+            runs.setdefault(event.run.run_id, []).append(event)
 
     labels = stack_module.labels(config.platforms)
     kinds = stack_module.kinds(config.platform_kinds)
@@ -376,6 +426,13 @@ def build(
         # Read from every run that wrote it, newest first, because an emitter
         # may name its integration on one event of a run and not another.
         production = _production(ordered[0], stack_module.of(ordered, key, labels, kinds))
+        production = replace(
+            production,
+            checks=tuple(
+                _input_checks(upstream, production, runs, producers, asserted)
+                for upstream in production.reads
+            ),
+        )
         # Distinct runs, not events. Emitters routinely declare the outputs on
         # START *and* on COMPLETE — dbt does — so counting events reported one
         # run as two and printed "1 other run wrote this" about a run that had
@@ -426,6 +483,55 @@ def build(
         scope=scope,
         completeness=_completeness(ordered_steps, dataset=dataset, scope=scope, report=report),
         generated_from=report.origin if report else "",
+    )
+
+
+def _asserted(events: Sequence[Event]) -> dict[str, list[tuple[datetime | None, Check]]]:
+    """Every check any event reported, by the dataset it was reported on."""
+    out: dict[str, list[tuple[datetime | None, Check]]] = {}
+    for event in events:
+        when = utc(event.event_time) if event.event_time else None
+        for dataset in event.datasets:
+            for check in reported_checks(dataset, event):
+                out.setdefault(dataset.key, []).append((when, check))
+    return out
+
+
+def _input_checks(
+    dataset: str,
+    production: Production,
+    runs: Mapping[str, Sequence[Event]],
+    producers: Mapping[str, Sequence[Event]],
+    asserted: Mapping[str, Sequence[tuple[datetime | None, Check]]],
+) -> InputChecks:
+    """The checks on *dataset* as *production*'s run read it: reported after the
+    dataset was last written before that run started, and up to the run's end."""
+    own = [e.event_time for e in runs.get(production.run_id, ()) if e.event_time]
+    start = utc(min(own)) if own else None
+    end = utc(production.when) if production.when else None
+    writes = [
+        utc(e.event_time)
+        for e in producers.get(dataset, ())
+        if e.event_time and (start is None or utc(e.event_time) <= start)
+    ]
+    written = max(writes) if writes else None
+    found = [
+        check
+        for when, check in asserted.get(dataset, ())
+        if (written is None or (when is not None and when >= written))
+        and (end is None or (when is not None and when <= end))
+    ]
+    latest: dict[tuple[str, str], Check] = {}
+    for check in once_per_run(found):
+        held = latest.get(check.key)
+        if held is None or _later(check, held):
+            latest[check.key] = check
+    return InputChecks(dataset=dataset, checks=tuple(latest[k] for k in sorted(latest)))
+
+
+def _later(a: Check, b: Check) -> bool:
+    return (utc(a.when).timestamp() if a.when else float("-inf")) >= (
+        utc(b.when).timestamp() if b.when else float("-inf")
     )
 
 
@@ -584,6 +690,13 @@ def _scope(
         ends_unproduced=sum(1 for s in steps if s.ended and not s.production),
         ends_at_depth=sum(1 for s in steps if s.ended and s.production),
         depth_limit=depth,
+        inputs=sum(len(s.production.checks) for s in steps if s.production),
+        inputs_checked=sum(
+            1 for s in steps if s.production for c in s.production.checks if c.checks
+        ),
+        inputs_failed=sum(
+            1 for s in steps if s.production for c in s.production.checks if c.failed
+        ),
     )
 
 

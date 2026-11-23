@@ -221,7 +221,7 @@ def build(
         domain = (config.domain_for(event.job.namespace, rule), config.domain_guessed(rule))
         for dataset in event.datasets:
             seen.add(dataset.key)
-            for check in _checks(dataset, event):
+            for check in reported_checks(dataset, event):
                 checks.setdefault(dataset.key, []).append(check)
         # A dataset belongs to the domain that **writes** it, not to whichever
         # job happened to be read first. `crm_curated.customers` is crm's even
@@ -246,7 +246,7 @@ def build(
         checks = {k: v for k, v in checks.items() if domain_of.get(k, "") in wanted}
 
     datasets = tuple(
-        _dataset(key, _once_per_run(found), domain_of.get(key, ""))
+        _dataset(key, once_per_run(found), domain_of.get(key, ""))
         for key, found in sorted(checks.items())
     )
     unchecked = tuple(sorted(seen - set(checks)))
@@ -277,7 +277,7 @@ def build(
     )
 
 
-def _checks(dataset: Dataset, event: Event) -> list[Check]:
+def reported_checks(dataset: Dataset, event: Event) -> list[Check]:
     """The assertions one event reported about one dataset.
 
     Anything malformed is skipped rather than raised on — an assertion list is
@@ -316,7 +316,7 @@ def _checks(dataset: Dataset, event: Event) -> list[Check]:
     return out
 
 
-def _once_per_run(checks: Sequence[Check]) -> list[Check]:
+def once_per_run(checks: Sequence[Check]) -> list[Check]:
     """Each run's result for each assertion once: the one the run ended on, or its
     latest where it reported none at the end.
 

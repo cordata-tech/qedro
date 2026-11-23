@@ -687,6 +687,14 @@ the line reads *not reported*. A namespace written as a URI is not always a plat
 — pipeline-runtime's `cordata://fraud` names a domain — so a scheme qedro has no label
 for is left out rather than printed; `platforms:` in `qedro.yaml` gives it one.
 
+**The `checks` line says what was checked on each input as the step read it**: the
+`dataQualityAssertions` reported on that input after it was last written and up to the
+end of the step's run, one result per check, whether a check job ran them before the
+step or the step ran them itself. An input nothing checked says so. A failed check is
+stated and does not withhold the mark, for the reason the assertion history gives: the
+chain's mark says where the figure came from rests on evidence, not that the data was
+good. The scope statement counts the inputs that carried checks.
+
 Nothing here calls a forge API to resolve a commit. Read-only is a property of what
 the code can reach.
 

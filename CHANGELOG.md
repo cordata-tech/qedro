@@ -8,6 +8,13 @@ before `1.0`.
 
 ## Unreleased
 
+- **Each step of a provenance chain says what was checked on what it read.** For every
+  input, the data quality assertions reported on it after it was last written and up to
+  the end of the step's run, one result per check, including those a separate check job
+  ran: *3 checks, 2 held, 1 failed: every share class has a price*, or *no checks
+  reported*. In every format; the JSON adds `checks` to each production and three
+  counts to the scope, beside the fields a sign-off covers, so no approval reopens. A
+  failed check is stated and does not withhold the mark (#64).
 - **The assertion history counts each run's checks once.** An emitter that put
   `dataQualityAssertions` on both START and COMPLETE had every check counted twice, and
   the history contradicted itself: 5 runs for a dataset, 10 for each of its checks. A

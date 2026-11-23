@@ -723,3 +723,84 @@ class TestTheDiagramFollowsWhatEachRunRead:
         parents = {n.key: n.parent for n in _provenance_nodes(out)}
         assert parents["wh/left_raw"] == "wh/left"
         assert parents["wh/right_raw"] == "wh/right"
+
+
+def checked(dataset, results, *, when, run, job="prices-check"):
+    """A run of a check job: it reads *dataset* and reports *results* on it."""
+    raw = {
+        "eventType": "COMPLETE",
+        "eventTime": when,
+        "run": {"runId": run},
+        "job": {"namespace": "acme.funds", "name": job},
+        "inputs": [
+            {
+                "namespace": "wh",
+                "name": dataset,
+                "inputFacets": {
+                    "dataQualityAssertions": {
+                        "_producer": "https://example.test",
+                        "_schemaURL": "https://example.test/s.json",
+                        "assertions": [
+                            {"assertion": a, "column": "", "success": ok} for a, ok in results
+                        ],
+                    }
+                },
+            }
+        ],
+    }
+    parsed = parse_event(raw)
+    assert parsed is not None
+    return parsed
+
+
+def fund_feed(*, last_check_holds=False):
+    """A price load, a check job on the prices, and a calculation reading them."""
+    return [
+        # Checked once before today's load: it says nothing about today's prices.
+        checked("prices", [("old check", False)], when="2026-03-01T09:00:00Z", run="old"),
+        event("ingest", reads=["provider.csv"], writes=["prices"], run="i",
+              when="2026-03-01T10:00:00Z"),
+        checked("prices", [("every NAV is positive", True),
+                           ("every share class has a price", last_check_holds)],
+                when="2026-03-01T10:05:00Z", run="c"),
+        event("charges", reads=["prices", "share_classes"], writes=["charges"], run="o",
+              event_type="START", when="2026-03-01T10:10:00Z"),
+        event("charges", reads=["prices", "share_classes"], writes=["charges"], run="o",
+              when="2026-03-01T10:12:00Z"),
+    ]  # fmt: skip
+
+
+class TestTheChecksEachStepsInputsCarried:
+    """#64: each step states what was checked on its inputs as it read them."""
+
+    def step(self, out, dataset):
+        return next(s for s in out.steps if s.dataset == f"wh/{dataset}")
+
+    def test_a_check_run_by_its_own_job_before_the_step_counts(self):
+        charges = self.step(chain(fund_feed(), "wh/charges"), "charges").production
+        prices = next(c for c in charges.checks if c.dataset == "wh/prices")
+        assert [(c.assertion, c.success) for c in prices.checks] == [
+            ("every NAV is positive", True),
+            ("every share class has a price", False),
+        ]
+        assert prices.describe() == "2 checks, 1 held, 1 failed: every share class has a price"
+
+    def test_a_check_from_before_the_input_was_last_written_does_not_count(self):
+        charges = self.step(chain(fund_feed(), "wh/charges"), "charges").production
+        prices = next(c for c in charges.checks if c.dataset == "wh/prices")
+        assert "old check" not in [c.assertion for c in prices.checks]
+
+    def test_an_input_nothing_checked_says_so(self):
+        charges = self.step(chain(fund_feed(), "wh/charges"), "charges").production
+        reference = next(c for c in charges.checks if c.dataset == "wh/share_classes")
+        assert reference.describe() == "no checks reported"
+
+    def test_a_failed_check_is_stated_and_leaves_the_mark_as_it_was(self):
+        failing = chain(fund_feed(), "wh/charges")
+        holding = chain(fund_feed(last_check_holds=True), "wh/charges")
+        assert failing.completeness.reasons == holding.completeness.reasons
+        assert failing.complete == holding.complete
+
+    def test_the_scope_counts_the_inputs_that_carried_checks(self):
+        lines = dict(chain(fund_feed(), "wh/charges").scope.lines())
+        assert lines["checks"] == "1 of 3 inputs read carried checks, 1 with a check that failed"

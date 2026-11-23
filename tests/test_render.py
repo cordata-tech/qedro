@@ -1064,3 +1064,31 @@ class TestTheJsonCarriesTheVerdictsSentence:
             assert set(lines) == {"code", "signature", "source", "platform"}
             for key in ("code", "signature"):
                 assert lines[key] in text
+
+
+@pytest.mark.parametrize("fmt", ["text", "markdown", "json", "pdf", "xlsx"])
+def test_every_format_states_the_checks_a_steps_inputs_carried(fmt):
+    # #64: the failed check on the prices, and the reference data nothing checked.
+    from qedro import config as config_module
+    from qedro.provenance import build
+
+    from .test_provenance import fund_feed
+
+    record = build(
+        fund_feed(),
+        dataset="wh/charges",
+        config=config_module.parse("controller: ACME GmbH\n"),
+    )
+    rendered = render.FORMATS[fmt](record)
+    if fmt == "xlsx":
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        book = load_workbook(BytesIO(rendered))
+        text = " ".join(str(c.value) for row in book["Chain"].iter_rows() for c in row if c.value)
+    else:
+        text = as_text(rendered)
+    text = " ".join(text.split())
+    assert "every share class has a price" in text
+    assert "no checks reported" in text
