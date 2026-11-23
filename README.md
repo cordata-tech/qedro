@@ -5,8 +5,8 @@
 [![Python versions qedro runs on](https://img.shields.io/pypi/pyversions/qedro)](https://pypi.org/project/qedro/)
 [![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
-**The GDPR documents an auditor asks for, built from the lineage your pipelines already
-emit, and saying plainly what each one cannot prove.**
+**The GDPR documents an auditor asks for, built from the evidence your pipelines already
+emit, and saying plainly where that evidence ends.**
 
 Point qedro at your OpenLineage events. It writes your Art. 30 record of processing
 activities, a record of how far an erasure reached, the provenance of a published
@@ -54,15 +54,7 @@ place qedro reads from.
 
 ## How it works
 
-```text
-your pipelines      dbt · Airflow · Spark · Flink · your own jobs
-      │  OpenLineage events
-      ▼
-where they land     a directory · S3 · GCS · Azure · Marquez · a Kafka topic
-      │  read only
-      ▼
-qedro           ──▶ PDF · workbook · Markdown · JSON
-```
+![Your pipelines, such as dbt, Airflow, Spark, Flink or your own jobs, send OpenLineage events to wherever the events land: a directory, S3, GCS, Azure, Marquez or a Kafka topic. qedro reads them there and never writes. It produces the documents: the Art. 30 record, the erasure record, provenance and data checks, as PDF, workbook, Markdown and JSON, each ending with the mark only where every part stands on evidence.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/how-it-works.png)
 
 qedro reads the [OpenLineage](https://openlineage.io) events your pipelines emit, from
 wherever they land, and needs no server of its own. Each value in a document says where
@@ -74,12 +66,26 @@ to a job without changing its code), produce a record that stands on evidence.
 
 ## The mark ∎
 
-**Q.E.D.**, *that which was to be demonstrated*: Art. 5(2) GDPR obliges a controller to
-be able to **demonstrate** compliance. qedro ends a document with **∎** only when it
-stands on its own evidence, and withholds it, with the reasons, wherever any part rests
-on assertion: a purpose from a mapping file, a domain that produced no lineage, a step
-whose code nobody named. The run still writes the document. Withholding is the signal,
-because a record with invisible holes is worse than none. More in
+**Q.E.D.**, *quod erat demonstrandum*, *that which was to be demonstrated*, closed
+mathematical proofs for centuries. The mathematician **Paul Halmos** replaced it with a
+small solid square borrowed from magazine typography, the end-of-proof mark now called
+the **tombstone**, or the *halmos*: **∎**. The wordmark puts it where the last letter
+goes, **QEDR∎**, so a complete run finishes the name.
+
+The link to the GDPR is the word *demonstrate*. Art. 5(2) obliges a controller to be
+able to **demonstrate** compliance, which makes a record of processing something to
+prove rather than something to fill in. A proof stands on what can be checked, and so
+does a qedro document: each value says whether it rests on **evidence**, a fact the
+pipelines emitted about what they ran, or on **assertion**, something a person wrote
+down, such as a purpose in a mapping file or a declared activity. A record built from
+assertions looks exactly like one built from evidence, and that is the problem a
+hand-kept record has.
+
+So qedro ends a document with the tombstone **∎** only when every part stands on
+evidence, and withholds it, listing the reasons, wherever any part rests on assertion
+or on nothing at all: a purpose from a mapping file, a domain that produced no lineage,
+a step whose code nobody named. The run still writes the document. Withholding is the
+signal, because a record with invisible holes is worse than none. More in
 [docs/about.md](docs/about.md).
 
 ![The first page of two Art. 30 records of the same pipelines, side by side. The left one ends its verdict with the mark; the right one lists three reasons it does not claim to be a proof and tints every activity row whose purpose and legal basis came from a mapping file or a declaration.](https://raw.githubusercontent.com/cordata-tech/qedro/main/docs/images/art30-pdf.png)

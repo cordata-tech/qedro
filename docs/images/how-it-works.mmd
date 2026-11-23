@@ -1,0 +1,20 @@
+%% The README's "How it works" diagram. Draw it again with:
+%%   mmdc -i docs/images/how-it-works.mmd -o docs/images/how-it-works.png -c docs/images/how-it-works.json -b white -s 2
+flowchart LR
+    pipelines["<b>Your pipelines</b><br/>dbt · Airflow · Spark<br/>Flink · your own jobs"]
+    land["<b>Where the events land</b><br/>a directory · S3 · GCS · Azure<br/>Marquez · a Kafka topic"]
+    qedro["<b>qedro</b><br/>reads, never writes"]
+    docs["<b>Documents</b><br/>Art. 30 record · erasure<br/>provenance · data checks<br/><i>PDF · workbook · Markdown · JSON</i>"]
+    mark(["∎ only where every part<br/>stands on evidence"])
+
+    pipelines -- "OpenLineage events" --> land
+    land -- "read" --> qedro
+    qedro --> docs
+    docs -.- mark
+
+    classDef box fill:#ffffff,stroke:#1f2933,stroke-width:1.5px,color:#1f2933
+    classDef core fill:#1f2933,stroke:#1f2933,color:#ffffff
+    classDef note fill:#f3f5f7,stroke:#9aa5b1,color:#1f2933,stroke-dasharray:3 3
+    class pipelines,land,docs box
+    class qedro core
+    class mark note
