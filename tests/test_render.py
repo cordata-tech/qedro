@@ -736,6 +736,10 @@ class TestTheComparisonRendersInEveryFormat:
             ]
             assert finding["loses_evidence"] is True
             assert finding["before"]["provenance"] == "facet"
+            # And the words the text prints, so a console shows qedro's sentence
+            # rather than composing its own from the fields.
+            assert finding["says"] == "fraud-detection, unchanged"
+            assert finding["costs"] == "evidence lost: emitted facet → mapping file"
         else:
             # The words, not the enum: a reader has not read `Provenance`.
             assert "emitted facet" in out

@@ -19,6 +19,11 @@ before `1.0`.
   vocabulary now flags `subject_type: none`. A vocabulary of your own needs the flag on
   its own values for the same effect. Such a rule cannot also give a purpose, a legal
   basis, recipients or security measures (#65).
+- **`qedro diff --format json` gives each finding in words**, as `says` and `costs`
+  beside its fields: the sentence the text and Markdown print, such as *debt-collection,
+  unchanged* and *evidence lost: emitted facet → mapping file*, with `costs` null where
+  a finding costs nothing. `qedro status --against` already did, and a console reviewing
+  a regenerated record now shows qedro's words rather than writing its own.
 
 ## 0.29.0 — 2026-11-23
 

@@ -1849,6 +1849,12 @@ def _finding(change, *, drift: bool = False) -> tuple[str, str]:
     return said, ""
 
 
+def _said(change, *, drift: bool) -> dict[str, str | None]:
+    """`_finding` as JSON: what it says, and what it costs or null."""
+    says, costs = _finding(change, drift=drift)
+    return {"says": says, "costs": costs or None}
+
+
 def _sides(comparison) -> tuple[tuple[str, object], ...]:
     """The two documents and what to call each one.
 
@@ -2045,6 +2051,11 @@ def _(record: compare_module.Comparison, *, indent: int = 2) -> str:
                 # the ordering of `Provenance` to work it out. Never true of a
                 # drift finding: nothing was lost, the two were never in step.
                 "loses_evidence": False if record.drift else change.regression,
+                # The finding in the words the text and Markdown print, so a
+                # console shows qedro's sentence rather than writing its own;
+                # `costs` is null where the finding costs nothing. As
+                # `qedro status --against` gives them.
+                **_said(change, drift=record.drift),
                 **({"owner": change.owner} if change.owner else {}),
             }
             for change in record.changes
