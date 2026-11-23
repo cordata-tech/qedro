@@ -95,6 +95,42 @@ or a monitoring count. Which of them is a processing activity is left to the rea
                   default/orders_enrichment.map_partitions_parallel_collection
 ```
 
+## Jobs that process no personal data
+
+A platform that also runs pipelines over data about no person — fund prices, sensor
+readings, exchange rates — would otherwise list each of those jobs as an activity with
+no purpose and no legal basis, and withhold the mark for gaps that are not gaps. A rule
+in the mapping file can leave such jobs out, with the reason in the rule's own words:
+
+```yaml
+jobs:
+  "acme.funds/*":
+    out_of_scope: fund prices and figures, no personal data
+```
+
+The jobs it matches are left out of the activities and named in the scope statement
+with that reason, so the record says what it left out and why rather than leaving it
+out silently. They still count among the jobs in view, and a domain whose only jobs were
+left out is seen rather than silent:
+
+```console
+    left out      5 jobs not listed as activities, by a rule in the mapping file saying
+                  fund prices and figures, no personal data: acme.funds/fund_check,
+                  acme.funds/fund_figures, acme.funds/fund_kid, acme.funds/fund_prices,
+                  acme.funds/fund_share_classes
+```
+
+The rule is a statement by whoever wrote the mapping file, so qedro checks it against
+what the datasets carry. If a left-out job reads or writes a dataset with a
+classification answering Art. 30(1)(c) — the categories of data subjects and of
+personal data — the mark is withheld, and the reason names the job and each dataset
+with its classification. A value the vocabulary flags `personal: false` is no
+contradiction; the shipped vocabulary flags `subject_type: none`, so a table tagged as
+holding no personal data agrees with the rule. A rule cannot also give a purpose, a
+legal basis, recipients or security measures, since those describe the job as an
+activity of the record. In the JSON, `scope.left_out` lists each job with its reason,
+its rule and any `personal_data` findings, beside the fields a sign-off covers.
+
 ## What the data is
 
 Art. 30(1) asks for more than the purpose. Where the datasets an activity touched carry
@@ -285,6 +321,12 @@ Point `--vocabulary` at your own and the shipped one is replaced wholesale — w
 what makes an organisation's own ontology possible later without a rewrite. A value
 outside a closed term is flagged and still reported; refusing to read what an emitter
 actually sent would hide the finding that matters.
+
+A value can carry `personal: false` to say it describes data about no person, as the
+shipped `subject_type: none` does. It is the only way qedro learns that, and it matters
+in one place: a job left out as processing no personal data may touch a dataset
+classified with such a value without contradicting the rule. A vocabulary of your own
+flags its own values; a value it does not flag counts as personal.
 
 ## The deployer view
 

@@ -70,7 +70,9 @@ class TestTypoesAreToldAbout:
             config.parse('jobs:\n  "*": {purpose: p, legalbasis: consent}\n')
 
     def test_the_message_says_what_is_allowed(self):
-        with pytest.raises(ConfigError, match="Allowed: domain, legal_basis, purpose"):
+        with pytest.raises(
+            ConfigError, match="Allowed: domain, legal_basis, out_of_scope, purpose"
+        ):
             config.parse('jobs:\n  "*": {nonsense: 1}\n')
 
 

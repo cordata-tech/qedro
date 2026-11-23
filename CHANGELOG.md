@@ -6,6 +6,20 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **A job that processes no personal data can be left out of the Art. 30 record.** A
+  `jobs:` rule with `out_of_scope: <why>` leaves the jobs it matches out of the
+  activities, so a platform that also runs pipelines over fund prices or sensor
+  readings no longer lists them with no purpose and withholds the mark for it. The
+  scope statement names every job left out with the rule's reason, in every format, and
+  the JSON lists them under `scope.left_out`, beside the fields a sign-off covers. A
+  left-out job that reads or writes a dataset classified under Art. 30(1)(c) withholds
+  the mark, unless the vocabulary flags the value `personal: false`; the shipped
+  vocabulary now flags `subject_type: none`. A vocabulary of your own needs the flag on
+  its own values for the same effect. Such a rule cannot also give a purpose, a legal
+  basis, recipients or security measures (#65).
+
 ## 0.29.0 — 2026-11-23
 
 - **Each step of a provenance chain says what was checked on what it read.** For every

@@ -223,6 +223,30 @@ class Activity:
 
 
 @dataclass(frozen=True)
+class LeftOut:
+    """A job a mapping rule left out of the record as processing no personal data (#65)."""
+
+    job: str
+    #: The rule's own words for why.
+    reason: str
+    #: The rule's pattern, so a reader can find it in the mapping file.
+    pattern: str
+    #: Classifications on datasets the job read or wrote that answer Art. 30(1)(c)
+    #: and that the vocabulary does not flag `personal: false`, as
+    #: `(dataset, key, value)`. Each contradicts the rule, and withholds the mark.
+    personal_data: tuple[tuple[str, str, str], ...] = ()
+
+    def contradiction(self) -> str:
+        """The job and what contradicts its rule, one clause per dataset."""
+        by_dataset: dict[str, list[str]] = {}
+        for dataset, key, value in self.personal_data:
+            by_dataset.setdefault(dataset, []).append(f"{key} {value}")
+        return f"{self.job}, which touches " + "; ".join(
+            f"{dataset} ({', '.join(tags)})" for dataset, tags in by_dataset.items()
+        )
+
+
+@dataclass(frozen=True)
 class Scope(scope.Scope):
     """What the Art. 30 run looked at.
 
@@ -259,6 +283,9 @@ class Scope(scope.Scope):
     #: events, and which of them is a processing activity is the reader's call.
     #: See cordata-tech/qedro#22.
     read_only: tuple[str, ...] = ()
+    #: Jobs a mapping rule left out as processing no personal data, with the
+    #: rule's reason. Listed, as `parents` are, so the omission is visible (#65).
+    left_out: tuple[LeftOut, ...] = ()
 
     #: Unconditional, per #3, and worded to be true whether or not anything is
     #: declared. Printing it only when nothing was declared would make it
@@ -298,6 +325,25 @@ class Scope(scope.Scope):
                         f"{words.plural(n, 'an activity', 'activities')} — "
                         f"{words.plural(n, 'a parent run', 'parent runs')} with no datasets "
                         f"and no processing facet: {', '.join(self.parents)}"
+                    ),
+                )
+            )
+        if self.left_out:
+            n = len(self.left_out)
+            # One clause per reason, in the rule's own words, each naming its jobs.
+            by_reason: dict[str, list[str]] = {}
+            for left in self.left_out:
+                by_reason.setdefault(left.reason, []).append(left.job)
+            out.append(
+                (
+                    "left out",
+                    (
+                        f"{n} {words.plural(n, 'job', 'jobs')} not listed as "
+                        f"{words.plural(n, 'an activity', 'activities')}, by a rule in the "
+                        "mapping file saying "
+                        + "; ".join(
+                            f"{reason}: {', '.join(jobs)}" for reason, jobs in by_reason.items()
+                        )
                     ),
                 )
             )
@@ -447,7 +493,7 @@ def build(
     tagged = _tags_in_view(events)
     labels = stack_module.labels(config.platforms)
     kinds = stack_module.kinds(config.platform_kinds)
-    activities = tuple(
+    every_job = [
         _activity(
             job_events,
             config=config,
@@ -457,7 +503,11 @@ def build(
         )
         for key, job_events in sorted(grouped.items())
         if key not in parents
-    )
+    ]
+    # A job a rule leaves out is still built, so what its datasets carry can be
+    # checked against the rule's claim, and then kept out of the activities (#65).
+    activities = tuple(a for a in every_job if not (a.rule and a.rule.out_of_scope))
+    left_out = tuple(_left_out(a, vocabulary) for a in every_job if a.rule and a.rule.out_of_scope)
     every = [e for job_events in grouped.values() for e in job_events]
     in_view = sorted({d for a in activities for d in (*a.inputs, *a.outputs)})
     stores = {
@@ -474,9 +524,14 @@ def build(
         until=until,
         declared=len(declared),
         parents={key: grouped[key] for key in parents},
+        left_out={a.key: a for a in every_job if a.rule and a.rule.out_of_scope},
     )
     scope = replace(
-        scope, read=read_facts(report, every, domains=_domain_events(activities, config))
+        scope,
+        left_out=left_out,
+        # Left-out jobs included: their domain produced lineage, whatever the
+        # record lists.
+        read=read_facts(report, every, domains=_domain_events(every_job, config)),
     )
     completeness = _completeness(
         activities,
@@ -735,6 +790,30 @@ def _parents(grouped: Mapping[str, Sequence[Event]]) -> tuple[str, ...]:
     return tuple(sorted(out))
 
 
+def _left_out(activity: Activity, vocabulary: Vocabulary) -> LeftOut:
+    """A job a rule left out, with whatever on its datasets contradicts the rule.
+
+    A contradiction is a classification answering Art. 30(1)(c) — the categories
+    of data subjects and of personal data — that the vocabulary does not flag
+    `personal: false`. Which values those are is the vocabulary's to say, not
+    this function's.
+    """
+    rule = activity.rule
+    assert rule is not None
+    personal = {
+        (dataset, c.key, c.value)
+        for c in activity.classification
+        if c.item == "c" and vocabulary.personal(c.key, c.value)
+        for dataset in (*c.reads, *c.writes)
+    }
+    return LeftOut(
+        job=activity.key,
+        reason=rule.out_of_scope,
+        pattern=rule.pattern,
+        personal_data=tuple(sorted(personal)),
+    )
+
+
 def _domain_events(activities: Sequence[Activity], config: Config) -> dict[str, int]:
     """Events per domain from the activities, a declared domain that produced none at zero (#57)."""
     counts = dict.fromkeys(config.domains, 0)
@@ -753,13 +832,19 @@ def _scope(
     until: datetime | None,
     declared: int = 0,
     parents: Mapping[str, Sequence[Event]] | None = None,
+    left_out: Mapping[str, Activity] | None = None,
 ) -> Scope:
     parents = parents or {}
+    left_out = left_out or {}
     # A parent's events were looked at, so they count toward the window even
-    # though the job is not listed.
-    times = [t for a in activities for t in (a.first_seen, a.last_seen) if t is not None]
+    # though the job is not listed; so were a left-out job's (#65).
+    looked_at = [*activities, *left_out.values()]
+    times = [t for a in looked_at for t in (a.first_seen, a.last_seen) if t is not None]
     times += [e.event_time for evs in parents.values() for e in evs if e.event_time is not None]
     datasets = {d for a in activities for d in a.inputs + a.outputs}
+    # A domain whose only jobs were left out still produced lineage, so it is
+    # seen and not silent: the record says why its jobs are not listed.
+    seen = [a for a in looked_at if a.domain]
 
     return Scope(
         source=report.origin if report else "",
@@ -770,17 +855,13 @@ def _scope(
         since=since if since is not None else (min(times) if times else None),
         until=until if until is not None else (max(times) if times else None),
         events=report.events if report else sum(a.events for a in activities),
-        jobs=len(activities) + len(parents),
+        jobs=len(activities) + len(parents) + len(left_out),
         datasets=len(datasets),
         namespaces=tuple(sorted({a.namespace for a in activities})),
         domains_declared=config.domains,
-        domains_seen=tuple(sorted({a.domain for a in activities if a.domain})),
-        domains_guessed=tuple(
-            sorted({a.domain for a in activities if a.domain and a.domain_guessed})
-        ),
-        domains_mapped=tuple(
-            sorted({a.domain for a in activities if a.domain and not a.domain_guessed})
-        ),
+        domains_seen=tuple(sorted({a.domain for a in seen})),
+        domains_guessed=tuple(sorted({a.domain for a in seen if a.domain_guessed})),
+        domains_mapped=tuple(sorted({a.domain for a in seen if not a.domain_guessed})),
         evidenced=sum(1 for a in activities if a.evidenced),
         from_mapping=sum(
             1
@@ -838,6 +919,19 @@ def _completeness(
             f"{declared} {words.plural(declared, 'activity is', 'activities are')} declared "
             f"with no lineage, so {words.plural(declared, 'it is', 'they are')} asserted — "
             f"nothing in the events shows that {words.plural(declared, 'it', 'they')} happened"
+        )
+
+    # A rule said the job processes no personal data, and a dataset it touched is
+    # classified as personal data: one of the two is wrong, and the record cannot
+    # tell which (#65). Before the early return, so it is said even when every
+    # job was left out.
+    contradicted = [left for left in scope.left_out if left.personal_data]
+    if contradicted:
+        n = len(contradicted)
+        completeness = completeness.degraded(
+            f"{n} {words.plural(n, 'job', 'jobs')} left out of the record as processing no "
+            f"personal data {words.plural(n, 'reads or writes', 'read or write')} data "
+            "classified as personal: " + " — ".join(left.contradiction() for left in contradicted)
         )
 
     if not activities:

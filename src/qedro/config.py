@@ -15,6 +15,8 @@ Four things live here, and only the first is required:
       "cordata.fraud/*":
         purpose: fraud-detection
         legal_basis: legitimate-interest
+      "cordata.funds/*":   # or: not an activity of this record at all (#65)
+        out_of_scope: fund prices and figures, no personal data
 
     platforms:             # what a diagram box prints for an integration or a
       lakehouse: Corp lake # namespace scheme it does not know (#39), and
@@ -62,7 +64,13 @@ STEM = "qedro"
 
 #: What a `jobs:` entry may declare. Anything else is a typo the user wants to
 #: hear about rather than a silently ignored key.
-RULE_KEYS = frozenset({"purpose", "legal_basis", "domain", "recipients", "security_measures"})
+RULE_KEYS = frozenset(
+    {"purpose", "legal_basis", "domain", "recipients", "security_measures", "out_of_scope"}
+)
+
+#: What an out-of-scope rule may not also say: each describes the job as an
+#: activity of this record, which the rule says it is not.
+NOT_WITH_OUT_OF_SCOPE = ("purpose", "legal_basis", "recipients", "security_measures")
 
 
 @dataclass(frozen=True)
@@ -101,6 +109,10 @@ class Rule:
     #: and the record says so wherever it prints them. See cordata-tech/qedro#13.
     recipients: tuple[str, ...] = ()
     security_measures: tuple[str, ...] = ()
+    #: Why a job processes no personal data, when the rule leaves it out of the
+    #: record (#65). The record lists it with this reason rather than dropping
+    #: it silently; empty for every other rule.
+    out_of_scope: str = ""
     #: Where the rule is written, so an explanation can point at it (#48).
     #: `None` for a TOML file, whose parser keeps no positions. Not part of the
     #: rule's identity: moving a rule down a line does not change what it says.
@@ -328,9 +340,25 @@ def _rules(raw: Any, origin: str, lines: Mapping[str, int]) -> tuple[Rule, ...]:
                 f"Allowed: {', '.join(sorted(RULE_KEYS))}"
             )
 
+        out_of_scope = spec.get("out_of_scope")
+        if "out_of_scope" in spec:
+            if not isinstance(out_of_scope, str) or not out_of_scope.strip():
+                raise ConfigError(
+                    f"`out_of_scope` for `jobs: {pattern}` in {origin} should say why the "
+                    "job processes no personal data, such as `fund prices, no personal data`"
+                )
+            also = [key for key in NOT_WITH_OUT_OF_SCOPE if key in spec]
+            if also:
+                raise ConfigError(
+                    f"`out_of_scope` cannot also have {', '.join(also)} in `jobs: {pattern}` "
+                    f"in {origin}: the rule leaves the job out of the record, where those "
+                    "would describe it as an activity"
+                )
+
         rules.append(
             Rule(
                 pattern=pattern,
+                out_of_scope=out_of_scope.strip() if isinstance(out_of_scope, str) else "",
                 purpose=_str(spec.get("purpose")),
                 legal_basis=_str(spec.get("legal_basis")),
                 domain=_str(spec.get("domain")),

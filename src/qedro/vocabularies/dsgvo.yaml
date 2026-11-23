@@ -140,6 +140,11 @@ terms:
         means: >-
           No personal data at all. Recorded rather than left blank, because
           *nobody said* and *no personal data* are different answers.
+        # The one value in this document that says data is about no person. A
+        # job a mapping rule leaves out of the record as processing no personal
+        # data may touch a table tagged this way without contradicting the rule;
+        # any other classification answering Art. 30(1)(c) contradicts it (#65).
+        personal: false
 
   residency:
     description: >-

@@ -533,6 +533,22 @@ def _(record: Record, *, indent: int = 2) -> str:
             "jobs": record.scope.jobs,
             "parents": list(record.scope.parents),
             "read_only": list(record.scope.read_only),
+            # Jobs a rule left out as processing no personal data, with its reason
+            # and anything on their datasets that contradicts it (#65). In the
+            # scope, beside the fields a sign-off covers: a left-out job is
+            # already missing from the covered activities.
+            "left_out": [
+                {
+                    "job": left.job,
+                    "reason": left.reason,
+                    "rule": left.pattern,
+                    "personal_data": [
+                        {"dataset": dataset, "key": key, "value": value}
+                        for dataset, key, value in left.personal_data
+                    ],
+                }
+                for left in record.scope.left_out
+            ],
             "declared": record.scope.declared,
             "datasets": record.scope.datasets,
             "namespaces": list(record.scope.namespaces),

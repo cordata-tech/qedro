@@ -45,6 +45,9 @@ class Term:
     description: str = ""
     closed: bool = False
     values: Mapping[str, str] = field(default_factory=dict)
+    #: Values the document flags `personal: false`: data said to be about no
+    #: person, such as `subject_type: none`. The document decides, never the code.
+    not_personal: frozenset[str] = frozenset()
 
     def knows(self, value: str) -> bool:
         return value in self.values
@@ -82,6 +85,18 @@ class Vocabulary:
         """
         term = self.terms.get(key)
         return term is not None and term.unrecognised(value)
+
+    def personal(self, key: str, value: str) -> bool:
+        """Whether *value* may describe personal data, as far as this document says.
+
+        True unless the document flags the value `personal: false`. Silence is not
+        a claim that data is not personal, so a key or value the document does
+        not know counts as personal: a projection that leaves processing out of
+        a record on the strength of *no personal data* needs someone to have
+        said so (#65).
+        """
+        term = self.terms.get(key)
+        return term is None or value not in term.not_personal
 
 
 def load(path: str | Path | None = None) -> Vocabulary:
@@ -149,11 +164,22 @@ def _term(key: str, spec: Any, origin: str) -> Term:
     # values need no gloss, and rejecting it would make the format fussier
     # than the thing it describes.
     values = {}
+    not_personal = set()
     for value, meaning in values_raw.items():
         if not isinstance(value, str):
             continue
         if isinstance(meaning, Mapping):
             values[value] = _str(meaning.get("means"))
+            # Anything but true or false is refused: a typo that read as false
+            # would let a record leave out processing of personal data.
+            flag = meaning.get("personal", True)
+            if not isinstance(flag, bool):
+                raise ConfigError(
+                    f"`personal` for `{key}: {value}` in {origin or 'the vocabulary'} "
+                    "should be true or false"
+                )
+            if not flag:
+                not_personal.add(value)
         else:
             values[value] = _str(meaning)
 
@@ -162,6 +188,7 @@ def _term(key: str, spec: Any, origin: str) -> Term:
         description=_str(spec.get("description")),
         closed=bool(spec.get("closed", False)),
         values=values,
+        not_personal=frozenset(not_personal),
     )
 
 
