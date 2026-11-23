@@ -8,6 +8,12 @@ before `1.0`.
 
 ## Unreleased
 
+- **The assertion history counts each run's checks once.** An emitter that put
+  `dataQualityAssertions` on both START and COMPLETE had every check counted twice, and
+  the history contradicted itself: 5 runs for a dataset, 10 for each of its checks. A
+  run's result for a check is now the one it ended on, or its latest where it reported
+  none at the end, so the counts under a dataset and its checks agree and a check that
+  failed at START and held at COMPLETE counts as held (#63).
 - **The provenance PDF's note under the tree reads as a sentence.** It said each line
   joins a dataset "to one its producing run read"; it now says "to one that its
   producing run read".

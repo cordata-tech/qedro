@@ -41,7 +41,7 @@ from .config import Config, Controller
 from .events import Dataset, Event
 from .mark import Completeness
 from .signoff import Standing
-from .sources import ReadReport, read_facts
+from .sources import ReadReport, read_facts, utc
 
 #: The standard OpenLineage facet. Not ours — this one the ecosystem already
 #: agreed on, which is why `quality` needs no schema published beside it.
@@ -50,6 +50,9 @@ FACET = "dataQualityAssertions"
 #: Its sibling, carrying row counts and column statistics. Read for the run
 #: count only; interpreting a distribution is not this tool's business.
 METRICS = "dataQualityMetrics"
+
+#: The events a run ends on. A run's result for a check is the one it ended on.
+TERMINAL = frozenset({"COMPLETE", "FAIL", "ABORT"})
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,8 @@ class Check:
     job: str
     run_id: str
     when: datetime | None
+    #: Whether it came from the event the run ended on.
+    final: bool = False
 
     @property
     def key(self) -> tuple[str, str]:
@@ -241,7 +246,8 @@ def build(
         checks = {k: v for k, v in checks.items() if domain_of.get(k, "") in wanted}
 
     datasets = tuple(
-        _dataset(key, found, domain_of.get(key, "")) for key, found in sorted(checks.items())
+        _dataset(key, _once_per_run(found), domain_of.get(key, ""))
+        for key, found in sorted(checks.items())
     )
     unchecked = tuple(sorted(seen - set(checks)))
 
@@ -304,9 +310,35 @@ def _checks(dataset: Dataset, event: Event) -> list[Check]:
                 job=event.job.key,
                 run_id=event.run.run_id,
                 when=event.event_time,
+                final=event.event_type in TERMINAL,
             )
         )
     return out
+
+
+def _once_per_run(checks: Sequence[Check]) -> list[Check]:
+    """Each run's result for each assertion once: the one the run ended on, or its
+    latest where it reported none at the end.
+
+    An emitter may put the facet on START as well as COMPLETE, and nothing in the
+    OpenLineage spec forbids it; counted per event, every check counted twice and
+    the history said a dataset had 5 runs and each of its checks 10 (#63). A check
+    with no run id cannot be matched to another, so each one is kept.
+    """
+    kept: list[Check] = []
+    chosen: dict[tuple[str, str, str], Check] = {}
+    for check in checks:
+        if not check.run_id:
+            kept.append(check)
+            continue
+        key = (check.run_id, *check.key)
+        if key not in chosen or _rank(check) >= _rank(chosen[key]):
+            chosen[key] = check
+    return kept + list(chosen.values())
+
+
+def _rank(check: Check) -> tuple[bool, float]:
+    return (check.final, utc(check.when).timestamp() if check.when else float("-inf"))
 
 
 def _dataset(key: str, checks: Sequence[Check], domain: str) -> DatasetQuality:

@@ -33,11 +33,13 @@ def event(
     when="2026-03-01T10:00:00Z",
     run="r1",
     writes=None,
+    state="COMPLETE",
 ):
-    """One COMPLETE event, optionally asserting things about what it read."""
+    """One event, COMPLETE unless *state* says otherwise, optionally asserting
+    things about what it read."""
     dataset_namespace, _, name = reads.partition("/")
     raw = {
-        "eventType": "COMPLETE",
+        "eventType": state,
         "eventTime": when,
         "run": {"runId": run},
         "job": {"namespace": namespace, "name": job},
@@ -368,3 +370,57 @@ def test_assertions_are_read_from_the_pipeline_runtime_capture():
     out = build(events, config=config.parse(CONTROLLER), report=report)
     assert out.scope.checks > 0
     assert out.datasets
+
+
+class TestARunCountsOnce:
+    """#63: a run that reports its checks on more than one event is one run."""
+
+    START = "2026-03-01T10:00:00Z"
+    END = "2026-03-01T10:05:00Z"
+
+    def test_a_check_repeated_on_start_and_complete_counts_once(self):
+        out = record(
+            [
+                event(assertions=[check()], state="START", when=self.START),
+                event(assertions=[check()], when=self.END),
+            ]
+        )
+        (dataset,) = out.datasets
+        (expectation,) = dataset.expectations
+        assert (dataset.runs, dataset.checks, expectation.runs) == (1, 1, 1)
+
+    def test_the_result_a_run_ended_on_is_the_one_counted(self):
+        failed_at_the_end = record(
+            [
+                event(assertions=[check(success=True)], state="START", when=self.START),
+                event(assertions=[check(success=False)], when=self.END),
+            ]
+        )
+        held_at_the_end = record(
+            [
+                event(assertions=[check(success=False)], state="START", when=self.START),
+                event(assertions=[check(success=True)], when=self.END),
+            ]
+        )
+        assert failed_at_the_end.datasets[0].expectations[0].failures == 1
+        assert held_at_the_end.datasets[0].expectations[0].failures == 0
+
+    def test_the_runs_under_a_dataset_and_under_its_assertions_agree(self):
+        # qedro-lab's fund feed: three checks on START and COMPLETE of each of five
+        # runs read as "5 runs" for the dataset and "10 runs" for each check.
+        events = []
+        for day in range(1, 6):
+            for state, minute in (("START", "00"), ("COMPLETE", "05")):
+                events.append(
+                    event(
+                        assertions=[check("a"), check("b"), check("c", success=day != 5)],
+                        state=state,
+                        run=f"r{day}",
+                        when=f"2026-03-0{day}T10:{minute}:00Z",
+                    )
+                )
+        (dataset,) = record(events).datasets
+        assert dataset.runs == 5
+        assert [e.runs for e in dataset.expectations] == [5, 5, 5]
+        assert dataset.checks == 15
+        assert dataset.failures == 1
