@@ -536,6 +536,23 @@ def _status(directory: str) -> int:
 SIGNED = frozenset({"approved", "published"})
 
 
+#: The formats besides JSON a document can sit beside, by the suffix `--out` takes.
+OTHER_FORMATS = tuple(suffix for suffix in render.BY_SUFFIX if suffix != ".json")
+
+
+def _not_a_document(path: Path) -> str:
+    """Why a JSON file in a directory of records is not one qedro wrote."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return "not JSON"
+    except OSError as exc:
+        return f"could not be read ({exc.strerror or type(exc).__name__})"
+    if not (isinstance(payload, dict) and isinstance(payload.get("qedro"), dict)):
+        return "not a document qedro wrote: it has no `qedro` block"
+    return "not a document qedro wrote"
+
+
 def _currency(
     directory: str,
     *,
@@ -565,16 +582,35 @@ def _currency(
         raise UsageError(f"no directory at {directory}")
     listed: list[tuple[Path, str, dict, signoff.Standing]] = []
     other = 0
+    # Every document in the directory, whatever its kind, and every JSON file
+    # passed over with why: an index a reader that cannot list a directory, such
+    # as the console in a browser, finds them by (qedro-platform#5).
+    documents: list[dict] = []
+    passed_over: list[dict] = []
     for path in sorted(root.rglob("*.json")):
         if path.name.endswith(".signoff.json"):
             continue
+        name = str(path.relative_to(root))
         try:
             payload = signoff.read_record(path)
         except UsageError:
+            passed_over.append({"file": name, "reason": _not_a_document(path)})
             continue
         if payload["qedro"].get("projection") == "status":
             # This command's own output, written into the directory it reads.
             continue
+        documents.append(
+            {
+                "file": name,
+                "projection": payload["qedro"].get("projection"),
+                "view": payload["qedro"].get("view"),
+                # The same document in the other formats qedro writes, beside it
+                # under the same name, so a reader links only files that exist.
+                "formats": [
+                    suffix for suffix in OTHER_FORMATS if path.with_suffix(suffix).is_file()
+                ],
+            }
+        )
         kind = signoff.kind(payload)
         if kind not in signoff.COVERED or (source and kind != "ropa/art30"):
             # Only an Art. 30 record has activities a fresh run can be compared
@@ -684,6 +720,8 @@ def _currency(
             "approved_without_second_person": sum(
                 1 for *_, standing in listed if standing.second_person is False
             ),
+            "documents": documents,
+            "passed_over": passed_over,
         }
         _deliver(json.dumps(document, indent=2, ensure_ascii=False) + "\n", out)
         if out:

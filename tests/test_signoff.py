@@ -369,3 +369,94 @@ class TestFourEyes:
 
         with pytest.raises(ConfigError, match=message):
             config.parse(yaml)
+
+
+class TestTheStatusIndex:
+    """`qedro status --format json` lists every document in the directory, so a
+    reader that cannot list one, the console in a browser, finds them by it
+    (qedro-platform#5)."""
+
+    @staticmethod
+    def directory(tmp_path):
+        from qedro.__main__ import main
+
+        demo, config = "demo/lineage-declared", "demo/qedro.yaml"
+        records = tmp_path / "records"
+        (records / "lab").mkdir(parents=True)
+        for out in ("ropa.json", "ropa.pdf", "ropa.md"):
+            assert main(["ropa", demo, "--config", config, "--out", str(records / out)]) == 0
+        assert (
+            main(
+                [
+                    "ropa",
+                    demo,
+                    "--config",
+                    config,
+                    "--view",
+                    "deployer",
+                    "--out",
+                    str(records / "ropa-ai.json"),
+                ]
+            )
+            == 0
+        )
+        assert (
+            main(
+                [
+                    "quality",
+                    demo,
+                    "--config",
+                    config,
+                    "--out",
+                    str(records / "lab" / "quality.json"),
+                ]
+            )
+            == 0
+        )
+        main(
+            [
+                "diff",
+                str(records / "ropa.json"),
+                str(records / "ropa.json"),
+                "--format",
+                "json",
+                "--out",
+                str(records / "ropa.diff.json"),
+            ]
+        )
+        (records / "register.json").write_text("{}", encoding="utf-8")
+        (records / "broken.json").write_text('{"qedro"', encoding="utf-8")
+        signoff.sign(records / "ropa.json", state="for sign-off", by="Max Mustermann", at=AT)
+        return records  # fmt: skip
+
+    def index(self, records, capsys, *args):
+        from qedro.__main__ import main
+
+        capsys.readouterr()
+        assert main(["status", str(records), *args, "--format", "json"]) == 0
+        return json.loads(capsys.readouterr().out)
+
+    def test_every_document_of_every_kind_with_the_formats_beside_it(self, tmp_path, capsys):
+        payload = self.index(self.directory(tmp_path), capsys)
+        assert payload["documents"] == [
+            {"file": "lab/quality.json", "projection": "quality", "view": None, "formats": []},
+            {"file": "ropa-ai.json", "projection": "ropa", "view": "deployer", "formats": []},
+            {"file": "ropa.diff.json", "projection": "diff", "view": None, "formats": []},
+            {"file": "ropa.json", "projection": "ropa", "view": "art30", "formats": [".md", ".pdf"]},
+        ]  # fmt: skip
+
+    def test_a_json_file_that_is_not_a_document_is_passed_over_with_why(self, tmp_path, capsys):
+        payload = self.index(self.directory(tmp_path), capsys)
+        assert payload["passed_over"] == [
+            {"file": "broken.json", "reason": "not JSON"},
+            {"file": "register.json", "reason": "not a document qedro wrote: it has no `qedro` block"},
+        ]  # fmt: skip
+
+    def test_the_index_is_the_same_when_records_are_compared(self, tmp_path, capsys):
+        # --against compares only Art. 30 records; the index still lists all.
+        records = self.directory(tmp_path)
+        alone = self.index(records, capsys)
+        against = self.index(records, capsys, "--against", "demo/lineage-declared",
+                             "--config", "demo/qedro.yaml")  # fmt: skip
+        assert against["documents"] == alone["documents"]
+        assert [r["file"] for r in against["records"]] == ["ropa.json"]

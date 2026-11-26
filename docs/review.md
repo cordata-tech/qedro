@@ -208,3 +208,10 @@ $ qedro sign records/fraud.next.json --as "Erika Mustermann" --state approved
 its verdict and sign-off, and with `--against` each activity's state and what changed,
 in the words the text uses, for a reader such as a console that shows which signed
 records have gone stale.
+
+The document also lists everything in the directory, whatever its kind, so a reader
+that cannot list a directory itself, such as the console in a browser, can find each
+file from it: `documents` names every JSON document qedro wrote there, with its
+projection and view and the other formats of it beside it under the same name, and
+`passed_over` every JSON file that is not one, with the reason. Both are the same with
+`--against`, which compares only the Art. 30 records.

@@ -6,6 +6,16 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro status --format json` lists every document in the directory**, in two new
+  fields beside `records`: `documents`, each JSON document qedro wrote there with its
+  projection, its view and the other formats of it beside it (`.pdf`, `.md`, …), and
+  `passed_over`, each JSON file that is not one, with the reason. `records` still holds
+  the ones a sign-off covers, and with `--against` the Art. 30 records it compares; the
+  two new lists are the same either way. A reader that cannot list a directory, such as
+  a console loading records in a browser, finds every file from it.
+
 ## 0.31.0 — 2026-11-26
 
 - **A record states a job's latest declared purpose and legal basis**, not the first
