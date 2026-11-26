@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.31.0 — 2026-11-26
 
 - **A record states a job's latest declared purpose and legal basis**, not the first
   (#66). Over a window in which a job emitted one purpose and later another, the record
