@@ -91,6 +91,10 @@ def check(
         return blocked(origin, signed, str(exc))
 
     grouped = dict(comparison.by_entry())
+    # The fresh run split where the signed record's window ends: what each job did
+    # up to the signing, and after it (#49).
+    if attributor is not None:
+        attributor = attributor.at(before.until)
 
     def causes(changes: tuple[Change, ...]) -> tuple[Attribution, ...]:
         return tuple(attributor.change(c) for c in changes) if attributor else ()

@@ -8,16 +8,26 @@ before `1.0`.
 
 ## Unreleased
 
-- **`qedro status --against` says why each change happened**, as far as the fresh run's
-  events and files show it: the first run in the window that emitted a new value, with
-  the commit its `sourceCodeLocation` names; the mapping rule now supplying it, with its
-  file and line; a declared activity; or, for a new activity or a dataset newly read or
-  written, the first run that did so. A value gone with nothing supplying it is reported
-  as stopped, and a change qedro does not trace yet, such as a classification, as
-  unattributed with the reason; neither is guessed. The text prints a `why:` line under
-  each change; the JSON gives each change a `cause` object, and each new activity one,
-  beside the existing fields. The commit that changed a `qedro.yaml` rule and causes
-  further up the provenance chain are not traced yet (#49).
+- **`qedro status --against` says why each change happened**, as far as the events and
+  files show it, comparing each job before and after the end of the signed record's
+  window (#49):
+  - a value a job emits: the first run after the sign-off that emitted it, with its
+    commit, and the commit the job ran at before;
+  - a value from the mapping file: the rule, its file and line, and where `qedro.yaml`
+    is in Git, the commit that last changed the rule, with author, date and message,
+    read with `git log`, which is the only program qedro runs;
+  - a classification: the run, and the job, whose event first tagged the dataset so;
+  - a dataset newly read: the first run that read it, and the chain of jobs producing
+    it, each before → after the sign-off, by commit and by the inputs it gained or lost;
+  - a new activity or a dataset newly written: its first run; a declared activity: its
+    document.
+
+  A value gone with nothing supplying it is reported as stopped, anything else as
+  unattributed with the reason, and a job with no run before the sign-off in the events
+  as possibly older; nothing is guessed. The text prints a `why:` line under each change;
+  the JSON gives each change and each new activity a `cause` object beside the existing
+  fields, with `upstream`, `rule_change` and `history` for the chain and the rule's
+  history.
 
 ## 0.30.0 — 2026-11-23
 

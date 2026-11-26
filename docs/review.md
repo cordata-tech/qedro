@@ -157,15 +157,33 @@ files show it ([#49](https://github.com/cordata-tech/qedro/issues/49)):
                          `acme.billing/dunning-*` in qedro.yaml line 72
 ```
 
-The causes qedro can name are the first run in the window that emitted a new value, with
-the commit its `sourceCodeLocation` names; the mapping rule now supplying it, with its
-file and line; a declared activity; and for a new activity or a dataset newly read or
-written, the first run that did so. A first run in the window that already carries the
-new value is said to be the window's first, since the change may be older than the
-window. A value that is gone with nothing supplying it is reported as stopped, and a
-kind of change qedro does not trace yet, such as a classification, as unattributed with
-the reason; neither is guessed. The commit that changed a rule in `qedro.yaml`, and a
-cause further up the provenance chain, are not traced yet.
+The fresh run usually reads the whole source, the events from before the signing
+included, so the end of the signed record's window is a boundary: what each job did up
+to it, and what it did after. The causes qedro names against it:
+
+- **A value a job emits:** the first run after the sign-off that emitted it, with the
+  commit its `sourceCodeLocation` names, and the job's last run before the sign-off with
+  the commit it ran at.
+- **A value from the mapping file:** the rule now supplying it, with its file and line.
+  Where `qedro.yaml` is in Git, also the commit that last changed the rule — its pattern
+  and the fields under it — with its author, date and message, read with `git log`.
+  Where it is not in a repository, has uncommitted changes, or Git is not installed, the
+  cause says so.
+- **A classification:** the run whose event first tagged a dataset the activity touches
+  with the new value, naming the job when it is another one, such as a catalog sync.
+- **A dataset newly read:** the first run that read it, and the chain of jobs that
+  produce it, nearest first. Each level shows the producing job before → after the
+  sign-off: the commit it ran at and the inputs it gained or lost, or that it has no run
+  before the sign-off in the events. The walk goes on through what changed at each level,
+  stops where nothing did, and is cut at eight jobs.
+- **A new activity, or a dataset newly written:** the first run after the sign-off.
+- **A declared activity:** the activities document, which no event can date.
+
+Where a job has no run before the sign-off in the events, the cause says the change may
+be older than what the events show. A value gone with nothing supplying it is reported as
+stopped, and anything else as unattributed with the reason; nothing is guessed. Reading
+`git log` is the only thing qedro runs besides itself, in the mapping file's own
+repository, with the settings that would let a repository run a program switched off.
 
 `--regenerate --as NAME` turns the stale and new activities into a version to review
 ([#55](https://github.com/cordata-tech/qedro/issues/55)): for each signed record that
