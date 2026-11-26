@@ -572,3 +572,40 @@ class TestAFourthWeekAfterASignOff:
         assert any(
             "demo/lineage and demo/lineage-later" in caution for caution in check["cautions"]
         )
+
+
+class TestAMappingChangeOnTheDemo:
+    """The other direction (#49): a record signed over `demo/lineage-declared`,
+    checked against `demo/lineage`, where nothing emits a purpose any more and the
+    mapping file supplies it."""
+
+    def test_the_cause_names_the_rule_now_supplying_the_value(self, tmp_path, capsys):
+        records = tmp_path / "records"
+        records.mkdir()
+        path = str(records / "fraud.json")
+        assert main(["ropa", DECLARED, "--config", CONFIG, "--format", "json", "--out", path]) == 0
+        assert main(["sign", path, "--as", "Max Mustermann", "--state", "for sign-off"]) == 0
+        assert main(["sign", path, "--as", "Erika Mustermann", "--state", "approved"]) == 0
+        capsys.readouterr()
+        args = ["status", str(records), "--against", PLAIN, "--config", CONFIG]
+        assert main([*args, "--format", "json"]) == 0
+        [signed] = json.loads(capsys.readouterr().out)["records"]
+        [scoring] = [
+            a
+            for a in signed["check"]["activities"]
+            if a["key"] == "acme.fraud/transactions-scored-daily"
+        ]
+        purpose = {c["field"]: c for c in scoring["changes"]}["purpose"]
+        assert purpose["costs"] == "evidence lost: emitted facet → mapping file"
+        cause = purpose["cause"]
+        pattern = "acme.fraud/transactions-*"
+        line = 1 + (DEMO / "qedro.yaml").read_text().splitlines().index(f'  "{pattern}":')
+        assert (cause["cause"], cause["rule"], cause["file"], cause["line"]) == (
+            "mapping",
+            pattern,
+            CONFIG,
+            line,
+        )
+        # The rule's Git history is read from this repository, whose depth
+        # depends on the checkout, so only its presence or its reason is asserted.
+        assert cause["rule_change"] is not None or cause["history"] is not None
