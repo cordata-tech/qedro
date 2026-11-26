@@ -25,6 +25,7 @@ from qedro.__main__ import main
 DEMO = Path("demo")
 PLAIN = str(DEMO / "lineage")
 DECLARED = str(DEMO / "lineage-declared")
+LATER = str(DEMO / "lineage-later")
 CONFIG = str(DEMO / "qedro.yaml")
 
 
@@ -111,7 +112,7 @@ class TestSourceNeutrality:
     the claim untestable while looking like it proved it.
     """
 
-    @pytest.mark.parametrize("directory", ["lineage", "lineage-declared"])
+    @pytest.mark.parametrize("directory", ["lineage", "lineage-declared", "lineage-later"])
     def test_nothing_in_the_estate_names_one_cloud(self, directory):
         forbidden = ("lf_tags", "lakeformation", "arn:aws", "amazonaws", "cordata://")
         for path in (DEMO / directory).glob("*.ndjson"):
@@ -459,3 +460,115 @@ class TestDeclaredActivitiesOnTheDemo:
         assert main([*args, "--activities", ACTIVITIES, "--format", "json"]) == 0
         payload = json.loads(capsys.readouterr().out)
         assert [d["name"] for d in payload["declared"]] == ["support-reply-drafts"]
+
+
+class TestAFourthWeekAfterASignOff:
+    """cordata-tech/qedro#49 on the demo rather than on events built for a test.
+
+    A record signed over `demo/lineage`, checked with `qedro status --against
+    demo/lineage-later`: the same three weeks and a fourth after them, in which
+    the scoring job's next release reads a new job's output and declares a
+    purpose that is not the mapping file's. Every cause below is read from
+    events shaped as the integrations emit them.
+    """
+
+    SCORING = "acme.fraud/transactions-scored-daily"
+    PROFILES = "acme.fraud/device-profiles-daily"
+
+    @pytest.fixture
+    def check(self, tmp_path, capsys) -> dict:
+        records = tmp_path / "records"
+        records.mkdir()
+        path = str(records / "fraud.json")
+        assert main(["ropa", PLAIN, "--config", CONFIG, "--format", "json", "--out", path]) == 0
+        assert main(["sign", path, "--as", "Max Mustermann", "--state", "for sign-off"]) == 0
+        assert main(["sign", path, "--as", "Erika Mustermann", "--state", "approved"]) == 0
+        capsys.readouterr()
+        args = ["status", str(records), "--against", LATER, "--config", CONFIG]
+        assert main([*args, "--format", "json"]) == 0
+        [signed] = json.loads(capsys.readouterr().out)["records"]
+        return signed["check"]
+
+    def changes(self, check: dict) -> dict[str, dict]:
+        [scoring] = [a for a in check["activities"] if a["key"] == self.SCORING]
+        assert scoring["state"] == "stale"
+        return {c["field"]: c for c in scoring["changes"]}
+
+    def test_its_first_three_weeks_are_demo_lineage_line_for_line(self):
+        # So the end of a record signed over demo/lineage is where the fourth
+        # week starts, and nothing before it can read as a change.
+        for path in sorted((DEMO / "lineage").glob("*.ndjson")):
+            earlier = path.read_text(encoding="utf-8")
+            later = (DEMO / "lineage-later" / path.name).read_text(encoding="utf-8")
+            assert later.startswith(earlier)
+            for line in later[len(earlier) :].splitlines():
+                assert json.loads(line)["eventTime"] >= "2026-07-27"
+
+    def test_only_the_scoring_job_is_stale_and_the_new_job_is_new(self, check):
+        # Every other job ran again in the fourth week, at a new commit, and
+        # states the same: running again is not a change.
+        states = {a["key"]: a["state"] for a in check["activities"]}
+        assert states.pop(self.SCORING) == "stale"
+        assert states.pop(self.PROFILES) == "new"
+        assert set(states.values()) == {"up to date"}
+        assert len(states) == 6
+
+    def test_the_purpose_names_the_run_that_declared_it_and_both_commits(self, check):
+        purpose = self.changes(check)["purpose"]
+        assert (purpose["before"]["value"], purpose["after"]["value"]) == (
+            "fraud-detection",
+            "chargeback-handling",
+        )
+        cause = purpose["cause"]
+        assert cause["cause"] == "emitted"
+        assert cause["when"].startswith("2026-07-27")
+        assert cause["commit"] == demo._commit(demo.LATER[0], 21)
+        assert cause["commit_before"] == demo._commit(demo.PIPELINES[0], 20)
+        assert cause["says"].startswith("first emitted as chargeback-handling by run ")
+        assert "the job's last run before the sign-off" in cause["says"]
+        assert "on 2026-07-26, ran at commit" in cause["says"]
+
+    def test_a_basis_now_evidenced_has_the_same_cause(self, check):
+        basis = self.changes(check)["legal basis"]
+        assert basis["kind"] == "repaired"
+        assert basis["cause"]["cause"] == "emitted"
+        assert basis["cause"]["run"] == self.changes(check)["purpose"]["cause"]["run"]
+
+    def test_the_new_input_is_traced_to_the_new_job_that_writes_it(self, check):
+        reads = self.changes(check)["reads"]
+        assert reads["after"]["value"] == "warehouse/fraud_curated.device_profiles"
+        cause = reads["cause"]
+        assert cause["cause"] == "first run"
+        [step] = cause["upstream"]
+        assert (step["dataset"], step["job"], step["new"]) == (
+            "warehouse/fraud_curated.device_profiles",
+            self.PROFILES,
+            True,
+        )
+        assert step["commit"]["before"] is None
+        assert cause["says"].endswith(
+            "upstream: warehouse/fraud_curated.device_profiles is written by "
+            "acme.fraud/device-profiles-daily, which has no run before the sign-off in the events"
+        )
+
+    def test_a_category_gained_names_the_other_job_whose_event_tagged_it(self, check):
+        category = self.changes(check)["data_category"]
+        assert category["after"]["value"] == "location"
+        cause = category["cause"]
+        assert (cause["cause"], cause["job"]) == ("tagged", self.PROFILES)
+        assert cause["says"].startswith(
+            "first tagged data_category location on warehouse/fraud_curated.device_profiles by run "
+        )
+        assert " of acme.fraud/device-profiles-daily on 2026-07-27" in cause["says"]
+
+    def test_the_new_job_names_its_first_run_and_says_it_may_be_older(self, check):
+        [profiles] = [a for a in check["activities"] if a["key"] == self.PROFILES]
+        cause = profiles["cause"]
+        assert cause["cause"] == "first run"
+        assert cause["says"].startswith("first ran as run ")
+        assert cause["says"].endswith("so it may be older")
+
+    def test_the_different_source_is_said_above_the_findings(self, check):
+        assert any(
+            "demo/lineage and demo/lineage-later" in caution for caution in check["cautions"]
+        )

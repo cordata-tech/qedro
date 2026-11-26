@@ -12,7 +12,7 @@ well enough that the record it produces reads like one somebody would actually
 hand to a supervisory authority. cordata-tech/qedro#2 warns against budgeting
 this as an afterthought. It was right to.
 
-Two estates, from the same fictional company:
+Two sets of lineage from the same fictional company, and a third continuing the first:
 
 ``demo/lineage``
     What most organisations have today. dbt, Airflow and Spark emitting
@@ -28,6 +28,12 @@ That pairing is the demonstration. Run the projection against each and the
 difference is not cosmetic: the first record is asserted, the second is
 evidenced, and only the second earns the mark.
 
+``demo/lineage-later``
+    ``demo/lineage`` with a fourth week after it, in which the fraud team
+    ships a new job and the scoring job's next release reads its output and
+    declares a purpose of its own. A record signed over the first three weeks
+    is what `qedro status --against` checks against it (#49).
+
 **Everything here is deterministic.** No randomness, no clock — run IDs are
 UUIDv5 over the job and the day, and every timestamp derives from `START`. Two
 runs produce byte-identical files, so a diff in `demo/` is always a real
@@ -39,7 +45,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from importlib import resources
 from pathlib import Path
@@ -64,6 +70,12 @@ CONTROLLER = "ACME Finanz GmbH"
 #: every failure day and every count is unchanged — only the dates moved.
 START = datetime(2026, 7, 6, tzinfo=UTC)
 DAYS = 21
+
+#: `demo/lineage-later` runs a week longer. Its first three weeks are
+#: `demo/lineage` line for line, so a record signed over `demo/lineage` has the
+#: end of its window where the fourth week begins, and everything `qedro status
+#: --against` finds has happened in that week.
+LATER_DAYS = 28
 
 #: Real OpenLineage producer strings. The integrations are named because the
 #: whole claim is that this works against what people already run — an estate
@@ -120,6 +132,16 @@ CLASSIFICATION: dict[str, tuple[tuple[str, ...], ...]] = {
         ("subject_type", "customer"),
         ("residency", "eu"),
         ("retention", "7y"),
+    ),
+    # Written only in the fourth week of `demo/lineage-later`. The country an
+    # address resolves to is a location, which nothing the scoring job read
+    # before carried, so the job's categories change when it starts reading it.
+    "fraud_curated.device_profiles": (
+        ("data_category", "behavioural"),
+        ("data_category", "location", "ip_country"),
+        ("subject_type", "customer"),
+        ("residency", "eu"),
+        ("retention", "1y"),
     ),
     "fraud_curated.scores_checked": (
         ("data_category", "behavioural"),
@@ -199,6 +221,13 @@ SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("fraud_score", "DOUBLE"),
         ("model_version", "VARCHAR"),
         ("scored_at", "TIMESTAMP"),
+    ],
+    "fraud_curated.device_profiles": [
+        ("account_id", "VARCHAR"),
+        ("device_fingerprint", "VARCHAR"),
+        ("ip_country", "VARCHAR"),
+        ("first_seen", "TIMESTAMP"),
+        ("last_seen", "TIMESTAMP"),
     ],
     "fraud_curated.scores_checked": [
         ("tx_id", "VARCHAR"),
@@ -320,6 +349,9 @@ class Pipeline:
     #: changes part-way through the window because the deployer view exists to
     #: say which model ran on which run, and a single version never tests that.
     models: tuple[tuple[int, str], ...] = ()
+    #: Emits the `processing` facet in every set of lineage, the plain one included: a
+    #: job written after the team began declaring, in `demo/lineage-later`.
+    declares: bool = False
 
     @property
     def namespace(self) -> str:
@@ -477,6 +509,41 @@ PIPELINES = (
     ),
 )
 
+#: What changes in the fourth week of `demo/lineage-later`, from its first day.
+#: The scoring job's next release reads the device profiles and declares its
+#: purpose, which is no longer the mapping file's `fraud-detection`: its scores
+#: now also decide disputed card transactions. The profiles come from a job new
+#: that week, declaring from its first run. Every job also runs at a new commit,
+#: as each does every week, so a change here has a commit before and after it.
+LATER = (
+    replace(
+        PIPELINES[0],
+        inputs=(*PIPELINES[0].inputs, "fraud_curated.device_profiles"),
+        purpose="chargeback-handling",
+        declares=True,
+        sql=(
+            "select t.tx_id, t.account_id, score(t.*, d.*, p.*) as fraud_score "
+            "from fraud_raw.transactions t "
+            "left join fraud_raw.device_events d using (account_id) "
+            "left join fraud_curated.device_profiles p using (account_id)"
+        ),
+    ),
+    *PIPELINES[1:],
+    Pipeline(
+        domain="fraud",
+        name="device-profiles-daily",
+        code_path="jobs/fraud/device_profiles.scala",
+        emitter="spark",
+        hour=1,
+        minute=50,
+        inputs=("fraud_raw.device_events",),
+        outputs=("fraud_curated.device_profiles",),
+        purpose="fraud-detection",
+        legal_basis="legitimate-interest",
+        declares=True,
+    ),
+)
+
 #: Namespace for the deterministic run IDs. Any fixed UUID would do; this one
 #: is derived from the demo's own name so it is reproducible from the source.
 RUN_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://cordata.tech/qedro/demo")
@@ -615,7 +682,7 @@ def _job(pipeline: Pipeline, producer: str, day: int, *, declared: bool) -> dict
             producer,
             f"{FACET_SPEC}/SourceCodeLocationJobFacet.json#/$defs/SourceCodeLocationJobFacet",
         )
-    if declared:
+    if declared or pipeline.declares:
         # The whole difference between the two estates.
         facets["processing"] = _facet(
             {"purpose": pipeline.purpose, "legal_basis": pipeline.legal_basis},
@@ -712,10 +779,10 @@ def _events(pipeline: Pipeline, day: int, *, declared: bool) -> list[dict]:
     return events
 
 
-def build(*, declared: bool) -> Estate:
+def build(*, declared: bool, later: bool = False) -> Estate:
     estate = Estate(declared=declared)
-    for day in range(DAYS):
-        for pipeline in PIPELINES:
+    for day in range(LATER_DAYS if later else DAYS):
+        for pipeline in LATER if day >= DAYS else PIPELINES:
             if not pipeline.runs_on(day):
                 continue
             for event in _events(pipeline, day, declared=declared):
@@ -742,6 +809,7 @@ def estates() -> dict[str, dict[str, str]]:
     return {
         "lineage": render(build(declared=False)),
         "lineage-declared": render(build(declared=True)),
+        "lineage-later": render(build(declared=False, later=True)),
     }
 
 

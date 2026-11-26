@@ -28,6 +28,11 @@ before `1.0`.
   the JSON gives each change and each new activity a `cause` object beside the existing
   fields, with `upstream`, `rule_change` and `history` for the chain and the rule's
   history.
+- **The demo has a fourth week**, in `lineage-later/`: `lineage/` line for line, then a
+  week in which a new job starts writing device profiles and the scoring job reads them
+  and declares a purpose of its own. `qedro demo` now ends with the four commands that
+  sign a record over the first three weeks and check it against all four, and
+  `demo/README.md` shows what `qedro status` says and why.
 
 ## 0.30.0 — 2026-11-23
 

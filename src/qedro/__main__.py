@@ -421,10 +421,12 @@ def _demo(target: str) -> int:
     at = shlex.quote(target.rstrip("/"))
     # Both directories hold the same runs, so one of them is the count.
     events = sum(body.count("\n") for name, body in written.items() if name.startswith("lineage/"))
+    record = shlex.quote(f"{target.rstrip('/')}/fraud.json")
     print(
         f"  wrote {demo.CONTROLLER}, a company that does not exist, to {at}/\n"
         f"  {len(demo.PIPELINES)} pipelines over {demo.DAYS} days, {events:,} events, twice: "
-        "the two directories differ only in whether each job declares its purpose\n"
+        "the two directories differ only in whether each job declares its purpose; "
+        "lineage-later/ adds a fourth week in which two fraud jobs change\n"
         "\n"
         "  lineage alone, with purposes from the mapping file: no mark\n"
         f"    qedro ropa {at}/lineage --config {at}/qedro.yaml\n"
@@ -440,6 +442,11 @@ def _demo(target: str) -> int:
         "  a register kept by hand, checked against the record\n"
         f"    qedro ropa {at}/lineage-declared --config {at}/qedro.yaml --out record.json\n"
         f"    qedro diff {at}/register.yaml record.json\n"
+        "  a record signed over the three weeks, and what changed in the fourth, and why\n"
+        f"    qedro ropa {at}/lineage --config {at}/qedro.yaml --out {record}\n"
+        f"    qedro sign {record} --as 'Max Mustermann' --state 'for sign-off'\n"
+        f"    qedro sign {record} --as 'Erika Mustermann' --state approved\n"
+        f"    qedro status {at} --against {at}/lineage-later --config {at}/qedro.yaml\n"
         "\n"
         "  Then run the same commands against your own lineage: a directory of "
         "OpenLineage events, or the URL of a Marquez-compatible API."

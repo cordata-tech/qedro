@@ -157,6 +157,10 @@ files show it ([#49](https://github.com/cordata-tech/qedro/issues/49)):
                          `acme.billing/dunning-*` in qedro.yaml line 72
 ```
 
+[`demo/README.md`](../demo/README.md#a-fourth-week-after-a-sign-off) runs the same
+against the demo's fourth week, where a new job and a purpose declared for the first
+time give most of the causes below.
+
 The fresh run usually reads the whole source, the events from before the signing
 included, so the end of the signed record's window is a boundary: what each job did up
 to it, and what it did after. The causes qedro names against it:

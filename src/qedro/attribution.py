@@ -28,7 +28,7 @@ events, the mapping file, and its Git history through `history`.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import compare, history
@@ -159,12 +159,23 @@ class Context:
 
 
 def _from_run(
-    cause: str, what: str, event: Event, ctx: Context, upstream: tuple[Step, ...] = ()
+    cause: str,
+    what: str,
+    event: Event,
+    ctx: Context,
+    upstream: tuple[Step, ...] = (),
+    *,
+    by: str = "by",
+    of_job: bool = False,
 ) -> Attribution:
-    """A cause found in one run: the run, its date, its commit, and the run before."""
+    """A cause found in one run: the run, its date, its commit, and the run before.
+
+    *of_job* names the run's job, for a run of another job than the activity's,
+    so that "the job" in the rest of the sentence has something to refer to."""
     commit, where = _where(event)
     run, job = event.run.run_id, event.job.key
-    says = f"{what} by run {run[:8]} on {_day(event.event_time)}"
+    says = f"{what} {by} run {run[:8]}" + (f" of {job}" if of_job else "")
+    says += f" on {_day(event.event_time)}"
     says += (
         (f", at commit {commit[:12]}" + (f" of {where}" if where else ""))
         if commit
@@ -361,11 +372,13 @@ def _classification(change: Change, activity: Activity | None, ctx: Context) -> 
     for event in ctx.after(ctx.every):
         for dataset in sorted(datasets):
             if (key, value) in _tags(event, dataset):
-                found = _from_run(TAGGED, f"first tagged {key} {value} on {dataset}", event, ctx)
-                job = event.job.key
-                if job != change.entry:
-                    return replace(found, says=found.says + f"; the event is {job}'s")
-                return found
+                return _from_run(
+                    TAGGED,
+                    f"first tagged {key} {value} on {dataset}",
+                    event,
+                    ctx,
+                    of_job=event.job.key != change.entry,
+                )
     return Attribution(
         UNATTRIBUTED,
         "no event after the sign-off tags it; it may come from a catalog qedro reads "
@@ -415,7 +428,7 @@ def added(change: Change, ctx: Context) -> Attribution:
     runs = ctx.after(ctx.by_job.get(change.entry, []))
     if not runs:
         return Attribution(UNATTRIBUTED, "no run of it is in the window")
-    return _from_run(FIRST_RUN, "first ran", runs[0], ctx)
+    return _from_run(FIRST_RUN, "first ran", runs[0], ctx, by="as")
 
 
 class Attributor:

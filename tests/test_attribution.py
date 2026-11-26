@@ -308,10 +308,14 @@ class TestAClassificationChange:
         ]  # fmt: skip
         cause = cause_of(checked(signed, fresh), "data_category")
         assert (cause.cause, cause.run, cause.job) == (TAGGED, "t1", "acme.catalog/sync")
+        # The other job is named beside its run, so "the job" after it is that one.
         assert cause.says.startswith(
-            "first tagged data_category financial on wh/curated.scores by run t1 on 2026-03-04"
+            "first tagged data_category financial on wh/curated.scores by run t1 of "
+            "acme.catalog/sync on 2026-03-04, at commit 4f2a9c1e8b7d"
         )
-        assert cause.says.endswith("; the event is acme.catalog/sync's")
+        assert cause.says.endswith(
+            "; the job has no run before the sign-off in the events, so it may be older"
+        )
 
 
 class TestOtherChanges:
@@ -332,6 +336,7 @@ class TestOtherChanges:
         [new] = [a for a in checked(signed, fresh).activities if a.state == staleness.NEW]
         assert new.cause is not None
         assert (new.cause.cause, new.cause.run) == (FIRST_RUN, "n1")
+        assert new.cause.says.startswith("first ran as run n1 on 2026-03-11")
 
 
 def test_a_declared_activity_is_attributed_to_its_document_never_to_events():

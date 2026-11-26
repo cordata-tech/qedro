@@ -1,6 +1,7 @@
 """The CLI, mostly to prove the mark rule holds end to end."""
 
 import json
+import shlex
 
 import pytest
 from openpyxl import load_workbook
@@ -965,7 +966,7 @@ class TestTheDemoCommand:
     @staticmethod
     def printed(out):
         """The commands `qedro demo` tells somebody to type, as argument lists."""
-        return [line.split()[1:] for line in out.splitlines() if line.startswith("    qedro ")]
+        return [shlex.split(line)[1:] for line in out.splitlines() if line.startswith("    qedro ")]
 
     def test_it_writes_what_the_repository_has(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -984,6 +985,7 @@ class TestTheDemoCommand:
         commands = self.printed(capsys.readouterr().out)
         assert [c[0] for c in commands] == [
             "ropa", "ropa", "quality", "provenance", "erasure", "ropa", "diff",
+            "ropa", "sign", "sign", "status",
         ]  # fmt: skip
         for command in commands:
             assert main(command) == 0, command
@@ -992,6 +994,11 @@ class TestTheDemoCommand:
                 assert TOMBSTONE not in out
             if command[:2] == ["ropa", "acme/lineage-declared"] and "--out" not in command:
                 assert TOMBSTONE in out
+            if command[0] == "status":
+                # The fourth week's two changes, each with its cause.
+                assert "stale       acme.fraud/transactions-scored-daily" in out
+                assert "new         acme.fraud/device-profiles-daily" in out
+                assert "why: first emitted as chargeback-handling by run" in out
 
     def test_a_directory_with_anything_in_it_is_refused(self, tmp_path, capsys):
         (tmp_path / "mine.txt").write_text("somebody's own file", encoding="utf-8")

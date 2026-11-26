@@ -17,6 +17,7 @@ demo/
   register.yaml        an AI register kept by hand, drifted from what runs
   lineage/             the estate as it is today — no Art. 30 facet anywhere
   lineage-declared/    the same three weeks once the pipelines declare
+  lineage-later/       lineage/ and a fourth week after it, in which two fraud jobs change
 ```
 
 `qedro demo` writes the same files into an empty directory, for anyone who installed
@@ -208,6 +209,66 @@ looks like here.
 The three source tables at the end are marked as endings rather than failures — and
 the reasons say what an ending means, since a source dataset and a producing run
 outside the window are indistinguishable from here.
+
+## A fourth week, after a sign-off
+
+`lineage-later/` is `lineage/` line for line, followed by a fourth week starting on
+Monday 27 July. In that week the fraud team ships `device-profiles-daily`, a Spark job
+that builds a profile per device and declares its purpose from its first run, and the
+scoring job's next release reads those profiles and declares its own purpose for the
+first time. The purpose it declares is `chargeback-handling` rather than the mapping
+file's `fraud-detection`, because its scores now also decide disputed card transactions.
+Every job runs at a new commit that week, as each does every week.
+
+A record signed over the three weeks, checked against all four, is stale in that one
+activity, and `qedro status` says why each change happened
+([#49](https://github.com/cordata-tech/qedro/issues/49)):
+
+```console
+$ mkdir records
+$ qedro ropa demo/lineage --config demo/qedro.yaml --out records/fraud.json
+$ qedro sign records/fraud.json --as "Max Mustermann" --state "for sign-off"
+$ qedro sign records/fraud.json --as "Erika Mustermann" --state approved
+$ qedro status records --against demo/lineage-later --config demo/qedro.yaml
+
+    stale       acme.fraud/transactions-scored-daily
+                  purpose: fraud-detection → chargeback-handling — now evidenced: mapping file → emitted facet
+                    why: first emitted as chargeback-handling by run b5f5af4d on 2026-07-27, at commit
+                         6ceb0c680936 of https://github.com/acme-finanz/data-platform/models/fraud/transactions_scored.sql;
+                         the job's last run before the sign-off, 78766c96 on 2026-07-26, ran at commit 5bb8fdd71549
+                  data_category: + location
+                    why: first tagged data_category location on warehouse/fraud_curated.device_profiles by run
+                         23b9ef7d of acme.fraud/device-profiles-daily on 2026-07-27, at commit 7568b067caa4 of …;
+                         the job has no run before the sign-off in the events, so it may be older
+                  reads: + warehouse/fraud_curated.device_profiles
+                    why: first read by run b5f5af4d on 2026-07-27, at commit 6ceb0c680936 of …;
+                         the job's last run before the sign-off, 78766c96 on 2026-07-26, ran at commit 5bb8fdd71549;
+                         upstream: warehouse/fraud_curated.device_profiles is written by
+                         acme.fraud/device-profiles-daily, which has no run before the sign-off in the events
+    new         acme.fraud/device-profiles-daily
+                  why: first ran as run 23b9ef7d on 2026-07-27, at commit 7568b067caa4 of …
+    up to date  acme.billing/dunning-weekly, acme.billing/invoices-nightly, acme.crm/consent-sync, …
+
+  1 signed record: 6 up to date, 1 stale, 1 new, 0 blocked
+```
+
+The legal basis and the retention period are stale too, and left out above: the basis
+is the same value now emitted rather than mapped, and the profiles are kept for a year
+where the scored transactions are kept for seven. The other six jobs ran again in the
+fourth week at new commits and state what they stated before, so they are up to date.
+Above the findings the command also says the two records were read from different
+directories over windows of different length, since the record was built from
+`lineage/` and the check from `lineage-later/`.
+
+The location category is the one change whose cause is another job: no dataset the
+scoring job read before carried it, and the device-profiles job's event was the first
+to tag one with it.
+
+The fourth week is built on the plain lineage, where the scoring job emitted no
+purpose before, rather than on the declared one, where it emitted `fraud-detection` for
+three weeks. In a window where a job emits one purpose and then another, the Art. 30
+record keeps the first one it read, so a fresh run over all four weeks of declared
+lineage would still say `fraud-detection` and report no change.
 
 ## Worth noticing
 
