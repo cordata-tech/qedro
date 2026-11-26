@@ -264,7 +264,7 @@ def _single(change: Change, activity: Activity | None, ctx: Context) -> Attribut
     if after.provenance is Provenance.MAPPING:
         before = change.before
         lead = (
-            f"no run in the window emitted a {label}; now supplied by"
+            f"{_unemitted(change, ctx)}; now supplied by"
             if before is not None and before.provenance is Provenance.FACET
             else "supplied by"
         )
@@ -275,9 +275,48 @@ def _single(change: Change, activity: Activity | None, ctx: Context) -> Attribut
         return Attribution(DECLARED, "supplied by a declared activity, with no lineage behind it")
     return Attribution(
         STOPPED,
-        f"no run in the window emitted a {label} and no rule supplies one; "
+        f"{_unemitted(change, ctx)}, and no rule supplies one; "
         "what stopped it is not in the events",
     )
+
+
+def _unemitted(change: Change, ctx: Context) -> str:
+    """Why no emitted value stands: none in the window, or the job stopped emitting
+    one, named by its last run that did and the first completed run after it (#66)."""
+    key = FACET_KEYS.get(change.label, "")
+    runs = ctx.by_job.get(change.entry, [])
+
+    def emits(event: Event) -> bool:
+        value = (event.job_facet(FACET) or {}).get(key)
+        return isinstance(value, str) and bool(value.strip())
+
+    emitting = [e for e in runs if emits(e)]
+    if not emitting:
+        return f"no run in the window emitted a {change.label}"
+    last = emitting[-1]
+    says = (
+        f"the job last emitted a {change.label} in run {last.run.run_id[:8]} "
+        f"on {_day(last.event_time)}"
+    )
+    after = [
+        e
+        for e in runs
+        if e.event_type == "COMPLETE"
+        and e.run.run_id != last.run.run_id
+        and e.event_time is not None
+        and last.event_time is not None
+        and e.event_time > last.event_time
+    ]
+    if after:
+        stopped = after[0]
+        commit, _ = _where(stopped)
+        says += (
+            f", and run {stopped.run.run_id[:8]} on {_day(stopped.event_time)} "
+            f"completed without one"
+        )
+        if commit:
+            says += f", at commit {commit[:12]}"
+    return says
 
 
 def _upstream(dataset: str, ctx: Context) -> tuple[Step, ...]:

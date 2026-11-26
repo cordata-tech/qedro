@@ -465,11 +465,11 @@ class TestDeclaredActivitiesOnTheDemo:
 class TestAFourthWeekAfterASignOff:
     """cordata-tech/qedro#49 on the demo rather than on events built for a test.
 
-    A record signed over `demo/lineage`, checked with `qedro status --against
-    demo/lineage-later`: the same three weeks and a fourth after them, in which
-    the scoring job's next release reads a new job's output and declares a
-    purpose that is not the mapping file's. Every cause below is read from
-    events shaped as the integrations emit them.
+    A record signed over `demo/lineage-declared`, checked with `qedro status
+    --against demo/lineage-later`: the same three weeks and a fourth after them,
+    in which the scoring job's next release reads a new job's output and emits a
+    purpose other than the one it emitted for three weeks. Every cause below is
+    read from events shaped as the integrations emit them.
     """
 
     SCORING = "acme.fraud/transactions-scored-daily"
@@ -480,7 +480,7 @@ class TestAFourthWeekAfterASignOff:
         records = tmp_path / "records"
         records.mkdir()
         path = str(records / "fraud.json")
-        assert main(["ropa", PLAIN, "--config", CONFIG, "--format", "json", "--out", path]) == 0
+        assert main(["ropa", DECLARED, "--config", CONFIG, "--format", "json", "--out", path]) == 0
         assert main(["sign", path, "--as", "Max Mustermann", "--state", "for sign-off"]) == 0
         assert main(["sign", path, "--as", "Erika Mustermann", "--state", "approved"]) == 0
         capsys.readouterr()
@@ -494,10 +494,10 @@ class TestAFourthWeekAfterASignOff:
         assert scoring["state"] == "stale"
         return {c["field"]: c for c in scoring["changes"]}
 
-    def test_its_first_three_weeks_are_demo_lineage_line_for_line(self):
-        # So the end of a record signed over demo/lineage is where the fourth
-        # week starts, and nothing before it can read as a change.
-        for path in sorted((DEMO / "lineage").glob("*.ndjson")):
+    def test_its_first_three_weeks_are_the_declared_lineage_line_for_line(self):
+        # So the end of a record signed over demo/lineage-declared is where the
+        # fourth week starts, and nothing before it can read as a change.
+        for path in sorted((DEMO / "lineage-declared").glob("*.ndjson")):
             earlier = path.read_text(encoding="utf-8")
             later = (DEMO / "lineage-later" / path.name).read_text(encoding="utf-8")
             assert later.startswith(earlier)
@@ -514,10 +514,12 @@ class TestAFourthWeekAfterASignOff:
         assert len(states) == 6
 
     def test_the_purpose_names_the_run_that_declared_it_and_both_commits(self, check):
+        # Three weeks of fraud-detection and one of chargeback-handling, all
+        # emitted: the record states the later one (#66), so the change shows.
         purpose = self.changes(check)["purpose"]
-        assert (purpose["before"]["value"], purpose["after"]["value"]) == (
-            "fraud-detection",
-            "chargeback-handling",
+        assert (purpose["before"], purpose["after"]) == (
+            {"value": "fraud-detection", "provenance": "facet"},
+            {"value": "chargeback-handling", "provenance": "facet"},
         )
         cause = purpose["cause"]
         assert cause["cause"] == "emitted"
@@ -528,11 +530,8 @@ class TestAFourthWeekAfterASignOff:
         assert "the job's last run before the sign-off" in cause["says"]
         assert "on 2026-07-26, ran at commit" in cause["says"]
 
-    def test_a_basis_now_evidenced_has_the_same_cause(self, check):
-        basis = self.changes(check)["legal basis"]
-        assert basis["kind"] == "repaired"
-        assert basis["cause"]["cause"] == "emitted"
-        assert basis["cause"]["run"] == self.changes(check)["purpose"]["cause"]["run"]
+    def test_the_basis_emitted_the_same_is_not_a_change(self, check):
+        assert "legal basis" not in self.changes(check)
 
     def test_the_new_input_is_traced_to_the_new_job_that_writes_it(self, check):
         reads = self.changes(check)["reads"]
@@ -570,7 +569,8 @@ class TestAFourthWeekAfterASignOff:
 
     def test_the_different_source_is_said_above_the_findings(self, check):
         assert any(
-            "demo/lineage and demo/lineage-later" in caution for caution in check["cautions"]
+            "demo/lineage-declared and demo/lineage-later" in caution
+            for caution in check["cautions"]
         )
 
 

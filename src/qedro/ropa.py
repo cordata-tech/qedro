@@ -122,6 +122,10 @@ class Sourced:
     rule: str = field(default="", compare=False)
     file: str = field(default="", compare=False)
     line: int | None = field(default=None, compare=False)
+    #: For a value a job no longer emits but emitted earlier in the window, the
+    #: last run that did (#66), so the explanation does not say it never emitted
+    #: one. Not in the JSON, so not in what a sign-off covers.
+    last_emitted: str = field(default="", compare=False)
 
     def __bool__(self) -> bool:
         return bool(self.value)
@@ -565,21 +569,12 @@ def _activity(
     first = events[0]
     rule = config.rule_for(first.job.namespace, first.job.name)
 
-    facet = first.job_facet(FACET) or {}
-    carrier = first
-    # A job's facet can arrive on any of its events and an emitter may attach it
-    # to COMPLETE but not START. Take the first event that carries it rather
-    # than assuming the first event does.
-    if not facet:
-        for event in events:
-            candidate = event.job_facet(FACET)
-            if candidate:
-                facet, carrier = candidate, event
-                break
-
-    purpose = _sourced("purpose", facet, rule, vocabulary, carrier.run.run_id, config.origin)
+    facet, carrier, stopped = _declaration(events)
+    purpose = _sourced(
+        "purpose", facet, rule, vocabulary, carrier.run.run_id, config.origin, stopped
+    )
     legal_basis = _sourced(
-        "legal_basis", facet, rule, vocabulary, carrier.run.run_id, config.origin
+        "legal_basis", facet, rule, vocabulary, carrier.run.run_id, config.origin, stopped
     )
 
     times = [e.event_time for e in events if e.event_time is not None]
@@ -715,6 +710,46 @@ def _classification(
     return classification, unclassified
 
 
+def _declaration(
+    events: Sequence[Event],
+) -> tuple[Mapping[str, object], Event, Event | None]:
+    """The `processing` facet the job's latest declaring run carried, its event, and
+    for a job that has stopped declaring, the last event that carried one.
+
+    The latest, so the record describes the job as it runs now, and a purpose
+    emitted later in the window replaces the one before it (#66). A run counts by
+    any of its events, since an emitter may attach the facet to COMPLETE and not
+    START, and runs are ordered by their event times rather than by where they
+    were read. A run that completed after the latest declaring one, carrying no
+    facet, means the job stopped declaring: then there is none, and the mapping
+    file or nothing supplies the value, as for a job that never declared. A run
+    still in progress, or one that failed, without the facet is not taken as
+    stopping, since its COMPLETE may be where the facet would have been.
+    """
+    runs: dict[str, list[Event]] = {}
+    for index, event in enumerate(events):
+        runs.setdefault(event.run.run_id or f"#{index}", []).append(event)
+
+    def latest(run: list[Event]) -> float:
+        times = [e.event_time.timestamp() for e in run if e.event_time is not None]
+        return max(times, default=float("-inf"))
+
+    def carried(run: list[Event]) -> Event | None:
+        carriers = [e for e in run if e.job_facet(FACET)]
+        return max(carriers, key=lambda e: latest([e])) if carriers else None
+
+    # `sorted` is stable, so runs with equal times stay in the order they were read.
+    ordered = sorted(runs.values(), key=latest, reverse=True)
+    for index, run in enumerate(ordered):
+        last = carried(run)
+        if last is not None:
+            return last.job_facet(FACET) or {}, last, None
+        if any(e.event_type == "COMPLETE" for e in run):
+            earlier = (carried(r) for r in ordered[index + 1 :])
+            return {}, events[0], next((e for e in earlier if e is not None), None)
+    return {}, events[0], None
+
+
 def _sourced(
     key: str,
     facet: Mapping[str, object],
@@ -722,13 +757,19 @@ def _sourced(
     vocabulary: Vocabulary,
     run: str = "",
     origin: str = "",
+    stopped: Event | None = None,
 ) -> Sourced:
-    """Facet first, mapping second, nothing third. The order is the point."""
+    """Facet first, mapping second, nothing third. The order is the point.
+
+    *stopped* is the last event that carried a facet, for a job that has stopped
+    declaring; it is named on a mapped or absent value it emitted before."""
     emitted = facet.get(key)
     if isinstance(emitted, str) and emitted.strip():
         value = emitted.strip()
         return Sourced(value, Provenance.FACET, vocabulary.unrecognised(key, value), run=run)
 
+    before = (stopped.job_facet(FACET) or {}).get(key) if stopped else None
+    last_emitted = stopped.run.run_id if stopped and isinstance(before, str) and before else ""
     mapped = getattr(rule, key, "") if rule else ""
     if rule and isinstance(mapped, str) and mapped:
         return Sourced(
@@ -738,11 +779,12 @@ def _sourced(
             rule=rule.pattern,
             file=origin,
             line=rule.line,
+            last_emitted=last_emitted,
         )
 
     # Nothing to point at but where a rule would have been: the mapping file,
     # if there is one, so the explanation can say no rule in it matched.
-    return Sourced("", Provenance.ABSENT, file=origin)
+    return Sourced("", Provenance.ABSENT, file=origin, last_emitted=last_emitted)
 
 
 def _parents(grouped: Mapping[str, Sequence[Event]]) -> tuple[str, ...]:

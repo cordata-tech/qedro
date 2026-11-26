@@ -146,6 +146,51 @@ class TestAFacetChange:
 RULE = '\njobs:\n  "acme.fraud/*":\n    purpose: {purpose}\n    legal_basis: contract\n'
 
 
+class TestAFacetChangeInsideTheWindow:
+    """#66: the fresh run reads the events from before the sign-off too, so a job
+    that emitted one value up to it and another after it has the later value."""
+
+    def test_names_the_run_that_emitted_the_new_value_and_both_commits(self):
+        signed = [event("r0", "2026-03-01T10:00:00Z", purpose="fraud-detection", commit=C0)]
+        fresh = [
+            *signed,
+            event("r1", "2026-03-10T10:00:00Z", purpose="chargeback-handling", commit=C1),
+        ]
+        change = [c for c in checked(signed, fresh).activities[0].changes if c.label == "purpose"]
+        assert [(c.before.value, c.after.value) for c in change] == [
+            ("fraud-detection", "chargeback-handling")
+        ]
+        cause = cause_of(checked(signed, fresh), "purpose")
+        assert (cause.cause, cause.run, cause.commit, cause.commit_before) == (
+            EMITTED,
+            "r1",
+            C1,
+            C0,
+        )
+
+    def test_a_job_that_stopped_emitting_names_its_last_run_that_did(self):
+        signed = [event("r0", "2026-03-01T10:00:00Z", purpose="fraud-detection", commit=C0)]
+        fresh = [*signed, event("r1", "2026-03-10T10:00:00Z", commit=C1)]
+        cause = cause_of(
+            checked(signed, fresh, fresh_cfg=RULE.format(purpose="fraud-detection")), "purpose"
+        )
+        assert cause.cause == MAPPING
+        assert cause.says.startswith(
+            "the job last emitted a purpose in run r0 on 2026-03-01, and run r1 on 2026-03-10 "
+            "completed without one, at commit 4f2a9c1e8b7d; now supplied by the rule"
+        )
+
+    def test_and_with_no_rule_it_is_stopped_with_the_same_runs(self):
+        signed = [event("r0", "2026-03-01T10:00:00Z", purpose="fraud-detection")]
+        fresh = [*signed, event("r1", "2026-03-10T10:00:00Z")]
+        cause = cause_of(checked(signed, fresh), "purpose")
+        assert cause.cause == STOPPED
+        assert cause.says.startswith(
+            "the job last emitted a purpose in run r0 on 2026-03-01, and run r1 on 2026-03-10 "
+            "completed without one, and no rule supplies one"
+        )
+
+
 class TestAMappingChange:
     def test_names_the_rule_now_supplying_the_value_with_its_file_and_line(self):
         events = [event("r1", "2026-03-01T10:00:00Z")]
@@ -324,6 +369,7 @@ class TestOtherChanges:
         fresh = [event("r1", "2026-03-10T10:00:00Z")]
         cause = cause_of(checked(signed, fresh), "purpose")
         assert cause.cause == STOPPED
+        assert cause.says.startswith("no run in the window emitted a purpose, and no rule")
         assert "what stopped it is not in the events" in cause.says
 
     def test_a_new_activity_names_its_first_run_after_the_sign_off(self):

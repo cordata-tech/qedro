@@ -21,9 +21,16 @@ from qedro.sources import ReadReport
 WORDS = vocabulary.load()
 
 
-def event(name="scored", namespace="acme.fraud", facet=None, when="2026-03-01T10:00:00Z", run="r1"):
+def event(
+    name="scored",
+    namespace="acme.fraud",
+    facet=None,
+    when="2026-03-01T10:00:00Z",
+    run="r1",
+    kind="COMPLETE",
+):
     raw = {
-        "eventType": "COMPLETE",
+        "eventType": kind,
         "eventTime": when,
         "run": {"runId": run},
         "job": {"namespace": namespace, "name": name, "facets": {}},
@@ -106,6 +113,91 @@ class TestProvenancePrecedence:
         events = [event(when="2026-03-01T09:00:00Z"), event(facet=EVIDENCED)]
         [activity] = record(events).activities
         assert activity.evidenced
+
+
+CHARGEBACKS = {"purpose": "chargeback-handling", "legal_basis": "legitimate-interest"}
+MAPPED = 'jobs:\n  "acme.fraud/*": {purpose: from-the-file, legal_basis: consent}\n'
+
+
+class TestAFacetThatChangesInsideTheWindow:
+    """cordata-tech/qedro#66: the record describes a job as it runs now, so a
+    purpose emitted later in the window replaces the one emitted before it."""
+
+    def test_the_latest_run_s_purpose_is_the_one_stated(self):
+        events = [
+            event(facet=EVIDENCED, when="2026-03-01T10:00:00Z", run="r1"),
+            event(facet=CHARGEBACKS, when="2026-03-08T10:00:00Z", run="r2"),
+        ]
+        [activity] = record(events).activities
+        assert activity.purpose.value == "chargeback-handling"
+        assert activity.purpose.provenance is Provenance.FACET
+        assert activity.purpose.run == "r2"
+
+    def test_latest_by_event_time_not_by_where_the_event_was_read(self):
+        # Two files of one source are read in name order, so the later run can
+        # come first in what the reader hands on.
+        events = [
+            event(facet=CHARGEBACKS, when="2026-03-08T10:00:00Z", run="r2"),
+            event(facet=EVIDENCED, when="2026-03-01T10:00:00Z", run="r1"),
+        ]
+        [activity] = record(events).activities
+        assert (activity.purpose.value, activity.purpose.run) == ("chargeback-handling", "r2")
+
+    def test_a_job_that_completed_runs_without_the_facet_has_stopped_declaring(self):
+        # Its latest runs rest on the mapping file, and the record says so
+        # rather than carrying the facet from before as evidence.
+        events = [
+            event(facet=EVIDENCED, when="2026-03-01T10:00:00Z", run="r1"),
+            event(when="2026-03-08T10:00:00Z", run="r2"),
+        ]
+        [activity] = record(events, cfg=MAPPED).activities
+        assert activity.purpose.value == "from-the-file"
+        assert activity.purpose.provenance is Provenance.MAPPING
+        assert not activity.evidenced
+        assert activity.purpose.last_emitted == "r1"
+
+    def test_its_explanation_names_the_last_run_that_emitted_one(self):
+        from qedro import explain, references
+
+        events = [
+            event(facet=EVIDENCED, when="2026-03-01T10:00:00Z", run="r1"),
+            event(when="2026-03-08T10:00:00Z", run="r2"),
+        ]
+        for cfg, start in ((MAPPED, "Asserted in"), ("", "Nothing states a purpose")):
+            [activity] = record(events, cfg=cfg).activities
+            said = explain.activity_value(
+                activity,
+                "purpose",
+                activity.purpose,
+                references=references.load(),
+                vocabulary="dsgvo",
+            ).text
+            assert said.startswith(start)
+            assert (
+                "`acme.fraud/scored` stopped emitting a purpose in a `processing` facet "
+                "after run `r1`"
+            ) in said
+
+    def test_a_run_in_progress_or_failed_without_it_has_not_stopped(self):
+        # An emitter may attach the facet to COMPLETE only, so a run that has
+        # only started, or that failed, says nothing about whether it declares.
+        events = [
+            event(facet=EVIDENCED, when="2026-03-01T10:00:00Z", run="r1"),
+            event(when="2026-03-08T10:00:00Z", run="r2", kind="FAIL"),
+            event(when="2026-03-09T10:00:00Z", run="r3", kind="START"),
+        ]
+        [activity] = record(events, cfg=MAPPED).activities
+        assert (activity.purpose.value, activity.purpose.run) == ("fraud-detection", "r1")
+        assert activity.purpose.provenance is Provenance.FACET
+
+    def test_a_job_that_declares_again_is_evidenced_again(self):
+        events = [
+            event(facet=EVIDENCED, when="2026-03-01T10:00:00Z", run="r1"),
+            event(when="2026-03-08T10:00:00Z", run="r2"),
+            event(facet=CHARGEBACKS, when="2026-03-15T10:00:00Z", run="r3"),
+        ]
+        [activity] = record(events, cfg=MAPPED).activities
+        assert (activity.purpose.value, activity.purpose.run) == ("chargeback-handling", "r3")
 
 
 class TestTheTombstoneIsEarned:

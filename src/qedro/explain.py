@@ -98,10 +98,16 @@ def activity_value(
             (Link("run", sourced.run),) if sourced.run else (),
         )
 
+    # A job that emitted one earlier in the window and has stopped (#66).
+    none = (
+        f"stopped emitting a {label} in a `processing` facet after run `{sourced.last_emitted}`"
+        if sourced.last_emitted
+        else f"emitted no {label} in a `processing` facet"
+    )
     if sourced.provenance is Provenance.MAPPING:
         return Explanation(
             f"Asserted in {_at(sourced.file, sourced.line)}, rule `{sourced.rule}`, because "
-            f"`{job}` emitted no {label} in a `processing` facet.{tail}",
+            f"`{job}` {none}.{tail}",
             answers,
             (Link("rule", sourced.rule, sourced.file, sourced.line),),
         )
@@ -121,7 +127,9 @@ def activity_value(
         where = "there is no mapping file"
         links = ()
     return Explanation(
-        f"Nothing states a {label}: `{job}` emitted none in a `processing` facet, and {where}.",
+        f"Nothing states a {label}: `{job}` "
+        + (none if sourced.last_emitted else "emitted none in a `processing` facet")
+        + f", and {where}.",
         answers,
         links,
     )

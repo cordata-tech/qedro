@@ -17,7 +17,7 @@ demo/
   register.yaml        an AI register kept by hand, drifted from what runs
   lineage/             the estate as it is today — no Art. 30 facet anywhere
   lineage-declared/    the same three weeks once the pipelines declare
-  lineage-later/       lineage/ and a fourth week after it, in which two fraud jobs change
+  lineage-later/       lineage-declared/ and a fourth week after it, in which two fraud jobs change
 ```
 
 `qedro demo` writes the same files into an empty directory, for anyone who installed
@@ -212,13 +212,13 @@ outside the window are indistinguishable from here.
 
 ## A fourth week, after a sign-off
 
-`lineage-later/` is `lineage/` line for line, followed by a fourth week starting on
-Monday 27 July. In that week the fraud team ships `device-profiles-daily`, a Spark job
-that builds a profile per device and declares its purpose from its first run, and the
-scoring job's next release reads those profiles and declares its own purpose for the
-first time. The purpose it declares is `chargeback-handling` rather than the mapping
-file's `fraud-detection`, because its scores now also decide disputed card transactions.
-Every job runs at a new commit that week, as each does every week.
+`lineage-later/` is `lineage-declared/` line for line, followed by a fourth week
+starting on Monday 27 July. In that week the fraud team ships `device-profiles-daily`,
+a Spark job that builds a profile per device, and the scoring job's next release reads
+those profiles and emits `chargeback-handling` as its purpose instead of the
+`fraud-detection` it emitted for three weeks, because its scores now also decide
+disputed card transactions. Every job runs at a new commit that week, as each does
+every week.
 
 A record signed over the three weeks, checked against all four, is stale in that one
 activity, and `qedro status` says why each change happened
@@ -226,13 +226,13 @@ activity, and `qedro status` says why each change happened
 
 ```console
 $ mkdir records
-$ qedro ropa demo/lineage --config demo/qedro.yaml --out records/fraud.json
+$ qedro ropa demo/lineage-declared --config demo/qedro.yaml --out records/fraud.json
 $ qedro sign records/fraud.json --as "Max Mustermann" --state "for sign-off"
 $ qedro sign records/fraud.json --as "Erika Mustermann" --state approved
 $ qedro status records --against demo/lineage-later --config demo/qedro.yaml
 
     stale       acme.fraud/transactions-scored-daily
-                  purpose: fraud-detection → chargeback-handling — now evidenced: mapping file → emitted facet
+                  purpose: fraud-detection → chargeback-handling
                     why: first emitted as chargeback-handling by run b5f5af4d on 2026-07-27, at commit
                          6ceb0c680936 of https://github.com/acme-finanz/data-platform/models/fraud/transactions_scored.sql;
                          the job's last run before the sign-off, 78766c96 on 2026-07-26, ran at commit 5bb8fdd71549
@@ -252,23 +252,20 @@ $ qedro status records --against demo/lineage-later --config demo/qedro.yaml
   1 signed record: 6 up to date, 1 stale, 1 new, 0 blocked
 ```
 
-The legal basis and the retention period are stale too, and left out above: the basis
-is the same value now emitted rather than mapped, and the profiles are kept for a year
-where the scored transactions are kept for seven. The other six jobs ran again in the
-fourth week at new commits and state what they stated before, so they are up to date.
-Above the findings the command also says the two records were read from different
-directories over windows of different length, since the record was built from
-`lineage/` and the check from `lineage-later/`.
+The retention period changed too, and is left out above: the profiles are kept for a
+year where the scored transactions are kept for seven. The other six jobs ran again in
+the fourth week at new commits and state what they stated before, so they are up to
+date. Above the findings the command also says the two records were read from
+different directories over windows of different length, since the record was built
+from `lineage-declared/` and the check from `lineage-later/`.
 
 The location category is the one change whose cause is another job: no dataset the
 scoring job read before carried it, and the device-profiles job's event was the first
 to tag one with it.
 
-The fourth week is built on the plain lineage, where the scoring job emitted no
-purpose before, rather than on the declared one, where it emitted `fraud-detection` for
-three weeks. In a window where a job emits one purpose and then another, the Art. 30
-record keeps the first one it read, so a fresh run over all four weeks of declared
-lineage would still say `fraud-detection` and report no change.
+The fresh run reads all four weeks, three of them emitting `fraud-detection`, and
+states `chargeback-handling`, because a record describes each job by its latest run
+that declared ([#66](https://github.com/cordata-tech/qedro/issues/66)).
 
 ## Worth noticing
 

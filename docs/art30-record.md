@@ -300,6 +300,14 @@ Patterns are fnmatch against `namespace/name` and then the bare name, first matc
 file order winning. A facet always beats the file: a config cannot silently rewrite
 what a pipeline emitted.
 
+Where a job emitted one purpose and later another inside the window, the record states
+the one from its latest run carrying the facet, so it describes the job as it runs now
+([#66](https://github.com/cordata-tech/qedro/issues/66)). A job whose runs completed
+without the facet after that has stopped declaring: the value then comes from the
+mapping file or nowhere, and its explanation names the last run that emitted one. A run
+still in progress, or one that failed, without the facet does not count as stopping,
+since an emitter may attach it to COMPLETE only.
+
 A job's domain is guessed from the last segment of its namespace, so `acme.fraud` is in
 `fraud`, unless a rule sets `domain:`. The guess fails for an integration that names its
 namespace after itself: openlineage-dbt defaults to `dbt`, which puts every model in a

@@ -8,6 +8,19 @@ before `1.0`.
 
 ## Unreleased
 
+- **A record states a job's latest declared purpose and legal basis**, not the first
+  (#66). Over a window in which a job emitted one purpose and later another, the record
+  said the first, so `qedro status --against`, which reads the events from before the
+  sign-off too, reported such a change as up to date. The value now comes from the
+  job's latest run carrying the `processing` facet, by event time. A job whose runs
+  completed without the facet after that has stopped declaring, and its values come
+  from the mapping file or nowhere, as for a job that never declared; a run still in
+  progress or failed without it does not count, since an emitter may attach the facet
+  to COMPLETE only. A record rebuilt over such a window states something different, and
+  its sign-off no longer covers it, which is what a change of purpose should do; records
+  over windows where nothing changed are as before. A mapped or missing value's
+  explanation, and its `why:` line in `qedro status`, name the last run that emitted one
+  when the job emitted it earlier in the window.
 - **`qedro status --against` says why each change happened**, as far as the events and
   files show it, comparing each job before and after the end of the signed record's
   window (#49):
@@ -28,9 +41,9 @@ before `1.0`.
   the JSON gives each change and each new activity a `cause` object beside the existing
   fields, with `upstream`, `rule_change` and `history` for the chain and the rule's
   history.
-- **The demo has a fourth week**, in `lineage-later/`: `lineage/` line for line, then a
-  week in which a new job starts writing device profiles and the scoring job reads them
-  and declares a purpose of its own. `qedro demo` now ends with the four commands that
+- **The demo has a fourth week**, in `lineage-later/`: `lineage-declared/` line for line,
+  then a week in which a new job starts writing device profiles and the scoring job
+  reads them and emits a different purpose. `qedro demo` now ends with the four commands that
   sign a record over the first three weeks and check it against all four, and
   `demo/README.md` shows what `qedro status` says and why.
 
