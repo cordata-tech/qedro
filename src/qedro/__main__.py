@@ -23,6 +23,7 @@ from pathlib import Path
 
 from . import (
     __version__,
+    attribution,
     compare,
     declared,
     demo,
@@ -580,6 +581,8 @@ def _currency(
     fresh: dict | None = None
     fresh_text = ""
     reason = ""
+    # The fresh run's record and events, so each change can be given its cause (#49).
+    attributor: attribution.Attributor | None = None
     if signed and source:
         try:
             settings = config_module.load(config_module.find(config_path))
@@ -605,6 +608,7 @@ def _currency(
             )
             fresh_text = render.FORMATS["json"](record)
             fresh = json.loads(fresh_text)
+            attributor = attribution.Attributor(record, events)
         except QedroError as exc:
             reason = f"the fresh run from {source} could not be built: {exc}"
 
@@ -613,7 +617,7 @@ def _currency(
     results: dict[str, tuple[staleness.RecordCheck, str | None]] = {}
     for path, origin, payload, standing in signed:
         result = (
-            staleness.check(payload, fresh, origin=origin)
+            staleness.check(payload, fresh, origin=origin, attributor=attributor)
             if fresh is not None
             else staleness.blocked(origin, payload, reason)
         )
@@ -752,12 +756,17 @@ def _print_states(result: staleness.RecordCheck) -> None:
         if a.state == staleness.UP_TO_DATE:
             continue
         print(f"    {a.state:<10}  {a.key}")
-        for change in a.changes:
+        if a.cause is not None:
+            print(f"                  why: {a.cause.says}")
+        for i, change in enumerate(a.changes):
             if change.kind == compare.REMOVED:
                 print("                  not in the fresh run — it may not have run in the window")
-                continue
-            said, cost = render._finding(change)
-            print(f"                  {change.label}: {said}" + (f" — {cost}" if cost else ""))
+            else:
+                said, cost = render._finding(change)
+                print(f"                  {change.label}: {said}" + (f" — {cost}" if cost else ""))
+            # The cause under the change it explains, as far as the events show it (#49).
+            if i < len(a.causes):
+                print(f"                    why: {a.causes[i].says}")
     if current:
         print(f"    {staleness.UP_TO_DATE:<10}  {', '.join(current)}")
 

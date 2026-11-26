@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import compare
+from .attribution import Attribution, Attributor, attribution_json
 from .compare import Change
 from .errors import QedroError
 
@@ -41,6 +42,11 @@ class ActivityState:
     #: What changed, for a stale activity: one finding per field, or the whole
     #: activity missing from the fresh run.
     changes: tuple[Change, ...] = ()
+    #: Why each change happened, as far as the fresh run's events and files show
+    #: it, in the order of `changes` (#49). Empty where nothing was attributed.
+    causes: tuple[Attribution, ...] = ()
+    #: For a new activity, its first run in the window or its declaration.
+    cause: Attribution | None = None
 
 
 @dataclass(frozen=True)
@@ -63,8 +69,18 @@ class RecordCheck:
         return out
 
 
-def check(signed: dict[str, Any], fresh: dict[str, Any], *, origin: str) -> RecordCheck:
-    """One signed record, as JSON, against a fresh run's JSON."""
+def check(
+    signed: dict[str, Any],
+    fresh: dict[str, Any],
+    *,
+    origin: str,
+    attributor: Attributor | None = None,
+) -> RecordCheck:
+    """One signed record, as JSON, against a fresh run's JSON.
+
+    With an *attributor* — the fresh run's record and events — each change also
+    gets its cause (#49). The comparison is the same either way.
+    """
     try:
         before = compare.side(signed, origin=origin)
     except QedroError as exc:
@@ -75,14 +91,27 @@ def check(signed: dict[str, Any], fresh: dict[str, Any], *, origin: str) -> Reco
         return blocked(origin, signed, str(exc))
 
     grouped = dict(comparison.by_entry())
+
+    def causes(changes: tuple[Change, ...]) -> tuple[Attribution, ...]:
+        return tuple(attributor.change(c) for c in changes) if attributor else ()
+
     states = [
         # Anything that differs is stale, including an activity the fresh run
         # does not have and a value whose evidence got stronger: either way the
         # signed record no longer says what runs.
-        ActivityState(key, STALE if key in grouped else UP_TO_DATE, grouped.get(key, ()))
+        ActivityState(
+            key,
+            STALE if key in grouped else UP_TO_DATE,
+            grouped.get(key, ()),
+            causes(grouped.get(key, ())),
+        )
         for key in sorted(before.entries)
     ]
-    states += [ActivityState(c.entry, NEW) for c in comparison.changes if c.kind == compare.ADDED]
+    states += [
+        ActivityState(c.entry, NEW, cause=attributor.new(c) if attributor else None)
+        for c in comparison.changes
+        if c.kind == compare.ADDED
+    ]
     return RecordCheck(origin, tuple(states), cautions=comparison.comparability.cautions())
 
 
@@ -102,9 +131,9 @@ def _value_json(value: compare.Value | None) -> dict[str, str] | None:
     return {"value": value.value, "provenance": str(value.provenance)}
 
 
-def change_json(change: Change) -> dict[str, Any]:
+def change_json(change: Change, cause: Attribution | None = None) -> dict[str, Any]:
     """One finding, with the words the text prints for it, so a reader such as
-    the console says it as qedro does."""
+    the console says it as qedro does, and its cause where one was attributed."""
     from . import render
 
     if change.kind == compare.REMOVED:
@@ -118,6 +147,7 @@ def change_json(change: Change) -> dict[str, Any]:
         "after": _value_json(change.after),
         "says": says,
         "costs": costs or None,
+        "cause": attribution_json(cause) if cause else None,
     }
 
 
@@ -131,7 +161,12 @@ def check_json(result: RecordCheck) -> dict[str, Any]:
             {
                 "key": a.key,
                 "state": a.state,
-                "changes": [change_json(c) for c in a.changes],
+                "changes": [
+                    change_json(c, a.causes[i] if i < len(a.causes) else None)
+                    for i, c in enumerate(a.changes)
+                ],
+                # Why a new activity is new: its first run, or its declaration.
+                "cause": attribution_json(a.cause) if a.cause else None,
             }
             for a in result.activities
         ],

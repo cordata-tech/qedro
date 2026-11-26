@@ -143,6 +143,30 @@ than reading as a platform where every job stopped. A fresh run over a different
 or window says so above its findings, since an activity missing from one may never
 have been in it.
 
+Under each change, a `why:` line gives its cause as far as the fresh run's events and
+files show it ([#49](https://github.com/cordata-tech/qedro/issues/49)):
+
+```console
+    stale       acme.fraud/transactions-scored-daily
+                  purpose: fraud-detection → chargeback-handling
+                    why: first emitted as chargeback-handling by run 3c9e1f20 on 2026-11-18,
+                         at commit 4f2a9c1e8b7d of https://github.com/acme/pipelines/jobs/scored.py
+    stale       acme.billing/dunning-weekly
+                  purpose: debt-collection, unchanged — evidence lost: emitted facet → mapping file
+                    why: no run in the window emitted a purpose; now supplied by the rule
+                         `acme.billing/dunning-*` in qedro.yaml line 72
+```
+
+The causes qedro can name are the first run in the window that emitted a new value, with
+the commit its `sourceCodeLocation` names; the mapping rule now supplying it, with its
+file and line; a declared activity; and for a new activity or a dataset newly read or
+written, the first run that did so. A first run in the window that already carries the
+new value is said to be the window's first, since the change may be older than the
+window. A value that is gone with nothing supplying it is reported as stopped, and a
+kind of change qedro does not trace yet, such as a classification, as unattributed with
+the reason; neither is guessed. The commit that changed a rule in `qedro.yaml`, and a
+cause further up the provenance chain, are not traced yet.
+
 `--regenerate --as NAME` turns the stale and new activities into a version to review
 ([#55](https://github.com/cordata-tech/qedro/issues/55)): for each signed record that
 changed, it writes the fresh record beside it as `record.next.json` and adds a *for

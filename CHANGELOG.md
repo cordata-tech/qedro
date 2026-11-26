@@ -6,6 +6,19 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
+## Unreleased
+
+- **`qedro status --against` says why each change happened**, as far as the fresh run's
+  events and files show it: the first run in the window that emitted a new value, with
+  the commit its `sourceCodeLocation` names; the mapping rule now supplying it, with its
+  file and line; a declared activity; or, for a new activity or a dataset newly read or
+  written, the first run that did so. A value gone with nothing supplying it is reported
+  as stopped, and a change qedro does not trace yet, such as a classification, as
+  unattributed with the reason; neither is guessed. The text prints a `why:` line under
+  each change; the JSON gives each change a `cause` object, and each new activity one,
+  beside the existing fields. The commit that changed a `qedro.yaml` rule and causes
+  further up the provenance chain are not traced yet (#49).
+
 ## 0.30.0 — 2026-11-23
 
 - **A job that processes no personal data can be left out of the Art. 30 record.** A
