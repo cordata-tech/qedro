@@ -1112,8 +1112,7 @@ class TestClassificationFromTheTagsFacet:
         assert out.scope.reported == {"e": 1}
         reported = dict(out.scope.lines())["reported"]
         assert reported == (
-            "(e) residency reported, not whether data went to a third country: "
-            "1 of 1 activity"
+            "(e) residency reported, not whether data went to a third country: 1 of 1 activity"
         )
         assert "transfers to third countries" not in reported
 
