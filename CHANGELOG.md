@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.32.0 — 2026-11-27
 
 - **`qedro status --format json` lists every document in the directory**, in two new
   fields beside `records`: `documents`, each JSON document qedro wrote there with its
