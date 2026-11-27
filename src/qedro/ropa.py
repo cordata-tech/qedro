@@ -66,6 +66,14 @@ ART30_ITEMS: tuple[tuple[str, str], ...] = (
 )
 ART30_COVERED = frozenset({"a", "b", "c", "d", "e", "f", "g"})
 
+#: What a count on the scope's `reported` line stands for, where that is
+#: narrower than the item it is counted under. Residency is counted under (e):
+#: it says where the data sits, which bears on a transfer to a third country
+#: without saying whether one happened, and naming the item bare read as if it did.
+ART30_REPORTED_AS: Mapping[str, str] = {
+    "e": "residency reported, not whether data went to a third country",
+}
+
 #: Items no lineage carries, so the record can only ever hold what somebody
 #: asserted about them. Named in the coverage line, because a field that can
 #: never be evidenced is a different offer from one that can.
@@ -352,7 +360,7 @@ class Scope(scope.Scope):
                 )
             )
         if self.reported:
-            named = {letter: what for letter, what in ART30_ITEMS}
+            named = {**dict(ART30_ITEMS), **ART30_REPORTED_AS}
             out.append(
                 (
                     # Thirteen characters is what the label column holds, and

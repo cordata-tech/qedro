@@ -1105,6 +1105,18 @@ class TestClassificationFromTheTagsFacet:
         # The noun agrees with the total and the verb with the count.
         assert lines["unclassified"].startswith("1 of 2 datasets carries no classification")
 
+    def test_residency_counts_under_e_as_residency_not_as_a_transfer(self):
+        # Where the data sits bears on Art. 30(1)(e) without saying whether data
+        # went to a third country, so the count names what it counts.
+        out = record([tagged(name="a", writes=[("wh/a", {"residency": "eu"})])])
+        assert out.scope.reported == {"e": 1}
+        reported = dict(out.scope.lines())["reported"]
+        assert reported == (
+            "(e) residency reported, not whether data went to a third country: "
+            "1 of 1 activity"
+        )
+        assert "transfers to third countries" not in reported
+
 
 class TestTheItemsNothingCanEvidence:
     """Art. 30(1)(d) recipients and (g) security measures. See #13, slice 4.
