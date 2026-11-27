@@ -6,7 +6,7 @@ Notable changes, in the words of somebody deciding whether to upgrade.
 output formats and the `qedro.yaml` schema are the parts most likely to move
 before `1.0`.
 
-## Unreleased
+## 0.33.0 — 2026-11-27
 
 - **The scope's `reported` line says residency where it counts residency.** It counted
   datasets' `residency` tags under Art. 30(1)(e) as "(e) transfers to third countries",
